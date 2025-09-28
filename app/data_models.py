@@ -1,6 +1,7 @@
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import Optional, Literal
+from fastapi import HTTPException
 
 OUTAGE_STATUS_RESOLVED = Literal["resolved", "unresolved"]
 
@@ -39,7 +40,7 @@ class OutageReport(BaseModel):
         Validate the outage start time.
         """
         if v > datetime.now():
-            raise ValueError("Outage start time cannot be in the future")
+            raise HTTPException(status_code=400, detail="Outage start time cannot be in the future")
         return v
     
     @field_validator("outage_end_time", mode="after")
@@ -49,5 +50,5 @@ class OutageReport(BaseModel):
         Validate the outage end time.
         """
         if v and v < cls.outage_start_time:
-            raise ValueError("Outage end time cannot be before start time")
+            raise HTTPException(status_code=400, detail="Outage end time cannot be before start time")
         return v
