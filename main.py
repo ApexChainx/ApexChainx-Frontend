@@ -1,8 +1,4 @@
-from fastapi import FastAPI
-from app.routes import router as app_router
-
-app = FastAPI()
-app.include_router(app_router)
+from config.wsgi import app # noqa: F401
 
 if __name__ == "__main__":
     import uvicorn
