@@ -13,6 +13,9 @@ def health_check():
 @router.post("/outage", status_code=201)
 def create_outage(outage: OutageReport):
     """Create a new outage report with version 1."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
     outage_data = outage.model_dump()
     outage_data["version"] = 1
     outage_data["previous_version_id"] = None
@@ -25,6 +28,9 @@ def create_outage(outage: OutageReport):
 
 def get_latest_version_by_ticket_id(ticket_id: str):
     """Get the latest version of an outage report by ticket_id."""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
     query = (
         db.collection(OUTAGE_MODEL)
         .where(filter=FieldFilter("ticket_id", "==", ticket_id))
@@ -82,6 +88,9 @@ def update_outage(ticket_id: str, update_data: OutageReportUpdate):
     new_version_data["updated_at"] = datetime.now()
     
     # Add the new version to Firestore
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
     doc_ref = db.collection(OUTAGE_MODEL).add(new_version_data)
     new_doc_id = doc_ref[1].id
     
@@ -111,6 +120,9 @@ def get_outage_by_ticket_id(ticket_id: str, version: int = None):
     Returns:
         The requested outage report or latest version if version not specified
     """
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+        
     if version:
         # Get specific version
         query = (
