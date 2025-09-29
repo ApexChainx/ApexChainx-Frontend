@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from datetime import datetime
 from typing import Optional, Literal
 from fastapi import HTTPException
@@ -52,3 +52,39 @@ class OutageReport(BaseModel):
         if v and v < cls.outage_start_time:
             raise HTTPException(status_code=400, detail="Outage end time cannot be before start time")
         return v
+
+
+class OutageReportVersioned(BaseModel):
+    """
+    Versioned data model for an outage report with version tracking.
+    Used internally for database operations and responses.
+    """
+    ticket_id: str
+    alarm_name: str
+    site_id: str
+    outage_start_time: datetime
+    outage_end_time: Optional[datetime] = None
+    vendor: Optional[str] = None
+    supervisor: Optional[str] = None
+    rca: Optional[str] = None
+    outage_status: OUTAGE_STATUS_RESOLVED
+    version: int
+    previous_version_id: Optional[str] = None
+    document_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
+class OutageReportUpdate(BaseModel):
+    """
+    Data model for updating an outage report. All fields are optional
+    to allow partial updates.
+    """
+    alarm_name: Optional[str] = None
+    site_id: Optional[str] = None
+    outage_start_time: Optional[datetime] = None
+    outage_end_time: Optional[datetime] = None
+    vendor: Optional[str] = None
+    supervisor: Optional[str] = None
+    rca: Optional[str] = None
+    outage_status: Optional[OUTAGE_STATUS_RESOLVED] = None
