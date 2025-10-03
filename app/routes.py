@@ -3,7 +3,7 @@ from fastapi.responses import PlainTextResponse
 from app.data_models import OutageReport, OutageReportVersioned, OutageReportUpdate
 from app.db_models import OUTAGE_MODEL
 from app.firebase import db
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.cloud.firestore_v1 import FieldFilter
 router = APIRouter()
 
@@ -233,3 +233,71 @@ def get_outage_summary(ticket_id: str):
     ]
 
     return "\n".join(summary_lines)
+
+
+@router.get("/analytics/kpis")
+def get_analytics_kpis():
+    """
+    Compute and return key dashboard metrics:
+    - total_active_outages: count of latest report versions where status is 'unresolved'
+    - average_mttr_hours_last_30_days: average resolution time (in hours) for outages
+      resolved in the last 30 days
+    - outages_by_severity: count of latest report versions grouped by 'severity' field
+      (falls back to 'unknown' when not present)
+    """
+    try:
+        docs = db.collection(OUTAGE_MODEL).get()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch outages: {e}")
+
+    # Keep only the latest version for each ticket_id
+    latest_by_ticket = {}
+    for doc in docs:
+        data = doc.to_dict()
+        ticket_id = data.get("ticket_id")
+        if not ticket_id:
+            continue
+        version = data.get("version", 1)
+        current = latest_by_ticket.get(ticket_id)
+        if current is None or version > current.get("version", 0):
+            latest_by_ticket[ticket_id] = data
+
+    now = datetime.now()
+    window_start = now - timedelta(days=30)
+
+    total_active_outages = 0
+    mttr_hours = []
+    severity_counts = {}
+
+    for report in latest_by_ticket.values():
+        status = report.get("outage_status")
+        if status == "unresolved":
+            total_active_outages += 1
+
+        # MTTR: only for resolved outages with valid start/end times within 30-day window by end time
+        start = report.get("outage_start_time")
+        end = report.get("outage_end_time")
+        if (
+            status == "resolved"
+            and isinstance(start, datetime)
+            and isinstance(end, datetime)
+            and end >= window_start
+        ):
+            delta = end - start
+            hours = delta.total_seconds() / 3600.0
+            if hours >= 0:
+                mttr_hours.append(hours)
+
+        # Severity counts (fallback to 'unknown' if missing)
+        severity = (report.get("severity") or "unknown").lower()
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
+    avg_mttr = None
+    if mttr_hours:
+        avg_mttr = round(sum(mttr_hours) / len(mttr_hours), 2)
+
+    return {
+        "total_active_outages": total_active_outages,
+        "average_mttr_hours_last_30_days": avg_mttr,
+        "outages_by_severity": severity_counts,
+    }
