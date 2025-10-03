@@ -3,8 +3,12 @@ from pydantic import BaseModel, Field
 from typing import List, Dict
 from datetime import datetime
 import operator
+from app.firebase import initialize_firebase
 
-# --- Pydantic Models (Data Shape) ---
+
+initialize_firebase()
+
+
 
 class ReportVersion(BaseModel):
     """Defines the structure of a single version of a report."""
