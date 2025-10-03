@@ -11,9 +11,21 @@ class ReportVersion(BaseModel):
     version: int
     author: str
     content: str
-    timestamp: datetime
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
-# --- NEW: Pydantic Models for RCA ---
+# --- NEW: Pydantic Models for Report Creation/Update ---
+class CreateReportPayload(BaseModel):
+    """Payload for creating a new report."""
+    ticket_id: str
+    author: str
+    content: str
+
+class UpdateReportPayload(BaseModel):
+    """Payload for updating an existing report."""
+    author: str
+    content: str
+
+# --- Pydantic Models for RCA ---
 
 class TimelineEvent(BaseModel):
     """Defines a single event in an incident timeline."""
@@ -44,22 +56,8 @@ REPORTS_DB: Dict[str, List[ReportVersion]] = {
     ],
 }
 
-# NEW: In-memory DB for RCA documents
+# In-memory DB for RCA documents
 RCA_DB: Dict[str, RcaModel] = {}
-
-# --- Service Logic ---
-
-def get_report_history(ticket_id: str) -> List[ReportVersion]:
-    """
-    Retrieves and sorts the history for a given ticket_id.
-    """
-    if ticket_id not in REPORTS_DB:
-        raise HTTPException(status_code=404, detail=f"No history found for ticket ID: {ticket_id}")
-    
-    history = REPORTS_DB[ticket_id]
-    history.sort(key=operator.attrgetter('version'), reverse=True)
-    
-    return history
 
 # --- FastAPI Application ---
 
@@ -69,6 +67,45 @@ app = FastAPI(
 )
 
 # --- Report Endpoints ---
+
+@app.post(
+    "/outages",
+    response_model=ReportVersion,
+    status_code=201,
+    summary="Create a new outage report",
+    tags=["Reports"],
+)
+def create_report(payload: CreateReportPayload):
+    """Creates the first version of a new outage report."""
+    if payload.ticket_id in REPORTS_DB:
+        raise HTTPException(status_code=409, detail=f"Ticket ID '{payload.ticket_id}' already exists.")
+    
+    new_report = ReportVersion(version=1, author=payload.author, content=payload.content)
+    REPORTS_DB[payload.ticket_id] = [new_report]
+    return new_report
+
+@app.patch(
+    "/outages/{ticket_id}",
+    response_model=ReportVersion,
+    summary="Update an outage report with a new version",
+    tags=["Reports"],
+)
+def update_report(ticket_id: str, payload: UpdateReportPayload):
+    """Adds a new version to an existing outage report."""
+    if ticket_id not in REPORTS_DB:
+        raise HTTPException(status_code=404, detail=f"No report found for ticket ID: {ticket_id}")
+    
+    current_history = REPORTS_DB[ticket_id]
+    # Find the latest version number correctly, even if the list is not sorted
+    next_version_number = max(v.version for v in current_history) + 1
+    
+    new_version = ReportVersion(
+        version=next_version_number,
+        author=payload.author,
+        content=payload.content,
+    )
+    current_history.append(new_version)
+    return new_version
 
 @app.get(
     "/outages/{ticket_id}/history",
@@ -81,9 +118,14 @@ def fetch_report_history(ticket_id: str):
     Retrieves all versions of a report for a specific `ticket_id`,
     sorted with the newest version first.
     """
-    return get_report_history(ticket_id)
+    if ticket_id not in REPORTS_DB:
+        raise HTTPException(status_code=404, detail=f"No history found for ticket ID: {ticket_id}")
+    
+    history = REPORTS_DB[ticket_id]
+    # Return a sorted copy, don't sort the DB in place to avoid side effects
+    return sorted(history, key=operator.attrgetter('version'), reverse=True)
 
-# --- NEW: RCA Management Endpoints ---
+# --- RCA Management Endpoints ---
 
 @app.post(
     "/rca/{ticket_id}",
