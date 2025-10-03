@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse
 from app.data_models import OutageReport, OutageReportVersioned, OutageReportUpdate
 from app.db_models import OUTAGE_MODEL
 from app.firebase import db
@@ -161,3 +162,74 @@ def get_outage_by_ticket_id(ticket_id: str, version: int = None):
         doc_data["outage_end_time"] = doc_data["outage_end_time"].isoformat()
     
     return doc_data
+
+
+@router.get("/outages/{ticket_id}/summary", response_class=PlainTextResponse)
+def get_outage_summary(ticket_id: str):
+    """
+    Returns a pre-formatted, plain-text summary of the latest outage report
+    for the given ticket_id. The summary is suitable for sharing via messaging
+    apps like WhatsApp.
+    """
+    # Fetch latest outage version for the ticket
+    latest = get_latest_version_by_ticket_id(ticket_id)
+    if not latest:
+        raise HTTPException(status_code=404, detail=f"No outage report found for ticket_id: {ticket_id}")
+
+    # Helper to safely stringify datetime values
+    def fmt_dt(value):
+        if value is None:
+            return None
+        from datetime import datetime as _dt
+        if isinstance(value, _dt):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            # Fallback if value is already a string
+            return str(value)
+        except Exception:
+            return ""
+
+    start_dt = latest.get("outage_start_time")
+    end_dt = latest.get("outage_end_time")
+
+    start_str = fmt_dt(start_dt)
+    end_str = fmt_dt(end_dt) if end_dt else "Ongoing"
+
+    # Compute duration if possible
+    duration_str = "Ongoing"
+    try:
+        from datetime import datetime as _dt
+        if isinstance(start_dt, _dt) and isinstance(end_dt, _dt):
+            delta = end_dt - start_dt
+            total_minutes = int(delta.total_seconds() // 60)
+            hours, minutes = divmod(total_minutes, 60)
+            duration_str = f"{hours}h {minutes}m"
+    except Exception:
+        pass
+
+    ticket = latest.get("ticket_id", "-")
+    alarm = latest.get("alarm_name", "-")
+    site = latest.get("site_id", "-")
+    vendor = latest.get("vendor") or "N/A"
+    supervisor = latest.get("supervisor") or "N/A"
+    status = latest.get("outage_status") or "N/A"
+    rca = latest.get("rca") or "N/A"
+    version = latest.get("version", 1)
+
+    summary_lines = [
+        f"Outage Summary (Ticket: {ticket})",
+        f"Version: {version}",
+        "",
+        f"Alarm: {alarm}",
+        f"Site: {site}",
+        f"Vendor: {vendor}",
+        f"Supervisor: {supervisor}",
+        f"Status: {status}",
+        f"Start: {start_str}",
+        f"End: {end_str}",
+        f"Duration: {duration_str}",
+        "",
+        f"RCA: {rca}",
+    ]
+
+    return "\n".join(summary_lines)
