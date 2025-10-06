@@ -1,5 +1,5 @@
-from pydantic import BaseModel, field_validator, Field
-from datetime import datetime
+from pydantic import BaseModel, field_validator, Field, model_validator
+from datetime import datetime, timezone
 from typing import Optional, Literal
 from fastapi import HTTPException
 
@@ -18,6 +18,9 @@ class OutageReport(BaseModel):
     - supervisor: Optional[str] = None - The supervisor of the site that triggered the outage
     - rca: Optional[str] = None - The RCA of the outage
     - outage_status: OUTAGE_STATUS_RESOLVED - The status of the outage
+    - location_name: Optional[str] = None - Human-readable location (e.g., "Maitama District, Abuja")
+    - latitude: Optional[float] = None - Latitude coordinate
+    - longitude: Optional[float] = None - Longitude coordinate
     
     Raises:
     - ValueError: If outage start time is in the future
@@ -32,6 +35,9 @@ class OutageReport(BaseModel):
     supervisor: Optional[str] = None
     rca: Optional[str] = None
     outage_status: OUTAGE_STATUS_RESOLVED
+    location_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     
     @field_validator("outage_start_time", mode="after")
     @classmethod
@@ -39,19 +45,20 @@ class OutageReport(BaseModel):
         """
         Validate the outage start time.
         """
-        if v > datetime.now():
+        # Ensure timezone-aware comparison when input includes timezone
+        now = datetime.now(v.tzinfo) if getattr(v, "tzinfo", None) else datetime.now()
+        if v > now:
             raise HTTPException(status_code=400, detail="Outage start time cannot be in the future")
         return v
     
-    @field_validator("outage_end_time", mode="after")
-    @classmethod
-    def validate_outage_end_time(cls, v):
+    @model_validator(mode="after")
+    def validate_outage_end_time(self):
         """
-        Validate the outage end time.
+        Validate that outage end time is not before start time.
         """
-        if v and v < cls.outage_start_time:
+        if self.outage_end_time and self.outage_start_time and self.outage_end_time < self.outage_start_time:
             raise HTTPException(status_code=400, detail="Outage end time cannot be before start time")
-        return v
+        return self
 
 
 class OutageReportVersioned(BaseModel):
@@ -68,6 +75,9 @@ class OutageReportVersioned(BaseModel):
     supervisor: Optional[str] = None
     rca: Optional[str] = None
     outage_status: OUTAGE_STATUS_RESOLVED
+    location_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     version: int
     previous_version_id: Optional[str] = None
     document_id: Optional[str] = None
@@ -88,3 +98,6 @@ class OutageReportUpdate(BaseModel):
     supervisor: Optional[str] = None
     rca: Optional[str] = None
     outage_status: Optional[OUTAGE_STATUS_RESOLVED] = None
+    location_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None

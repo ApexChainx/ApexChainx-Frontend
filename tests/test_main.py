@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from .main import app, MOCK_DB, ReportVersion # Import the app and mock DB
+from main import app, REPORTS_DB as MOCK_DB, ReportVersion  # Import the app and DB from project root
 from datetime import datetime
 
 client = TestClient(app)

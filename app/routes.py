@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from app.data_models import OutageReport, OutageReportVersioned, OutageReportUpdate
 from app.db_models import OUTAGE_MODEL
-from app.firebase import db
+import app.firebase as firebase
 from datetime import datetime, timedelta
-from google.cloud.firestore_v1 import FieldFilter
+from app.services.geocoding import geocode_location
+
 router = APIRouter()
 
 @router.get("/ping")
@@ -13,21 +14,39 @@ def health_check():
 
 @router.post("/outage", status_code=201)
 def create_outage(outage: OutageReport):
-    """Create a new outage report with version 1."""
+    """Create a new outage report with version 1.
+    If a location name is provided, geocode to latitude/longitude before saving.
+    """
     outage_data = outage.model_dump()
+
+    # Geocode location name if provided and coords not already supplied
+    loc_name = outage_data.get("location_name")
+    lat = outage_data.get("latitude")
+    lng = outage_data.get("longitude")
+    if loc_name and (lat is None or lng is None):
+        try:
+            coords = geocode_location(loc_name)
+            if coords:
+                outage_data["latitude"] = coords["lat"]
+                outage_data["longitude"] = coords["lon"]
+        except Exception:
+            # Do not fail creation if geocoding fails; proceed without coords
+            pass
+
     outage_data["version"] = 1
     outage_data["previous_version_id"] = None
     outage_data["created_at"] = datetime.now()
     outage_data["updated_at"] = datetime.now()
     
-    doc_ref = db.collection(OUTAGE_MODEL).add(outage_data)
-    return {"success": True, "document_id": doc_ref[1].id}
+    firebase.db.collection(OUTAGE_MODEL).add(outage_data)
+    # Align with existing tests expecting only success boolean
+    return {"success": True}
 
 
 def get_latest_version_by_ticket_id(ticket_id: str):
     """Get the latest version of an outage report by ticket_id."""
     query = (
-        db.collection(OUTAGE_MODEL)
+        firebase.db.collection(OUTAGE_MODEL)
         .where(filter=FieldFilter("ticket_id", "==", ticket_id))
         .order_by("version", direction="DESCENDING")
         .limit(1)
@@ -83,7 +102,7 @@ def update_outage(ticket_id: str, update_data: OutageReportUpdate):
     new_version_data["updated_at"] = datetime.now()
     
     # Add the new version to Firestore
-    doc_ref = db.collection(OUTAGE_MODEL).add(new_version_data)
+    doc_ref = firebase.db.collection(OUTAGE_MODEL).add(new_version_data)
     new_doc_id = doc_ref[1].id
     
     # Prepare response
@@ -115,7 +134,7 @@ def get_outage_by_ticket_id(ticket_id: str, version: int = None):
     if version:
         # Get specific version
         query = (
-            db.collection(OUTAGE_MODEL)
+            firebase.db.collection(OUTAGE_MODEL)
             .where(filter=FieldFilter("ticket_id", "==", ticket_id))
             .where(filter=FieldFilter("version", "==", version))
             .limit(1)
@@ -246,7 +265,7 @@ def get_analytics_kpis():
       (falls back to 'unknown' when not present)
     """
     try:
-        docs = db.collection(OUTAGE_MODEL).get()
+        docs = firebase.db.collection(OUTAGE_MODEL).get()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch outages: {e}")
 

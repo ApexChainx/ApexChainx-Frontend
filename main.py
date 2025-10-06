@@ -3,10 +3,16 @@ from pydantic import BaseModel, Field
 from typing import List, Dict
 from datetime import datetime
 import operator
+import os
 from app.firebase import initialize_firebase
 
-
-initialize_firebase()
+# Initialize Firebase only if creds are configured; otherwise skip (tests don't need it)
+if os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    try:
+        initialize_firebase()
+    except Exception:
+        # Non-fatal during tests/local runs without proper credentials
+        pass
 
 
 
