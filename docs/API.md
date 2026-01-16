@@ -1,0 +1,745 @@
+# NOCIQ API Documentation
+
+Version: 1.0.0  
+Base URL: `http://localhost:8000` (development) | `https://api.nociq.com` (production) - WIP
+
+## Table of Contents
+
+- [Authentication](#authentication)
+- [Outages](#outages)
+- [Root Cause Analysis (RCA)](#root-cause-analysis-rca)
+- [SLA Management](#sla-management)
+- [Stellar Payments](#stellar-payments)
+- [Wallet Management](#wallet-management)
+- [Smart Contracts](#smart-contracts)
+- [Analytics](#analytics)
+- [Reports](#reports)
+- [Error Handling](#error-handling)
+
+---
+
+## Authentication
+
+All authenticated endpoints require a bearer token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+### POST `/api/v1/auth/login`
+
+Authenticate user and receive access token.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "user": {
+    "id": "user123",
+    "email": "user@example.com",
+    "role": "engineer",
+    "stellar_wallet": "GXXX..."
+  }
+}
+```
+
+### POST `/api/v1/auth/register`
+
+Register new user account.
+
+**Request Body:**
+```json
+{
+  "email": "newuser@example.com",
+  "password": "securePassword123",
+  "full_name": "John Doe",
+  "role": "engineer"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": "user124",
+  "email": "newuser@example.com",
+  "full_name": "John Doe",
+  "role": "engineer",
+  "created_at": "2026-01-16T10:00:00Z"
+}
+```
+
+---
+
+## Outages
+
+### GET `/api/v1/outages`
+
+List all outages with optional filtering.
+
+**Query Parameters:**
+- `status` (optional): Filter by status (`active`, `resolved`, `investigating`)
+- `severity` (optional): Filter by severity (`critical`, `high`, `medium`, `low`)
+- `start_date` (optional): Filter from date (ISO 8601)
+- `end_date` (optional): Filter to date (ISO 8601)
+- `site_name` (optional): Filter by site name
+- `limit` (optional, default=50): Number of results
+- `offset` (optional, default=0): Pagination offset
+
+**Example Request:**
+```
+GET /api/v1/outages?severity=critical&status=active&limit=10
+```
+
+**Response (200 OK):**
+```json
+{
+  "total": 45,
+  "limit": 10,
+  "offset": 0,
+  "outages": [
+    {
+      "id": "OUT001",
+      "site_name": "Cell Tower Alpha",
+      "severity": "critical",
+      "status": "active",
+      "detected_at": "2026-01-16T09:30:00Z",
+      "description": "Total signal loss",
+      "affected_services": ["4G", "5G"],
+      "assigned_to": "user123",
+      "sla_status": {
+        "status": "in_progress",
+        "mttr_minutes": null,
+        "threshold_minutes": 15,
+        "time_remaining_minutes": 12
+      }
+    }
+  ]
+}
+```
+
+### GET `/api/v1/outages/{outage_id}`
+
+Get detailed information about a specific outage.
+
+**Response (200 OK):**
+```json
+{
+  "id": "OUT001",
+  "site_name": "Cell Tower Alpha",
+  "site_id": "SITE123",
+  "severity": "critical",
+  "status": "resolved",
+  "detected_at": "2026-01-16T09:30:00Z",
+  "resolved_at": "2026-01-16T09:45:00Z",
+  "description": "Total signal loss due to power failure",
+  "root_cause": "UPS battery failure",
+  "affected_services": ["4G", "5G"],
+  "affected_subscribers": 1500,
+  "assigned_to": "user123",
+  "created_by": "system",
+  "location": {
+    "latitude": 9.082,
+    "longitude": 8.675
+  },
+  "sla_status": {
+    "status": "met",
+    "mttr_minutes": 15,
+    "threshold_minutes": 15,
+    "penalty_amount": 0,
+    "reward_amount": 750.00,
+    "performance_rating": "good",
+    "payment_type": "reward",
+    "smart_contract_invoked": true,
+    "contract_tx_hash": "abc123..."
+  },
+  "stellar_payment": {
+    "transaction_hash": "def456...",
+    "amount": 750.00,
+    "asset_code": "USDC",
+    "from_address": "GPOOL...",
+    "to_address": "GNOC...",
+    "status": "confirmed",
+    "created_at": "2026-01-16T09:46:00Z",
+    "confirmed_at": "2026-01-16T09:46:05Z"
+  },
+  "timeline": [
+    {
+      "timestamp": "2026-01-16T09:30:00Z",
+      "event": "Outage detected",
+      "user": "system"
+    },
+    {
+      "timestamp": "2026-01-16T09:32:00Z",
+      "event": "Assigned to engineer",
+      "user": "admin"
+    },
+    {
+      "timestamp": "2026-01-16T09:45:00Z",
+      "event": "Outage resolved",
+      "user": "user123"
+    }
+  ]
+}
+```
+
+### POST `/api/v1/outages`
+
+Create a new outage record.
+
+**Request Body:**
+```json
+{
+  "site_name": "Cell Tower Beta",
+  "site_id": "SITE456",
+  "severity": "high",
+  "description": "Intermittent service degradation",
+  "affected_services": ["4G"],
+  "affected_subscribers": 500,
+  "location": {
+    "latitude": 9.082,
+    "longitude": 8.675
+  },
+  "assigned_to": "user123"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": "OUT002",
+  "site_name": "Cell Tower Beta",
+  "status": "active",
+  "detected_at": "2026-01-16T10:15:00Z",
+  "message": "Outage created successfully"
+}
+```
+
+### PUT `/api/v1/outages/{outage_id}`
+
+Update an existing outage.
+
+**Request Body:**
+```json
+{
+  "status": "resolved",
+  "resolved_at": "2026-01-16T10:40:00Z",
+  "root_cause": "Fiber cut",
+  "resolution_notes": "Fiber repaired, services restored"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "OUT002",
+  "status": "resolved",
+  "message": "Outage updated successfully",
+  "sla_triggered": true
+}
+```
+
+---
+
+## SLA Management
+
+### GET `/api/v1/sla/status/{outage_id}`
+
+Get real-time SLA status for an outage.
+
+**Response (200 OK):**
+```json
+{
+  "outage_id": "OUT001",
+  "status": "violated",
+  "mttr_minutes": 25,
+  "threshold_minutes": 15,
+  "severity": "critical",
+  "penalty_amount": 1000.00,
+  "reward_amount": 0,
+  "performance_rating": "poor",
+  "payment_type": "penalty",
+  "smart_contract_invoked": true,
+  "contract_tx_hash": "abc123...",
+  "payment_executed": true,
+  "payment_tx_hash": "def456..."
+}
+```
+
+### POST `/api/v1/sla/calculate`
+
+Calculate SLA for a resolved outage (triggers smart contract).
+
+**Request Body:**
+```json
+{
+  "outage_id": "OUT001"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "outage_id": "OUT001",
+  "sla_result": {
+    "status": "violated",
+    "mttr_minutes": 25,
+    "threshold_minutes": 15,
+    "amount": -1000.00,
+    "payment_type": "penalty"
+  },
+  "contract_invocation": {
+    "tx_hash": "abc123...",
+    "status": "confirmed",
+    "gas_cost_xlm": 0.001
+  }
+}
+```
+
+### POST `/api/v1/sla/execute-payment`
+
+Execute payment based on SLA result.
+
+**Request Body:**
+```json
+{
+  "outage_id": "OUT001",
+  "operator_wallet": "GOPER...",
+  "noc_team_wallet": "GNOC..."
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "payment": {
+    "transaction_hash": "def456...",
+    "amount": 1000.00,
+    "from": "GOPER...",
+    "to": "GPOOL...",
+    "asset": "USDC",
+    "status": "pending"
+  },
+  "estimated_confirmation": "2026-01-16T10:45:05Z"
+}
+```
+
+### GET `/api/v1/sla/configs`
+
+Get current SLA configurations.
+
+**Response (200 OK):**
+```json
+{
+  "critical": {
+    "threshold_minutes": 15,
+    "penalty_per_minute": 100.00,
+    "reward_base": 750.00
+  },
+  "high": {
+    "threshold_minutes": 30,
+    "penalty_per_minute": 50.00,
+    "reward_base": 750.00
+  },
+  "medium": {
+    "threshold_minutes": 60,
+    "penalty_per_minute": 25.00,
+    "reward_base": 750.00
+  },
+  "low": {
+    "threshold_minutes": 120,
+    "penalty_per_minute": 10.00,
+    "reward_base": 600.00
+  }
+}
+```
+
+---
+
+## Stellar Payments
+
+### POST `/api/v1/payments/process-sla`
+
+Process SLA-based payment for a resolved outage.
+
+**Request Body:**
+```json
+{
+  "outage_id": "OUT001"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "outage_id": "OUT001",
+  "sla_result": {
+    "status": "met",
+    "amount": 1500.00,
+    "payment_type": "reward"
+  },
+  "payment": {
+    "transaction_hash": "xyz789...",
+    "amount": 1500.00,
+    "from": "GPOOL...",
+    "to": "GNOC...",
+    "asset": "USDC",
+    "status": "confirmed"
+  }
+}
+```
+
+### GET `/api/v1/payments/history`
+
+Get payment transaction history.
+
+**Query Parameters:**
+- `start_date` (optional): From date
+- `end_date` (optional): To date
+- `type` (optional): Filter by type (`penalty`, `reward`, `manual`)
+- `status` (optional): Filter by status (`pending`, `confirmed`, `failed`)
+- `limit` (optional, default=50)
+- `offset` (optional, default=0)
+
+**Response (200 OK):**
+```json
+{
+  "total": 120,
+  "limit": 50,
+  "offset": 0,
+  "transactions": [
+    {
+      "id": "pay001",
+      "transaction_hash": "abc123...",
+      "type": "reward",
+      "amount": 1500.00,
+      "asset_code": "USDC",
+      "from_address": "GPOOL...",
+      "to_address": "GNOC...",
+      "status": "confirmed",
+      "outage_id": "OUT001",
+      "created_at": "2026-01-16T09:46:00Z",
+      "confirmed_at": "2026-01-16T09:46:05Z",
+      "explorer_url": "https://stellar.expert/explorer/testnet/tx/abc123..."
+    }
+  ],
+  "summary": {
+    "total_penalties": 5000.00,
+    "total_rewards": 12000.00,
+    "net_amount": 7000.00
+  }
+}
+```
+
+---
+
+## Wallet Management
+
+### POST `/api/v1/wallets/create`
+
+Create a new Stellar wallet for a user.
+
+**Request Body:**
+```json
+{
+  "user_id": "user123"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "user_id": "user123",
+  "public_key": "GXXX...",
+  "created_at": "2026-01-16T10:00:00Z",
+  "funded": false,
+  "message": "Wallet created. Please fund with at least 1 XLM to activate."
+}
+```
+
+**⚠️ Security Note:** Private keys are NEVER returned via API. Users must manage their own keys via wallet apps (Freighter, Albedo).
+
+### GET `/api/v1/wallets/{user_id}`
+
+Get wallet details for a user.
+
+**Response (200 OK):**
+```json
+{
+  "user_id": "user123",
+  "public_key": "GXXX...",
+  "created_at": "2026-01-16T10:00:00Z",
+  "last_updated": "2026-01-16T11:00:00Z",
+  "funded": true,
+  "active": true
+}
+```
+
+### GET `/api/v1/wallets/{address}/balance`
+
+Get balance for a Stellar address.
+
+**Response (200 OK):**
+```json
+{
+  "address": "GXXX...",
+  "balances": {
+    "XLM": {
+      "balance": "1000.0000000",
+      "asset_type": "native"
+    },
+    "USDC": {
+      "balance": "5000.0000000",
+      "asset_type": "credit_alphanum4",
+      "asset_code": "USDC",
+      "asset_issuer": "GBBD..."
+    },
+    "NOCIQ": {
+      "balance": "500.0000000",
+      "asset_type": "credit_alphanum12",
+      "asset_code": "NOCIQ",
+      "asset_issuer": "GNOC..."
+    }
+  },
+  "last_updated": "2026-01-16T11:05:00Z"
+}
+```
+
+---
+
+## Analytics
+
+### GET `/api/v1/analytics/mttr`
+
+Get MTTR statistics.
+
+**Query Parameters:**
+- `start_date`: Start date (ISO 8601)
+- `end_date`: End date (ISO 8601)
+- `severity` (optional): Filter by severity
+- `group_by` (optional): Group by (`site`, `severity`, `day`, `week`)
+
+**Response (200 OK):**
+```json
+{
+  "period": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-01-16T23:59:59Z"
+  },
+  "overall": {
+    "average_mttr_minutes": 28.5,
+    "median_mttr_minutes": 22.0,
+    "total_outages": 145,
+    "sla_compliance_rate": 78.5
+  },
+  "by_severity": {
+    "critical": {
+      "average_mttr": 18.2,
+      "count": 12,
+      "sla_met": 9,
+      "sla_violated": 3
+    },
+    "high": {
+      "average_mttr": 25.8,
+      "count": 35,
+      "sla_met": 28,
+      "sla_violated": 7
+    }
+  }
+}
+```
+
+### GET `/api/v1/analytics/payments`
+
+Get payment analytics.
+
+**Query Parameters:**
+- `start_date`: Start date
+- `end_date`: End date
+- `group_by` (optional, default=day): Group by period
+
+**Response (200 OK):**
+```json
+{
+  "period": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-01-16T23:59:59Z"
+  },
+  "summary": {
+    "total_penalties": 15000.00,
+    "total_rewards": 22500.00,
+    "net_amount": 7500.00,
+    "transaction_count": 145,
+    "average_transaction_amount": 258.62
+  },
+  "trends": [
+    {
+      "date": "2026-01-15",
+      "penalties": 1000.00,
+      "rewards": 1500.00,
+      "net": 500.00,
+      "count": 8
+    },
+    {
+      "date": "2026-01-16",
+      "penalties": 1500.00,
+      "rewards": 2000.00,
+      "net": 500.00,
+      "count": 10
+    }
+  ]
+}
+```
+
+---
+
+## Error Handling
+
+### Error Response Format
+
+All errors follow this structure:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid outage severity level",
+    "details": {
+      "field": "severity",
+      "allowed_values": ["critical", "high", "medium", "low"]
+    },
+    "timestamp": "2026-01-16T10:30:00Z"
+  }
+}
+```
+
+### Common Error Codes
+
+| Status Code | Error Code | Description |
+|-------------|------------|-------------|
+| 400 | `VALIDATION_ERROR` | Invalid request data |
+| 401 | `UNAUTHORIZED` | Missing or invalid authentication |
+| 403 | `FORBIDDEN` | Insufficient permissions |
+| 404 | `NOT_FOUND` | Resource not found |
+| 409 | `CONFLICT` | Resource conflict (e.g., duplicate) |
+| 422 | `UNPROCESSABLE_ENTITY` | Valid syntax but semantic errors |
+| 429 | `RATE_LIMIT_EXCEEDED` | Too many requests |
+| 500 | `INTERNAL_SERVER_ERROR` | Server error |
+| 503 | `SERVICE_UNAVAILABLE` | Service temporarily unavailable |
+
+### Stellar-Specific Errors
+
+| Error Code | Description | Solution |
+|------------|-------------|----------|
+| `STELLAR_INSUFFICIENT_BALANCE` | Not enough XLM/USDC | Fund account |
+| `STELLAR_NO_TRUSTLINE` | USDC trustline not established | Create trustline |
+| `STELLAR_TRANSACTION_FAILED` | Transaction failed on network | Check Stellar Explorer for details |
+| `STELLAR_CONTRACT_ERROR` | Smart contract execution failed | Review contract parameters |
+| `STELLAR_TIMEOUT` | Transaction confirmation timeout | Resubmit transaction |
+
+---
+
+## Rate Limiting
+
+API requests are rate-limited to prevent abuse:
+
+- **Authenticated requests**: 100 requests per minute
+- **Unauthenticated requests**: 20 requests per minute
+- **Payment operations**: 10 requests per minute
+
+Rate limit headers are included in responses:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1705405200
+```
+
+---
+
+## Pagination
+
+List endpoints support pagination:
+
+**Request:**
+```
+GET /api/v1/outages?limit=20&offset=40
+```
+
+**Response includes:**
+```json
+{
+  "total": 145,
+  "limit": 20,
+  "offset": 40,
+  "has_next": true,
+  "has_previous": true,
+  "next_offset": 60,
+  "previous_offset": 20,
+  "results": [...]
+}
+```
+
+---
+
+## Webhooks
+
+NOCIQ can send webhooks for important events:
+
+### Webhook Events
+
+- `outage.created`
+- `outage.resolved`
+- `outage.assigned`
+- `sla.calculated`
+- `payment.completed`
+- `payment.failed`
+
+### Webhook Payload
+
+```json
+{
+  "event": "payment.completed",
+  "timestamp": "2026-01-16T10:30:00Z",
+  "data": {
+    "outage_id": "OUT001",
+    "transaction_hash": "abc123...",
+    "amount": 1500.00,
+    "type": "reward"
+  }
+}
+```
+
+Configure webhooks in the admin panel or via API.
+
+---
+
+## Testing
+
+### Swagger UI
+
+Interactive API documentation available at:
+```
+http://localhost:8000/docs
+```
+
+### Postman Collection
+
+Download our Postman collection:[WIP]
+```
+https://github.com/OpSoll/noc-iq-be/blob/main/postman/NOCIQ-API.json
+```
+
+---
+
+For more information, visit our [GitHub repository](https://github.com/OpSoll/noc-iq-be)
