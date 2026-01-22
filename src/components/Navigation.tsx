@@ -5,7 +5,7 @@ const Navigation = () => {
     <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}>
       <Link href="/">Dashboard</Link> | <Link href="/outages">Outages</Link> |{" "}
       <Link href="/payments">Payments</Link> |{" "}
-      <Link href="/settings">Settings</Link>
+      <Link href="/setting">Settings</Link>
     </nav>
   );
 };
