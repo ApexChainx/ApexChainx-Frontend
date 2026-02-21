@@ -28,3 +28,8 @@ export async function deleteOutage(id: string): Promise<{ message: string }> {
   const res = await api.delete<{ message: string }>(`/outages/${id}`);
   return res.data;
 }
+
+export async function resolveOutage(id: string): Promise<Outage> {
+  const res = await api.post<Outage>(`/outages/${id}/resolve`);
+  return res.data;
+}
