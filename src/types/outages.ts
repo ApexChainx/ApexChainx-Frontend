@@ -57,3 +57,14 @@ export interface OutageUpdate {
   affected_subscribers?: number;
   assigned_to?: string;
 }
+
+export interface SlaPreviewPayload {
+  outageId: string;
+  mttr: number; // Sending MTTR ensures the preview matches the final resolution
+}
+
+export interface SlaPreviewResponse {
+  reward: number;
+  penalty: number;
+  rating: string | number; 
+}
