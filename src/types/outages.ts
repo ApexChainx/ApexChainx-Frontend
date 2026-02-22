@@ -6,11 +6,13 @@ export interface Location {
   longitude: number;
 }
 
-export interface SLAStatus {
-  status: "met" | "violated" | "in_progress";
-  mttr_minutes?: number;
+export interface SLAResult {
+  status: "met" | "violated";
+  mttr_minutes: number;
   threshold_minutes: number;
-  time_remaining_minutes?: number;
+  amount: number;
+  payment_type: "reward" | "penalty";
+  rating: "exceptional" | "excellent" | "good" | "poor";
 }
 
 export interface Outage {
@@ -27,7 +29,7 @@ export interface Outage {
   assigned_to?: string;
   created_by?: string;
   location?: Location;
-  sla_status?: SLAStatus;
+  sla_status?: SLAResult;
 }
 
 export interface OutageCreate {
