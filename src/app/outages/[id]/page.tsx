@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { getOutage, resolveOutage } from "@/services/outages";
 import type { Outage } from "@/types/outages";
 
-// Import shadcn UI components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -16,15 +15,49 @@ export default function OutageDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [resolving, setResolving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Prevent duplicate network requests if the interval fires while a fetch is ongoing
+    const isFetching = useRef(false);
 
     useEffect(() => {
         if (!id) return;
+        // Stop polling completely if the outage is already resolved
+        if (outage?.status === "resolved") return;
 
-        getOutage(id)
-            .then(setOutage)
-            .catch((err) => setError(err.message))
-            .finally(() => setLoading(false));
-    }, [id]);
+        let isMounted = true;
+
+        const fetchOutage = async () => {
+            if (isFetching.current) return;
+            isFetching.current = true;
+
+            try {
+                const data = await getOutage(id);
+                if (isMounted) {
+                    setOutage(data);
+                    setError(null); // Clear any previous errors on success
+                }
+            } catch (err: any) {
+                // Only show error UI if we don't already have stale data to display
+                if (isMounted && !outage) {
+                    setError(err.message || "Failed to fetch outage");
+                }
+            } finally {
+                isFetching.current = false;
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        // Initial fetch
+        fetchOutage();
+
+        // Start 15-second polling
+        const intervalId = setInterval(fetchOutage, 15000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(intervalId); // Prevent memory leaks on unmount
+        };
+    }, [id, outage?.status]); // Re-evaluates and kills interval if status changes to "resolved"
 
     async function handleResolve() {
         if (!id) return;
@@ -131,7 +164,6 @@ export default function OutageDetailsPage() {
                     <CardContent className="space-y-3 text-sm">
                         <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Started At</span>
-                            {/* Assuming started_at exists on your Outage type based on previous column.tsx context */}
                             <span className="font-medium">
                                 {outage.started_at ? new Date(outage.started_at).toLocaleString() : "Unknown"}
                             </span>
@@ -184,7 +216,6 @@ export default function OutageDetailsPage() {
                         <CardTitle>Payment Info</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
-                        {/* Assuming payment_info might be added to the Outage type. Adjust property name as needed. */}
                         {outage.payment_info ? (
                             <>
                                 <div className="flex justify-between items-center">
