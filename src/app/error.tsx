@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle, RotateCcw, RefreshCw } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+} from "@/components/ui/icons";
 
 export default function GlobalError({
   error,
@@ -28,7 +32,7 @@ export default function GlobalError({
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-gray-200 p-8 text-center">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertTriangle className="w-8 h-8 text-red-600" />
+            <AlertTriangleIcon className="w-8 h-8 text-red-600" />
           </div>
         </div>
 
@@ -46,7 +50,7 @@ export default function GlobalError({
             onClick={() => reset()}
             className="flex items-center justify-center gap-2 w-full sm:w-auto bg-gray-900 hover:bg-gray-800 text-white font-medium py-2.5 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcwIcon className="w-4 h-4" />
             Try Again
           </button>
           
@@ -55,7 +59,7 @@ export default function GlobalError({
             onClick={() => window.location.reload()}
             className="flex items-center justify-center gap-2 w-full sm:w-auto bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCwIcon className="w-4 h-4" />
             Reload Page
           </button>
         </div>

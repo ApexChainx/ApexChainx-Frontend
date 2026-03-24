@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { SlaPreviewResponse } from '@/types/outages';
 
 interface ResolveModalProps {
   outageId: string;

@@ -1,5 +1,5 @@
 export type Severity = "critical" | "high" | "medium" | "low";
-export type OutageStatus = "active" | "investigating" | "resolved";
+export type OutageStatus = "open" | "resolved";
 
 export interface Location {
   latitude: number;
@@ -21,7 +21,7 @@ export interface Outage {
   site_id?: string;
   severity: Severity;
   status: OutageStatus;
-  detected_at: string; // ISO string
+  detected_at: string;
   resolved_at?: string;
   description: string;
   affected_services: string[];
@@ -60,11 +60,27 @@ export interface OutageUpdate {
 
 export interface SlaPreviewPayload {
   outageId: string;
-  mttr: number; // Sending MTTR ensures the preview matches the final resolution
+  mttr: number;
 }
 
 export interface SlaPreviewResponse {
   reward: number;
   penalty: number;
-  rating: string | number; 
+  rating: string | number;
+}
+
+export interface PaginatedOutages {
+  items: Outage[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ResolveOutagePayload {
+  mttr_minutes: number;
+}
+
+export interface ResolveOutageResponse {
+  outage: Outage;
+  sla: SLAResult;
 }

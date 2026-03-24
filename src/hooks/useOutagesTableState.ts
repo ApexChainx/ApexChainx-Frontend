@@ -2,19 +2,23 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { getOutages } from "@/services/outages"; // Assumed import based on the detail page
+import { getOutages } from "@/services/outages";
 import type { Outage } from "@/types/outages";
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Failed to load outages";
+}
 
 // Existing state manager
 export function useOutagesTableState() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const page = Number(params.get("page") ?? 1);
-  const severity = params.get("severity") ?? undefined;
+  const page = Number(params?.get("page") ?? 1);
+  const severity = params?.get("severity") ?? undefined;
 
   function setParam(key: string, value?: string) {
-    const next = new URLSearchParams(params.toString());
+    const next = new URLSearchParams(params?.toString() ?? "");
 
     if (value) {
       next.set(key, value);
@@ -43,9 +47,15 @@ export function useOutagesList(page: number, severity?: string) {
   const [error, setError] = useState<string | null>(null);
   
   const isFetching = useRef(false);
+  const hasOutagesRef = useRef(false);
+
+  useEffect(() => {
+    hasOutagesRef.current = outages.length > 0;
+  }, [outages]);
 
   useEffect(() => {
     let isMounted = true;
+    setLoading(true);
 
     const fetchList = async () => {
       if (isFetching.current) return;
@@ -54,13 +64,12 @@ export function useOutagesList(page: number, severity?: string) {
       try {
         const data = await getOutages({ page, severity });
         if (isMounted) {
-          // Check if data is paginated or direct array
-          setOutages(Array.isArray(data) ? data : data.data || []);
+          setOutages(data.items);
           setError(null);
         }
-      } catch (err: any) {
-        if (isMounted && outages.length === 0) {
-          setError(err.message || "Failed to load outages");
+      } catch (error: unknown) {
+        if (isMounted && !hasOutagesRef.current) {
+          setError(getErrorMessage(error));
         }
       } finally {
         isFetching.current = false;

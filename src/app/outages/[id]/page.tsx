@@ -9,8 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "Failed to load outage";
+}
+
 export default function OutageDetailsPage() {
-    const { id } = useParams<{ id: string }>();
+    const params = useParams<{ id: string }>();
+    const id = params?.id;
     const [outage, setOutage] = useState<Outage | null>(null);
     const [loading, setLoading] = useState(true);
     const [resolving, setResolving] = useState(false);
@@ -18,11 +23,14 @@ export default function OutageDetailsPage() {
     
     // Prevent duplicate network requests if the interval fires while a fetch is ongoing
     const isFetching = useRef(false);
+    const hasOutageRef = useRef(false);
+
+    useEffect(() => {
+        hasOutageRef.current = outage !== null;
+    }, [outage]);
 
     useEffect(() => {
         if (!id) return;
-        // Stop polling completely if the outage is already resolved
-        if (outage?.status === "resolved") return;
 
         let isMounted = true;
 
@@ -36,10 +44,10 @@ export default function OutageDetailsPage() {
                     setOutage(data);
                     setError(null); // Clear any previous errors on success
                 }
-            } catch (err: any) {
+            } catch (error: unknown) {
                 // Only show error UI if we don't already have stale data to display
-                if (isMounted && !outage) {
-                    setError(err.message || "Failed to fetch outage");
+                if (isMounted && !hasOutageRef.current) {
+                    setError(getErrorMessage(error));
                 }
             } finally {
                 isFetching.current = false;
@@ -51,25 +59,41 @@ export default function OutageDetailsPage() {
         fetchOutage();
 
         // Start 15-second polling
-        const intervalId = setInterval(fetchOutage, 15000);
+        const intervalId =
+            outage?.status === "resolved" ? null : setInterval(fetchOutage, 15000);
 
         return () => {
             isMounted = false;
-            clearInterval(intervalId); // Prevent memory leaks on unmount
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
         };
-    }, [id, outage?.status]); // Re-evaluates and kills interval if status changes to "resolved"
+    }, [id, outage?.status]);
 
     async function handleResolve() {
         if (!id) return;
+
+        const initialValue = outage?.sla_status?.mttr_minutes?.toString() ?? "";
+        const input = window.prompt("Enter MTTR in minutes", initialValue);
+        if (input === null) return;
+
+        const mttrMinutes = Number(input);
+        if (!Number.isFinite(mttrMinutes) || mttrMinutes < 0) {
+            setError("MTTR must be a non-negative number.");
+            return;
+        }
 
         setResolving(true);
         setError(null);
 
         try {
-            const updated = await resolveOutage(id);
-            setOutage(updated);
-        } catch (err: any) {
-            setError(err.message || "Failed to resolve outage");
+            const updated = await resolveOutage(id, { mttr_minutes: mttrMinutes });
+            setOutage({
+                ...updated.outage,
+                sla_status: updated.sla,
+            });
+        } catch (error: unknown) {
+            setError(getErrorMessage(error));
         } finally {
             setResolving(false);
         }
@@ -164,9 +188,7 @@ export default function OutageDetailsPage() {
                     <CardContent className="space-y-3 text-sm">
                         <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Started At</span>
-                            <span className="font-medium">
-                                {outage.started_at ? new Date(outage.started_at).toLocaleString() : "Unknown"}
-                            </span>
+                            <span className="font-medium">{new Date(outage.detected_at).toLocaleString()}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between items-center">
@@ -210,27 +232,26 @@ export default function OutageDetailsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Payment Info Card */}
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle>Payment Info</CardTitle>
+                        <CardTitle>Impact</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
-                        {outage.payment_info ? (
-                            <>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-muted-foreground">Amount</span>
-                                    <span className="font-medium">${outage.payment_info.amount}</span>
-                                </div>
-                                <Separator />
-                                <div className="flex justify-between items-center">
-                                    <span className="text-muted-foreground">Status</span>
-                                    <Badge variant="outline">{outage.payment_info.status}</Badge>
-                                </div>
-                            </>
-                        ) : (
-                            <span className="text-muted-foreground italic">No payment info available.</span>
-                        )}
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Affected Services</span>
+                            <span className="font-medium">
+                                {outage.affected_services.length > 0
+                                    ? outage.affected_services.join(", ")
+                                    : "Not provided"}
+                            </span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Subscribers</span>
+                            <span className="font-medium">
+                                {outage.affected_subscribers ?? "Unknown"}
+                            </span>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

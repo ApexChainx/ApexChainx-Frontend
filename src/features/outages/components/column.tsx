@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
-import { Outage } from "@/lib/api/outages";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button"; 
+import { Button } from "@/components/ui/button";
+import type { Outage } from "@/types/outages";
 
 // Dedicated cell component to handle row-level state
 const ActionCell = ({ row }: { row: { original: Outage } }) => {
@@ -12,12 +13,7 @@ const ActionCell = ({ row }: { row: { original: Outage } }) => {
     const handleRecompute = async () => {
         setIsRecomputing(true);
         try {
-            const response = await fetch(`/outages/${outage.id}/recompute-sla`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-
-            if (!response.ok) throw new Error('Failed to recompute SLA');
+            await api.post(`/outages/${outage.id}/recompute-sla`);
             
             // To update the UI without a full refresh, you will trigger your state 
             // refresh here. If you use React Query, it would be queryClient.invalidateQueries(). 
@@ -68,7 +64,7 @@ export const columns: ColumnDef<Outage>[] = [
             </Badge>
         ),
     },
-    { accessorKey: "started_at", header: "Started" },
+    { accessorKey: "detected_at", header: "Detected" },
     { accessorKey: "resolved_at", header: "Resolved" },
     {
         id: "actions",

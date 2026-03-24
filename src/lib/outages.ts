@@ -1,4 +1,5 @@
-import axios from "axios";
+import { api } from "@/lib/api";
+import type { PaginatedOutages } from "@/types/outages";
 
 export interface Outage {
   id: string;
@@ -15,7 +16,7 @@ export interface Outage {
 }
 
 export interface OutagesResponse {
-  data: Outage[];
+  items: Outage[];
   page: number;
   page_size: number;
   total: number;
@@ -23,29 +24,22 @@ export interface OutagesResponse {
 
 export interface OutagesQuery {
   page: number;
-  page_size: number;
+  page_size?: number;
   severity?: string;
   status?: string;
   search?: string;
   sort?: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL!;
-
-export async function fetchOutages(query: OutagesQuery) {
-  const params = new URLSearchParams({
-    page: query.page.toString(),
+export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutages> {
+  const { data } = await api.get<PaginatedOutages>("/outages", {
+    params: {
+      page: query.page,
+      page_size: query.page_size ?? 20,
+      severity: query.severity,
+      status: query.status,
+    },
   });
 
-  if (query.severity) {
-    params.set("severity", query.severity);
-  }
-
-  const res = await fetch(`${API_BASE_URL}/api/v1/outages/?page=1`);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch outages");
-  }
-
-  return res.json();
+  return data;
 }

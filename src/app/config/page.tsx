@@ -12,6 +12,10 @@ export interface SlaConfigItem {
     penalty: number;
 }
 
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "An unexpected error occurred";
+}
+
 export default function SlaConfigPage() {
     const [configs, setConfigs] = useState<SlaConfigItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -38,8 +42,8 @@ export default function SlaConfigPage() {
             const data = await response.json();
             // Assuming data is an array of config objects
             setConfigs(data);
-        } catch (err: any) {
-            setError(err.message || "An unexpected error occurred");
+        } catch (error: unknown) {
+            setError(getErrorMessage(error));
         } finally {
             setLoading(false);
         }
@@ -85,10 +89,14 @@ export default function SlaConfigPage() {
             if (!response.ok) throw new Error("Failed to save configuration");
 
             // Update local state to reflect the persisted changes
-            setConfigs(configs.map(c => c.severity === editingConfig.severity ? payload : c));
+            setConfigs((currentConfigs) =>
+                currentConfigs.map((config) =>
+                    config.severity === editingConfig.severity ? payload : config,
+                ),
+            );
             setEditingConfig(null); // Close modal
-        } catch (err: any) {
-            setSaveError(err.message || "Failed to save changes.");
+        } catch (error: unknown) {
+            setSaveError(getErrorMessage(error));
         } finally {
             setIsSaving(false);
         }

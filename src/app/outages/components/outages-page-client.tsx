@@ -17,7 +17,7 @@ export function OutagesPageClient() {
         return <div>Error loading outages</div>;
     }
 
-    const outages = (data ?? []) as Outage[];
+    const outages: Outage[] = data?.items ?? [];
 
     if (outages.length === 0) {
         return <div>No outages found.</div>;

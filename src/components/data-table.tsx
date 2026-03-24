@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    type ColumnDef,
     flexRender,
     getCoreRowModel,
     useReactTable,
@@ -14,7 +15,12 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-export function DataTable({ columns, data }: any) {
+interface DataTableProps<TData, TValue> {
+    columns: ColumnDef<TData, TValue>[];
+    data: TData[];
+}
+
+export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
     const table = useReactTable({
         data,
         columns,

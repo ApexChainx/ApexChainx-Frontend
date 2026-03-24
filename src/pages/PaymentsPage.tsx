@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fetchPayments } from "../services/paymentService";
 import { Payment, PaginatedPayments } from "../types/payment";
 
@@ -21,15 +21,46 @@ const PaymentsPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestKey = useMemo(() => `${page}:${PER_PAGE}`, [page]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    fetchPayments(page, PER_PAGE)
+      .then((response) => {
+        if (isMounted) {
+          setData(response);
+          setError(null);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setError("Failed to load payments.");
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [requestKey, page]);
+
+  const goToPreviousPage = () => {
     setLoading(true);
     setError(null);
-    fetchPayments(page, PER_PAGE)
-      .then(setData)
-      .catch(() => setError("Failed to load payments."))
-      .finally(() => setLoading(false));
-  }, [page]);
+    setPage((currentPage) => Math.max(1, currentPage - 1));
+  };
+
+  const goToNextPage = () => {
+    if (!data) return;
+    setLoading(true);
+    setError(null);
+    setPage((currentPage) => Math.min(data.total_pages, currentPage + 1));
+  };
 
   const renderBody = () => {
     if (loading) {
@@ -122,18 +153,18 @@ const PaymentsPage: React.FC = () => {
       {data && data.total_pages > 1 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>
-            Page {data.page} of {data.total_pages} &mdash; {data.total} total
+            Page {data.page} of {data.total_pages} - {data.total} total
           </span>
           <div className="flex gap-2">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={goToPreviousPage}
               disabled={page === 1}
               className="rounded-lg border px-3 py-1.5 disabled:opacity-40 hover:bg-gray-100 transition-colors"
             >
               Previous
             </button>
             <button
-              onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
+              onClick={goToNextPage}
               disabled={page === data.total_pages}
               className="rounded-lg border px-3 py-1.5 disabled:opacity-40 hover:bg-gray-100 transition-colors"
             >
