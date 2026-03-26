@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { fetchDashboardMetrics } from "../services/dashboardService";
 import { DashboardMetrics } from "../types/dashboard";
