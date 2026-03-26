@@ -6,7 +6,7 @@ export const fetchPayments = async (
   perPage: number = 10
 ): Promise<PaginatedPayments> => {
   const response = await api.get<PaginatedPayments>("/payments", {
-    params: { page, per_page: perPage },
+    params: { page, page_size: perPage },
   });
   return response.data;
 };

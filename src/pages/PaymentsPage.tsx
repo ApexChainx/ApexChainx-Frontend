@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchPayments } from "../services/paymentService";
 import { Payment, PaginatedPayments } from "../types/payment";
@@ -5,10 +7,10 @@ import { Payment, PaginatedPayments } from "../types/payment";
 const PER_PAGE = 10;
 
 const statusStyles: Record<string, string> = {
-  paid: "bg-green-100 text-green-700",
+  completed: "bg-green-100 text-green-700",
   pending: "bg-yellow-100 text-yellow-700",
-  disputed: "bg-red-100 text-red-700",
-  cancelled: "bg-gray-100 text-gray-500",
+  failed: "bg-red-100 text-red-700",
+  confirmed: "bg-emerald-100 text-emerald-700",
 };
 
 const typeStyles: Record<string, string> = {
@@ -59,14 +61,14 @@ const PaymentsPage: React.FC = () => {
     if (!data) return;
     setLoading(true);
     setError(null);
-    setPage((currentPage) => Math.min(data.total_pages, currentPage + 1));
+    setPage((currentPage) => Math.min(Math.ceil(data.total / data.page_size), currentPage + 1));
   };
 
   const renderBody = () => {
     if (loading) {
       return (
         <tr>
-          <td colSpan={5} className="py-16 text-center text-gray-400">
+          <td colSpan={6} className="py-16 text-center text-gray-400">
             Loading...
           </td>
         </tr>
@@ -76,24 +78,24 @@ const PaymentsPage: React.FC = () => {
     if (error) {
       return (
         <tr>
-          <td colSpan={5} className="py-16 text-center text-red-500">
+          <td colSpan={6} className="py-16 text-center text-red-500">
             {error}
           </td>
         </tr>
       );
     }
 
-    if (!data || data.data.length === 0) {
+    if (!data || data.items.length === 0) {
       return (
         <tr>
-          <td colSpan={5} className="py-16 text-center text-gray-400">
+          <td colSpan={6} className="py-16 text-center text-gray-400">
             No payments found.
           </td>
         </tr>
       );
     }
 
-    return data.data.map((payment: Payment) => (
+    return data.items.map((payment: Payment) => (
       <tr key={payment.id} className="border-t hover:bg-gray-50 transition-colors">
         <td className="px-4 py-3 text-sm text-gray-700 font-mono">
           {payment.outage_id}
@@ -114,11 +116,14 @@ const PaymentsPage: React.FC = () => {
           {payment.amount.toLocaleString()}
         </td>
         <td className="px-4 py-3 text-sm text-gray-600">
-          {new Date(payment.date).toLocaleDateString()}
+          {new Date(payment.created_at).toLocaleDateString()}
+        </td>
+        <td className="px-4 py-3 text-xs font-mono text-gray-500">
+          {payment.asset_code}
         </td>
         <td className="px-4 py-3">
           <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status]}`}
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"}`}
           >
             {payment.status}
           </span>
@@ -135,7 +140,7 @@ const PaymentsPage: React.FC = () => {
         <table className="w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              {["Outage ID", "Type", "Amount", "Date", "Status"].map((col) => (
+              {["Outage ID", "Type", "Amount", "Date", "Asset", "Status"].map((col) => (
                 <th
                   key={col}
                   className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500"
@@ -150,10 +155,10 @@ const PaymentsPage: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {data && data.total_pages > 1 && (
+      {data && Math.ceil(data.total / data.page_size) > 1 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>
-            Page {data.page} of {data.total_pages} - {data.total} total
+            Page {data.page} of {Math.ceil(data.total / data.page_size)} - {data.total} total
           </span>
           <div className="flex gap-2">
             <button
@@ -165,7 +170,7 @@ const PaymentsPage: React.FC = () => {
             </button>
             <button
               onClick={goToNextPage}
-              disabled={page === data.total_pages}
+              disabled={page === Math.ceil(data.total / data.page_size)}
               className="rounded-lg border px-3 py-1.5 disabled:opacity-40 hover:bg-gray-100 transition-colors"
             >
               Next
