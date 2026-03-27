@@ -1,11 +1,14 @@
-import React, { useRef, useState } from "react";
-import { bulkImportOutages } from "../services/bulkImportService";
-import { BulkImportResult } from "../types/bulkImport";
+"use client";
+
+import { useRef, useState } from "react";
+
+import { bulkImportOutages } from "@/services/bulkImportService";
+import type { BulkImportResult } from "@/types/bulkImport";
 
 const ACCEPTED_TYPES = ["text/csv", "application/json"];
 const ACCEPTED_EXTENSIONS = [".csv", ".json"];
 
-const BulkImportPage: React.FC = () => {
+export default function BulkImportView() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -14,73 +17,93 @@ const BulkImportPage: React.FC = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const validateFile = (f: File): string | null => {
-    const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
-    if (!ACCEPTED_EXTENSIONS.includes(ext) && !ACCEPTED_TYPES.includes(f.type)) {
+  function validateFile(nextFile: File): string | null {
+    const extension = nextFile.name.slice(nextFile.name.lastIndexOf(".")).toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(extension) && !ACCEPTED_TYPES.includes(nextFile.type)) {
       return "Only .csv and .json files are allowed.";
     }
     return null;
-  };
+  }
 
-  const handleFile = (f: File) => {
-    const err = validateFile(f);
-    if (err) {
-      setFileError(err);
+  function handleFile(nextFile: File) {
+    const validationError = validateFile(nextFile);
+    if (validationError) {
+      setFileError(validationError);
       setFile(null);
-    } else {
-      setFileError(null);
-      setFile(f);
-      setResult(null);
-      setSubmitError(null);
+      return;
     }
-  };
 
-  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) handleFile(f);
-  };
+    setFileError(null);
+    setFile(nextFile);
+    setResult(null);
+    setSubmitError(null);
+  }
 
-  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.target.files?.[0];
+    if (nextFile) {
+      handleFile(nextFile);
+    }
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
     setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) handleFile(f);
-  };
+    const nextFile = event.dataTransfer.files?.[0];
+    if (nextFile) {
+      handleFile(nextFile);
+    }
+  }
 
-  const onSubmit = async () => {
-    if (!file) return;
+  async function handleSubmit() {
+    if (!file) {
+      return;
+    }
+
     setLoading(true);
     setSubmitError(null);
     setResult(null);
+
     try {
-      const res = await bulkImportOutages(file);
-      setResult(res);
+      const response = await bulkImportOutages(file);
+      setResult(response);
       setFile(null);
-      if (inputRef.current) inputRef.current.value = "";
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     } catch {
       setSubmitError("Upload failed. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const onReset = () => {
+  function handleReset() {
     setFile(null);
     setFileError(null);
     setResult(null);
     setSubmitError(null);
-    if (inputRef.current) inputRef.current.value = "";
-  };
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
+        <p className="text-sm text-gray-500">
+          Upload a `.csv` or `.json` file to create outages in one pass.
+        </p>
+      </div>
 
-      {/* Drop Zone */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
+        onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
         className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
           dragging
@@ -102,7 +125,7 @@ const BulkImportPage: React.FC = () => {
           />
         </svg>
         <p className="text-sm font-medium text-gray-600">
-          Drag & drop or <span className="text-blue-600 underline">browse</span>
+          Drag and drop or <span className="text-blue-600 underline">browse</span>
         </p>
         <p className="mt-1 text-xs text-gray-400">Accepted formats: .csv, .json</p>
         <input
@@ -110,45 +133,36 @@ const BulkImportPage: React.FC = () => {
           type="file"
           accept=".csv,.json"
           className="hidden"
-          onChange={onInputChange}
+          onChange={handleInputChange}
         />
       </div>
 
-      {/* File error */}
-      {fileError && (
-        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
-          {fileError}
-        </p>
-      )}
+      {fileError ? (
+        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{fileError}</p>
+      ) : null}
 
-      {/* Selected file */}
-      {file && (
+      {file ? (
         <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
           <span className="font-medium">{file.name}</span>
-          <button onClick={onReset} className="text-gray-400 hover:text-red-500">
+          <button onClick={handleReset} className="text-gray-400 hover:text-red-500">
             &#x2715;
           </button>
         </div>
-      )}
+      ) : null}
 
-      {/* Submit */}
       <button
-        onClick={onSubmit}
+        onClick={handleSubmit}
         disabled={!file || loading}
         className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {loading ? "Uploading..." : "Upload File"}
       </button>
 
-      {/* Submit error */}
-      {submitError && (
-        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
-          {submitError}
-        </p>
-      )}
+      {submitError ? (
+        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{submitError}</p>
+      ) : null}
 
-      {/* Success summary */}
-      {result && (
+      {result ? (
         <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
           <h2 className="text-base font-semibold text-gray-700">Import Summary</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -162,32 +176,24 @@ const BulkImportPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Validation errors */}
-          {result.errors.length > 0 && (
+          {result.errors.length > 0 ? (
             <div>
               <p className="mb-2 text-sm font-semibold text-red-600">
-                {result.errors.length} validation error
-                {result.errors.length > 1 ? "s" : ""}
+                {result.errors.length} validation error{result.errors.length > 1 ? "s" : ""}
               </p>
-              <ul className="max-h-48 overflow-y-auto space-y-1 rounded-lg bg-red-50 p-3">
-                {result.errors.map((err, i) => (
-                  <li key={i} className="text-xs text-red-700">
-                    {err.row != null && (
-                      <span className="font-semibold">Row {err.row}: </span>
-                    )}
-                    {err.field && (
-                      <span className="font-semibold">[{err.field}] </span>
-                    )}
-                    {err.message}
+              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-red-50 p-3">
+                {result.errors.map((error, index) => (
+                  <li key={`${error.message}-${index}`} className="text-xs text-red-700">
+                    {error.row != null ? <span className="font-semibold">Row {error.row}: </span> : null}
+                    {error.field ? <span className="font-semibold">[{error.field}] </span> : null}
+                    {error.message}
                   </li>
                 ))}
               </ul>
             </div>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
-};
-
-export default BulkImportPage;
+}
