@@ -1,221 +1,270 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
-// Define the shape of your SLA config. Adjust properties to match your API.
-export interface SlaConfigItem {
-    severity: string;
-    target_mttr: number; // e.g., in minutes
-    reward: number;
-    penalty: number;
-}
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { api } from "@/lib/api";
+
+type Severity = "critical" | "high" | "medium" | "low";
+
+type SLASeverityConfig = {
+  threshold_minutes: number;
+  penalty_per_minute: number;
+  reward_base: number;
+};
+
+type SLAConfigMap = Record<string, SLASeverityConfig>;
+
+type EditableConfig = SLASeverityConfig & {
+  severity: Severity;
+};
 
 function getErrorMessage(error: unknown) {
-    return error instanceof Error ? error.message : "An unexpected error occurred";
+  return error instanceof Error ? error.message : "An unexpected error occurred";
+}
+
+function getSeverityVariant(severity: Severity) {
+  if (severity === "critical" || severity === "high") {
+    return "destructive";
+  }
+  return "default";
 }
 
 export default function SlaConfigPage() {
-    const [configs, setConfigs] = useState<SlaConfigItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const [configs, setConfigs] = useState<EditableConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingConfig, setEditingConfig] = useState<EditableConfig | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<SLASeverityConfig>({
+    threshold_minutes: 0,
+    penalty_per_minute: 0,
+    reward_base: 0,
+  });
 
-    // Modal State
-    const [editingConfig, setEditingConfig] = useState<SlaConfigItem | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-    const [saveError, setSaveError] = useState<string | null>(null);
+  useEffect(() => {
+    void fetchConfigs();
+  }, []);
 
-    // Form State
-    const [formData, setFormData] = useState({ target_mttr: 0, reward: 0, penalty: 0 });
-
-    useEffect(() => {
-        fetchConfigs();
-    }, []);
-
-    const fetchConfigs = async () => {
-        try {
-            setLoading(true);
-            const response = await fetch("/config"); // Adjust to your actual API route if needed (e.g., /api/config)
-            if (!response.ok) throw new Error("Failed to load SLA configurations");
-            
-            const data = await response.json();
-            // Assuming data is an array of config objects
-            setConfigs(data);
-        } catch (error: unknown) {
-            setError(getErrorMessage(error));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleEditClick = (config: SlaConfigItem) => {
-        setEditingConfig(config);
-        setFormData({
-            target_mttr: config.target_mttr,
-            reward: config.reward,
-            penalty: config.penalty
+  async function fetchConfigs() {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get<SLAConfigMap>("/sla/config");
+      const nextConfigs = Object.entries(response.data)
+        .map(([severity, config]) => ({
+          severity: severity as Severity,
+          ...config,
+        }))
+        .sort((left, right) => {
+          const order: Record<Severity, number> = {
+            critical: 0,
+            high: 1,
+            medium: 2,
+            low: 3,
+          };
+          return order[left.severity] - order[right.severity];
         });
-        setSaveError(null);
-    };
+      setConfigs(nextConfigs);
+    } catch (issue) {
+      setError(getErrorMessage(issue));
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    const handleCancel = () => {
-        setEditingConfig(null);
-        setSaveError(null);
-    };
+  function handleEditClick(config: EditableConfig) {
+    setEditingConfig(config);
+    setFormData({
+      threshold_minutes: config.threshold_minutes,
+      penalty_per_minute: config.penalty_per_minute,
+      reward_base: config.reward_base,
+    });
+    setSaveError(null);
+  }
 
-    const handleSave = async () => {
-        if (!editingConfig) return;
+  function handleCancel() {
+    setEditingConfig(null);
+    setSaveError(null);
+  }
 
-        // Basic validation
-        if (formData.target_mttr < 0 || formData.reward < 0 || formData.penalty < 0) {
-            setSaveError("Values cannot be negative.");
-            return;
-        }
+  async function handleSave() {
+    if (!editingConfig) {
+      return;
+    }
 
-        setIsSaving(true);
-        setSaveError(null);
+    if (
+      formData.threshold_minutes < 0 ||
+      formData.penalty_per_minute < 0 ||
+      formData.reward_base < 0
+    ) {
+      setSaveError("Values cannot be negative.");
+      return;
+    }
 
-        try {
-            // Merge the updated data with the existing config severity
-            const payload = { ...editingConfig, ...formData };
+    setIsSaving(true);
+    setSaveError(null);
 
-            const response = await fetch("/config", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+    try {
+      const response = await api.put<SLASeverityConfig>(
+        `/sla/config/${editingConfig.severity}`,
+        formData,
+      );
 
-            if (!response.ok) throw new Error("Failed to save configuration");
+      setConfigs((currentConfigs) =>
+        currentConfigs.map((config) =>
+          config.severity === editingConfig.severity
+            ? { severity: editingConfig.severity, ...response.data }
+            : config,
+        ),
+      );
+      setEditingConfig(null);
+    } catch (issue) {
+      setSaveError(getErrorMessage(issue));
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
-            // Update local state to reflect the persisted changes
-            setConfigs((currentConfigs) =>
-                currentConfigs.map((config) =>
-                    config.severity === editingConfig.severity ? payload : config,
-                ),
-            );
-            setEditingConfig(null); // Close modal
-        } catch (error: unknown) {
-            setSaveError(getErrorMessage(error));
-        } finally {
-            setIsSaving(false);
-        }
-    };
+  if (loading) {
+    return <div className="animate-pulse p-8 text-muted-foreground">Loading configurations...</div>;
+  }
 
-    if (loading) return <div className="p-8 animate-pulse text-muted-foreground">Loading configurations...</div>;
-    if (error) return <div className="p-8 text-red-500">Error: {error}</div>;
+  if (error) {
+    return <div className="p-8 text-red-500">Error: {error}</div>;
+  }
 
-    return (
-        <div className="container mx-auto py-8 max-w-5xl px-4">
-            <h1 className="text-3xl font-bold tracking-tight mb-6">SLA Configuration Management</h1>
-            
-            <Card>
-                <CardHeader>
-                    <CardTitle>Severity Service Level Agreements</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-muted/50 text-muted-foreground">
-                                <tr>
-                                    <th className="p-3 font-medium border-b">Severity</th>
-                                    <th className="p-3 font-medium border-b">Target MTTR (mins)</th>
-                                    <th className="p-3 font-medium border-b">Reward ($)</th>
-                                    <th className="p-3 font-medium border-b">Penalty ($)</th>
-                                    <th className="p-3 font-medium border-b text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {configs.map((config) => (
-                                    <tr key={config.severity} className="border-b hover:bg-muted/30 transition-colors">
-                                        <td className="p-3 capitalize">
-                                            <Badge variant={config.severity === "high" || config.severity === "critical" ? "destructive" : "default"}>
-                                                {config.severity}
-                                            </Badge>
-                                        </td>
-                                        <td className="p-3">{config.target_mttr}</td>
-                                        <td className="p-3 text-green-600 font-medium">+{config.reward}</td>
-                                        <td className="p-3 text-red-600 font-medium">-{config.penalty}</td>
-                                        <td className="p-3 text-right">
-                                            <button 
-                                                onClick={() => handleEditClick(config)}
-                                                className="text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50"
-                                            >
-                                                Edit
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {configs.length === 0 && (
-                            <div className="text-center p-6 text-muted-foreground italic">No configurations found.</div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+  return (
+    <div className="container mx-auto max-w-5xl px-4 py-8">
+      <h1 className="mb-6 text-3xl font-bold tracking-tight">SLA Configuration Management</h1>
 
-            {/* Edit Modal Overlay */}
-            {editingConfig && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6 border">
-                        <h2 className="text-xl font-bold mb-4 capitalize">Edit {editingConfig.severity} SLA</h2>
-                        
-                        {saveError && (
-                            <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-200">
-                                {saveError}
-                            </div>
-                        )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Severity Service Level Agreements</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="border-b p-3 font-medium">Severity</th>
+                  <th className="border-b p-3 font-medium">Threshold (mins)</th>
+                  <th className="border-b p-3 font-medium">Reward Base</th>
+                  <th className="border-b p-3 font-medium">Penalty / Minute</th>
+                  <th className="border-b p-3 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {configs.map((config) => (
+                  <tr key={config.severity} className="border-b transition-colors hover:bg-muted/30">
+                    <td className="p-3 capitalize">
+                      <Badge variant={getSeverityVariant(config.severity)}>{config.severity}</Badge>
+                    </td>
+                    <td className="p-3">{config.threshold_minutes}</td>
+                    <td className="p-3 font-medium text-emerald-600">{config.reward_base}</td>
+                    <td className="p-3 font-medium text-red-600">
+                      {config.penalty_per_minute}
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => handleEditClick(config)}
+                        className="rounded px-2 py-1 font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {configs.length === 0 ? (
+              <div className="p-6 text-center italic text-muted-foreground">
+                No configurations found.
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Target MTTR (minutes)</label>
-                                <input 
-                                    type="number" 
-                                    value={formData.target_mttr}
-                                    onChange={(e) => setFormData({...formData, target_mttr: Number(e.target.value)})}
-                                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Reward Amount ($)</label>
-                                <input 
-                                    type="number" 
-                                    value={formData.reward}
-                                    onChange={(e) => setFormData({...formData, reward: Number(e.target.value)})}
-                                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Penalty Amount ($)</label>
-                                <input 
-                                    type="number" 
-                                    value={formData.penalty}
-                                    onChange={(e) => setFormData({...formData, penalty: Number(e.target.value)})}
-                                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                        </div>
+      {editingConfig ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="mb-4 text-xl font-bold capitalize">
+              Edit {editingConfig.severity} SLA
+            </h2>
 
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button 
-                                onClick={handleCancel}
-                                disabled={isSaving}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
-                            >
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {saveError ? (
+              <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                {saveError}
+              </div>
+            ) : null}
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Threshold (minutes)</label>
+                <input
+                  type="number"
+                  value={formData.threshold_minutes}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      threshold_minutes: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full rounded border p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Reward Base</label>
+                <input
+                  type="number"
+                  value={formData.reward_base}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      reward_base: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full rounded border p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Penalty Per Minute</label>
+                <input
+                  type="number"
+                  value={formData.penalty_per_minute}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      penalty_per_minute: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full rounded border p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={handleCancel}
+                disabled={isSaving}
+                className="rounded bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
         </div>
-    );
+      ) : null}
+    </div>
+  );
 }
