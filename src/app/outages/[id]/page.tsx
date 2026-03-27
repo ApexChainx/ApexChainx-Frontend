@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Separator } from "@/components/ui/separator";
 import { getOutage, resolveOutage } from "@/services/outages";
 import type { Outage, OutageResolutionPayment } from "@/types/outages";
@@ -100,30 +101,30 @@ export default function OutageDetailsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center p-8">
-        <p className="animate-pulse text-muted-foreground">Loading outage details…</p>
-      </div>
+      <RouteLoadingState
+        title="Loading outage details"
+        description="Pulling the incident timeline, SLA state, and resolution metadata."
+      />
     );
   }
 
   if (error && !outage) {
     return (
-      <div className="flex justify-center p-8">
-        <Card className="max-w-md w-full border-red-200 bg-red-50">
-          <CardContent className="p-6 text-center text-red-600">
-            <p className="font-semibold">Error loading outage</p>
-            <p className="mt-1 text-sm">{error}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RouteErrorState
+        title="Error loading outage"
+        description={error}
+        actionLabel="Reload page"
+        onAction={() => window.location.reload()}
+      />
     );
   }
 
   if (!outage) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        <p>Outage not found</p>
-      </div>
+      <RouteEmptyState
+        title="Outage not found"
+        description="The outage may have been removed or the link may be outdated."
+      />
     );
   }
 
