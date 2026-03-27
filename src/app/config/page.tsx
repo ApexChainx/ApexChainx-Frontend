@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { api } from "@/lib/api";
 
 type Severity = "critical" | "high" | "medium" | "low";
@@ -129,11 +130,23 @@ export default function SlaConfigPage() {
   }
 
   if (loading) {
-    return <div className="animate-pulse p-8 text-muted-foreground">Loading configurations...</div>;
+    return (
+      <RouteLoadingState
+        title="Loading SLA configuration"
+        description="Fetching the latest severity thresholds and payout settings."
+      />
+    );
   }
 
   if (error) {
-    return <div className="p-8 text-red-500">Error: {error}</div>;
+    return (
+      <RouteErrorState
+        title="Configuration unavailable"
+        description={error}
+        actionLabel="Try again"
+        onAction={() => void fetchConfigs()}
+      />
+    );
   }
 
   return (

@@ -3,6 +3,7 @@
 import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
+import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchDashboardMetrics } from "@/services/dashboardService";
 import type { DashboardMetrics } from "@/types/dashboard";
 import { useQuery } from "@tanstack/react-query";
@@ -22,23 +23,21 @@ export default function SLADashboardView() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center text-gray-500">
-        Loading dashboard...
-      </div>
+      <RouteLoadingState
+        title="Loading dashboard"
+        description="Pulling the latest SLA compliance, trends, and payout metrics."
+      />
     );
   }
 
   if (isError || !metrics) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-4 text-red-500">
-        <p>Failed to load dashboard metrics.</p>
-        <button
-          onClick={() => void refetch()}
-          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
-        >
-          Retry
-        </button>
-      </div>
+      <RouteErrorState
+        title="Dashboard unavailable"
+        description="We could not load the latest analytics right now."
+        actionLabel="Retry"
+        onAction={() => void refetch()}
+      />
     );
   }
 

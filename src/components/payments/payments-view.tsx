@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchPayments } from "@/services/paymentService";
 import type { PaginatedPayments, Payment } from "@/types/payment";
 
@@ -71,8 +72,11 @@ export default function PaymentsView() {
     if (loading) {
       return (
         <tr>
-          <td colSpan={6} className="py-16 text-center text-gray-400">
-            Loading...
+          <td colSpan={6} className="p-0">
+            <RouteLoadingState
+              title="Loading payments"
+              description="Retrieving the latest reward and penalty records."
+            />
           </td>
         </tr>
       );
@@ -81,8 +85,13 @@ export default function PaymentsView() {
     if (error) {
       return (
         <tr>
-          <td colSpan={6} className="py-16 text-center text-red-500">
-            {error}
+          <td colSpan={6} className="p-0">
+            <RouteErrorState
+              title="Payments unavailable"
+              description={error}
+              actionLabel="Reload page"
+              onAction={() => window.location.reload()}
+            />
           </td>
         </tr>
       );
@@ -91,8 +100,11 @@ export default function PaymentsView() {
     if (!data || data.items.length === 0) {
       return (
         <tr>
-          <td colSpan={6} className="py-16 text-center text-gray-400">
-            No payments found.
+          <td colSpan={6} className="p-0">
+            <RouteEmptyState
+              title="No payments yet"
+              description="Resolved outages with financial outcomes will appear here."
+            />
           </td>
         </tr>
       );
