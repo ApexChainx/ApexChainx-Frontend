@@ -1,3 +1,5 @@
+import PaymentsPage from "@/pages/PaymentsPage";
+
 export default function PaymentPage() {
-    return <h1>Payment</h1>;
+    return <PaymentsPage />;
 }
