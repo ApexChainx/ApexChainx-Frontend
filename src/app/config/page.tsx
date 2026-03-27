@@ -203,8 +203,14 @@ export default function SlaConfigPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium">Threshold (minutes)</label>
+                <label
+                  htmlFor="sla-threshold-minutes"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Threshold (minutes)
+                </label>
                 <input
+                  id="sla-threshold-minutes"
                   type="number"
                   value={formData.threshold_minutes}
                   onChange={(event) =>
@@ -217,8 +223,11 @@ export default function SlaConfigPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Reward Base</label>
+                <label htmlFor="sla-reward-base" className="mb-1 block text-sm font-medium">
+                  Reward Base
+                </label>
                 <input
+                  id="sla-reward-base"
                   type="number"
                   value={formData.reward_base}
                   onChange={(event) =>
@@ -231,8 +240,14 @@ export default function SlaConfigPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Penalty Per Minute</label>
+                <label
+                  htmlFor="sla-penalty-per-minute"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Penalty Per Minute
+                </label>
                 <input
+                  id="sla-penalty-per-minute"
                   type="number"
                   value={formData.penalty_per_minute}
                   onChange={(event) =>
