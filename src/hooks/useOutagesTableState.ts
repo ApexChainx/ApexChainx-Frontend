@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import { getOutages } from "@/services/outages";
 import type { Outage } from "@/types/outages";
 
@@ -15,7 +16,9 @@ export function useOutagesTableState() {
   const router = useRouter();
 
   const page = Number(params?.get("page") ?? 1);
+  const pageSize = Number(params?.get("page_size") ?? 10);
   const severity = params?.get("severity") ?? undefined;
+  const status = params?.get("status") ?? undefined;
 
   function setParam(key: string, value?: string) {
     const next = new URLSearchParams(params?.toString() ?? "");
@@ -29,19 +32,49 @@ export function useOutagesTableState() {
     router.push(`?${next.toString()}`);
   }
 
+  function setPage(nextPage: number) {
+    setParam("page", String(Math.max(1, nextPage)));
+  }
+
+  function setPageSize(nextPageSize: number) {
+    setParam("page_size", String(nextPageSize));
+    setParam("page", "1");
+  }
+
+  function setSeverity(nextSeverity?: string) {
+    setParam("severity", nextSeverity);
+    setParam("page", "1");
+  }
+
+  function setStatus(nextStatus?: string) {
+    setParam("status", nextStatus);
+    setParam("page", "1");
+  }
+
   return {
     state: {
       page,
+      page_size: pageSize,
       severity,
+      status,
     },
     actions: {
       setParam,
+      setPage,
+      setPageSize,
+      setSeverity,
+      setStatus,
     },
   };
 }
 
 // New data fetching & polling hook for the Outages list
-export function useOutagesList(page: number, severity?: string) {
+export function useOutagesList(
+  page: number,
+  severity?: string,
+  status?: string,
+  pageSize: number = 10,
+) {
   const [outages, setOutages] = useState<Outage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +95,12 @@ export function useOutagesList(page: number, severity?: string) {
       isFetching.current = true;
 
       try {
-        const data = await getOutages({ page, severity });
+        const data = await getOutages({
+          page,
+          page_size: pageSize,
+          severity,
+          status,
+        });
         if (isMounted) {
           setOutages(data.items);
           setError(null);
@@ -87,7 +125,7 @@ export function useOutagesList(page: number, severity?: string) {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [page, severity]);
+  }, [page, pageSize, severity, status]);
 
   return { outages, loading, error };
 }
