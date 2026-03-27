@@ -91,6 +91,32 @@ export default function SettingsPage() {
     () => currentUser?.id ?? walletForm.user_id.trim(),
     [currentUser?.id, walletForm.user_id],
   );
+  const walletAssetCount = useMemo(
+    () => Object.keys(walletBalance?.balances ?? {}).length,
+    [walletBalance],
+  );
+  const walletReadinessLabel = useMemo(() => {
+    if (!walletStatus) {
+      return "Not loaded";
+    }
+    if (!walletStatus.active) {
+      return "Inactive";
+    }
+    if (!walletStatus.funded) {
+      return "Funding required";
+    }
+    if (!walletStatus.trustline_ready) {
+      return "Trustline missing";
+    }
+    return walletStatus.usable ? "Ready" : "Review required";
+  }, [walletStatus]);
+  const walletReadinessTone = useMemo(() => {
+    if (!walletStatus) {
+      return "text-slate-900";
+    }
+    return walletStatus.usable ? "text-emerald-600" : "text-amber-600";
+  }, [walletStatus]);
+  const walletAddress = wallet?.public_key ?? walletStatus?.public_key ?? walletForm.public_key;
 
   async function handleRegister() {
     setLoadingAction("register");
@@ -322,6 +348,50 @@ export default function SettingsPage() {
           {error}
         </div>
       ) : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Session</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">
+            {currentUser ? "Authenticated" : "Not signed in"}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {currentUser?.email ?? "Load or create an operator account"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Wallet</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">
+            {walletAddress ? "Connected" : "Not linked"}
+          </p>
+          <p className="mt-1 truncate text-sm text-slate-500">
+            {walletAddress || "Create or link a wallet to continue"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Readiness</p>
+          <p className={`mt-2 text-xl font-semibold ${walletReadinessTone}`}>
+            {walletReadinessLabel}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {walletStatus
+              ? `${walletStatus.funded ? "Funded" : "Unfunded"} • ${
+                  walletStatus.trustline_ready ? "Trustline ready" : "Trustline missing"
+                }`
+              : "Load wallet details to inspect readiness"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Balances</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">{walletAssetCount}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {walletAssetCount > 0 ? "Tracked assets loaded" : "No balance data loaded yet"}
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
