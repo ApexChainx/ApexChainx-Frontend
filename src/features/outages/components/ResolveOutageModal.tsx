@@ -87,10 +87,14 @@ export function ResolveOutageModal({
 
         <div className="mt-6 space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="resolve-outage-mttr"
+              className="mb-2 block text-sm font-medium text-slate-700"
+            >
               Mean time to resolve (minutes)
             </label>
             <input
+              id="resolve-outage-mttr"
               type="number"
               min={0}
               value={mttrInput}
