@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { DataTable } from "@/components/data-table";
+import ExportDropdown from "@/components/outages/ExportDropdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useOutages } from "@/features/outages/hooks/useOutages";
@@ -80,6 +81,15 @@ export function OutagesPageClient() {
                 <p className="text-sm text-slate-500">
                     Review live incidents, filter by severity and status, and page through the active outage feed.
                 </p>
+            </div>
+
+            <div className="flex justify-end">
+                <ExportDropdown
+                    filters={{
+                        severity: state.severity,
+                        status: state.status,
+                    }}
+                />
             </div>
 
             <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
