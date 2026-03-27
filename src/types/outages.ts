@@ -15,6 +15,21 @@ export interface SLAResult {
   rating: "exceptional" | "excellent" | "good" | "poor";
 }
 
+export interface OutageResolutionPayment {
+  id: string;
+  transaction_hash: string;
+  type: string;
+  amount: number;
+  asset_code: string;
+  from_address: string;
+  to_address: string;
+  status: string;
+  outage_id: string;
+  sla_result_id?: number | null;
+  created_at: string;
+  confirmed_at?: string | null;
+}
+
 export interface Outage {
   id: string;
   site_name: string;
@@ -83,4 +98,5 @@ export interface ResolveOutagePayload {
 export interface ResolveOutageResponse {
   outage: Outage;
   sla: SLAResult;
+  payment: OutageResolutionPayment;
 }
