@@ -1,5 +1,5 @@
-import SLADashboard from "@/pages/SLADashboard";
+import SLADashboardView from "@/components/dashboard/sla-dashboard-view";
 
 export default function Dashboard() {
-  return <SLADashboard />;
+  return <SLADashboardView />;
 }
