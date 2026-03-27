@@ -1,8 +1,13 @@
 import { useState } from "react";
 
+import { previewSLA } from "@/services/sla";
+import type { Severity } from "@/types/outages";
+import type { SLAResult } from "@/types/sla";
+
 interface ResolveModalProps {
   outageId: string;
   siteName: string;
+  severity: Severity;
   initialMttrMinutes?: number;
   isOpen: boolean;
   isResolving: boolean;
@@ -14,6 +19,7 @@ interface ResolveModalProps {
 export function ResolveOutageModal({
   outageId,
   siteName,
+  severity,
   initialMttrMinutes,
   isOpen,
   isResolving,
@@ -25,6 +31,9 @@ export function ResolveOutageModal({
     initialMttrMinutes !== undefined ? initialMttrMinutes.toString() : "",
   );
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewResult, setPreviewResult] = useState<SLAResult | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   if (!isOpen) {
     return null;
@@ -39,6 +48,30 @@ export function ResolveOutageModal({
 
     setValidationError(null);
     await onConfirmResolve(parsed);
+  }
+
+  async function handlePreview() {
+    const parsed = Number(mttrInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setValidationError("MTTR must be a non-negative number.");
+      return;
+    }
+
+    setValidationError(null);
+    setPreviewError(null);
+    setIsPreviewLoading(true);
+
+    try {
+      const result = await previewSLA({
+        severity,
+        mttr_minutes: parsed,
+      });
+      setPreviewResult(result);
+    } catch (issue) {
+      setPreviewError(issue instanceof Error ? issue.message : "Failed to preview SLA.");
+    } finally {
+      setIsPreviewLoading(false);
+    }
   }
 
   return (
@@ -61,7 +94,11 @@ export function ResolveOutageModal({
               type="number"
               min={0}
               value={mttrInput}
-              onChange={(event) => setMttrInput(event.target.value)}
+              onChange={(event) => {
+                setMttrInput(event.target.value);
+                setPreviewResult(null);
+                setPreviewError(null);
+              }}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               placeholder="Enter MTTR in minutes"
             />
@@ -78,6 +115,49 @@ export function ResolveOutageModal({
               {error}
             </div>
           ) : null}
+
+          {previewError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              {previewError}
+            </div>
+          ) : null}
+
+          {previewResult ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-900">SLA outcome preview</h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {previewResult.status}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Rating</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {previewResult.rating}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Threshold</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {previewResult.threshold_minutes} min
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Payout</div>
+                  <div
+                    className={`mt-1 text-sm font-medium ${
+                      previewResult.amount >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {previewResult.amount >= 0 ? "+" : ""}
+                    {previewResult.amount} ({previewResult.payment_type})
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
@@ -87,6 +167,13 @@ export function ResolveOutageModal({
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             Cancel
+          </button>
+          <button
+            onClick={handlePreview}
+            disabled={isResolving || isPreviewLoading}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {isPreviewLoading ? "Previewing..." : "Preview SLA"}
           </button>
           <button
             onClick={handleResolve}

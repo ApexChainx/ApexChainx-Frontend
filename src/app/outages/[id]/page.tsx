@@ -295,6 +295,7 @@ export default function OutageDetailsPage() {
         key={`${outage.id}-${outage.sla_status?.mttr_minutes ?? "empty"}-${isResolveModalOpen ? "open" : "closed"}`}
         outageId={outage.id}
         siteName={outage.site_name}
+        severity={outage.severity}
         initialMttrMinutes={outage.sla_status?.mttr_minutes}
         isOpen={isResolveModalOpen}
         isResolving={resolving}
