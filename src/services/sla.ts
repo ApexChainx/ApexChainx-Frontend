@@ -16,8 +16,6 @@ export async function previewSLA(params: {
   severity: string;
   mttr_minutes: number;
 }): Promise<SLAResult> {
-  const res = await api.get<SLAResult>("/sla/preview", {
-    params,
-  });
+  const res = await api.post<SLAResult>("/sla/preview", params);
   return res.data;
 }
