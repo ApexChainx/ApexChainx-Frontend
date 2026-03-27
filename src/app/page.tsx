@@ -1,3 +1,5 @@
+import SLADashboard from "@/pages/SLADashboard";
+
 export default function Dashboard() {
-  return <h1>Dashboard</h1>;
+  return <SLADashboard />;
 }
