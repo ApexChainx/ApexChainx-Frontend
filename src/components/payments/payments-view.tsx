@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { fetchPayments } from "../services/paymentService";
-import { Payment, PaginatedPayments } from "../types/payment";
+import { useEffect, useMemo, useState } from "react";
+
+import { fetchPayments } from "@/services/paymentService";
+import type { PaginatedPayments, Payment } from "@/types/payment";
 
 const PER_PAGE = 10;
 
@@ -18,7 +19,7 @@ const typeStyles: Record<string, string> = {
   penalty: "bg-red-100 text-red-700",
 };
 
-const PaymentsPage: React.FC = () => {
+export default function PaymentsView() {
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -51,20 +52,22 @@ const PaymentsPage: React.FC = () => {
     };
   }, [requestKey, page]);
 
-  const goToPreviousPage = () => {
+  function goToPreviousPage() {
     setLoading(true);
     setError(null);
     setPage((currentPage) => Math.max(1, currentPage - 1));
-  };
+  }
 
-  const goToNextPage = () => {
-    if (!data) return;
+  function goToNextPage() {
+    if (!data) {
+      return;
+    }
     setLoading(true);
     setError(null);
     setPage((currentPage) => Math.min(Math.ceil(data.total / data.page_size), currentPage + 1));
-  };
+  }
 
-  const renderBody = () => {
+  function renderBody() {
     if (loading) {
       return (
         <tr>
@@ -96,10 +99,8 @@ const PaymentsPage: React.FC = () => {
     }
 
     return data.items.map((payment: Payment) => (
-      <tr key={payment.id} className="border-t hover:bg-gray-50 transition-colors">
-        <td className="px-4 py-3 text-sm text-gray-700 font-mono">
-          {payment.outage_id}
-        </td>
+      <tr key={payment.id} className="border-t transition-colors hover:bg-gray-50">
+        <td className="px-4 py-3 text-sm font-mono text-gray-700">{payment.outage_id}</td>
         <td className="px-4 py-3">
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${typeStyles[payment.type]}`}
@@ -118,19 +119,19 @@ const PaymentsPage: React.FC = () => {
         <td className="px-4 py-3 text-sm text-gray-600">
           {new Date(payment.created_at).toLocaleDateString()}
         </td>
-        <td className="px-4 py-3 text-xs font-mono text-gray-500">
-          {payment.asset_code}
-        </td>
+        <td className="px-4 py-3 text-xs font-mono text-gray-500">{payment.asset_code}</td>
         <td className="px-4 py-3">
           <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"}`}
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+              statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"
+            }`}
           >
             {payment.status}
           </span>
         </td>
       </tr>
     ));
-  };
+  }
 
   return (
     <div className="space-y-4 p-6">
@@ -140,12 +141,12 @@ const PaymentsPage: React.FC = () => {
         <table className="w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              {["Outage ID", "Type", "Amount", "Date", "Asset", "Status"].map((col) => (
+              {["Outage ID", "Type", "Amount", "Date", "Asset", "Status"].map((column) => (
                 <th
-                  key={col}
+                  key={column}
                   className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500"
                 >
-                  {col}
+                  {column}
                 </th>
               ))}
             </tr>
@@ -154,8 +155,7 @@ const PaymentsPage: React.FC = () => {
         </table>
       </div>
 
-      {/* Pagination */}
-      {data && Math.ceil(data.total / data.page_size) > 1 && (
+      {data && Math.ceil(data.total / data.page_size) > 1 ? (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>
             Page {data.page} of {Math.ceil(data.total / data.page_size)} - {data.total} total
@@ -164,22 +164,20 @@ const PaymentsPage: React.FC = () => {
             <button
               onClick={goToPreviousPage}
               disabled={page === 1}
-              className="rounded-lg border px-3 py-1.5 disabled:opacity-40 hover:bg-gray-100 transition-colors"
+              className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40"
             >
               Previous
             </button>
             <button
               onClick={goToNextPage}
               disabled={page === Math.ceil(data.total / data.page_size)}
-              className="rounded-lg border px-3 py-1.5 disabled:opacity-40 hover:bg-gray-100 transition-colors"
+              className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40"
             >
               Next
             </button>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
-};
-
-export default PaymentsPage;
+}
