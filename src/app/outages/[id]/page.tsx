@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
+import { SLADisputesPanel } from "@/components/outages/SLADisputesPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
@@ -290,6 +291,8 @@ export default function OutageDetailsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <SLADisputesPanel outageId={outage.id} canResolve={isResolved} />
       </div>
 
       <ResolveOutageModal

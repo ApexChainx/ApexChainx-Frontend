@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 
 import { DataTable } from "@/components/data-table";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { useOutages } from "@/features/outages/hooks/useOutages";
-import { useOutagesTableState } from "@/hooks/useOutagesTableState";
+import { useFilterPresets, useOutagesTableState } from "@/hooks/useOutagesTableState";
 import type { Outage } from "@/types/outages";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -61,9 +62,11 @@ const columns: ColumnDef<Outage>[] = [
 
 export function OutagesPageClient() {
     const { state, actions } = useOutagesTableState();
+    const { presets, savePreset, deletePreset } = useFilterPresets();
     const { data, isLoading, isError } = useOutages(state);
     const totalItems = data?.total ?? 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / state.page_size));
+    const [presetName, setPresetName] = useState("");
 
     if (isLoading) {
         return (
@@ -103,6 +106,50 @@ export function OutagesPageClient() {
                         status: state.status,
                     }}
                 />
+            </div>
+
+            {/* Filter presets */}
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Presets:</span>
+                {presets.map((preset) => (
+                    <div key={preset.name} className="flex items-center gap-1">
+                        <button
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            onClick={() => {
+                                actions.setSeverity(preset.severity);
+                                actions.setStatus(preset.status);
+                            }}
+                        >
+                            {preset.name}
+                        </button>
+                        <button
+                            className="text-slate-400 hover:text-red-500 text-xs"
+                            onClick={() => deletePreset(preset.name)}
+                            aria-label={`Delete preset ${preset.name}`}
+                        >
+                            ×
+                        </button>
+                    </div>
+                ))}
+                <div className="ml-auto flex items-center gap-2">
+                    <input
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                        placeholder="Preset name"
+                        value={presetName}
+                        onChange={(e) => setPresetName(e.target.value)}
+                    />
+                    <Button
+                        variant="outline"
+                        className="text-xs h-7 px-2"
+                        disabled={!presetName.trim()}
+                        onClick={() => {
+                            savePreset({ name: presetName.trim(), severity: state.severity, status: state.status });
+                            setPresetName("");
+                        }}
+                    >
+                        Save preset
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">

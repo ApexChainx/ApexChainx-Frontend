@@ -10,6 +10,42 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Failed to load outages";
 }
 
+const PRESETS_KEY = "outage_filter_presets";
+
+export interface FilterPreset {
+  name: string;
+  severity?: string;
+  status?: string;
+}
+
+export function useFilterPresets() {
+  const [presets, setPresets] = useState<FilterPreset[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(PRESETS_KEY) ?? "[]") as FilterPreset[];
+    } catch {
+      return [];
+    }
+  });
+
+  function savePreset(preset: FilterPreset) {
+    setPresets((prev) => {
+      const next = [...prev.filter((p) => p.name !== preset.name), preset];
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function deletePreset(name: string) {
+    setPresets((prev) => {
+      const next = prev.filter((p) => p.name !== name);
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  return { presets, savePreset, deletePreset };
+}
+
 // Existing state manager
 export function useOutagesTableState() {
   const params = useSearchParams();

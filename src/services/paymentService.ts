@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import { PaginatedPayments } from "../types/payment";
+import { PaginatedPayments, Payment } from "../types/payment";
 
 export const fetchPayments = async (
   page: number = 1,
@@ -8,5 +8,10 @@ export const fetchPayments = async (
   const response = await api.get<PaginatedPayments>("/payments", {
     params: { page, page_size: perPage },
   });
+  return response.data;
+};
+
+export const fetchPayment = async (id: string): Promise<Payment> => {
+  const response = await api.get<Payment>(`/payments/${id}`);
   return response.data;
 };

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchPayments } from "@/services/paymentService";
 import type { PaginatedPayments, Payment } from "@/types/payment";
@@ -25,6 +26,7 @@ export default function PaymentsView() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const requestKey = useMemo(() => `${page}:${PER_PAGE}`, [page]);
 
   useEffect(() => {
@@ -111,7 +113,11 @@ export default function PaymentsView() {
     }
 
     return data.items.map((payment: Payment) => (
-      <tr key={payment.id} className="border-t transition-colors hover:bg-gray-50">
+      <tr
+        key={payment.id}
+        className="border-t transition-colors hover:bg-gray-50 cursor-pointer"
+        onClick={() => setSelectedPaymentId(payment.id)}
+      >
         <td className="px-4 py-3 text-sm font-mono text-gray-700">{payment.outage_id}</td>
         <td className="px-4 py-3">
           <span
@@ -148,7 +154,6 @@ export default function PaymentsView() {
   return (
     <div className="space-y-4 p-6">
       <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
-
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <table className="w-full text-left">
           <thead className="bg-gray-50">
@@ -190,6 +195,11 @@ export default function PaymentsView() {
           </div>
         </div>
       ) : null}
+
+      <PaymentDetailDrawer
+        paymentId={selectedPaymentId}
+        onClose={() => setSelectedPaymentId(null)}
+      />
     </div>
   );
 }

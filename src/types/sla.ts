@@ -7,3 +7,16 @@ export interface SLAResult {
   payment_type: "reward" | "penalty";
   rating: "exceptional" | "excellent" | "good" | "poor";
 }
+
+export type DisputeStatus = "open" | "under_review" | "resolved" | "rejected";
+
+export interface SLADispute {
+  id: string;
+  outage_id: string;
+  sla_result_id?: string;
+  status: DisputeStatus;
+  reason: string;
+  created_at: string;
+  resolved_at?: string | null;
+  resolution_note?: string | null;
+}
