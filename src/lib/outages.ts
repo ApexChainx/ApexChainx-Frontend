@@ -38,6 +38,8 @@ export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutage
       page_size: query.page_size ?? 20,
       severity: query.severity,
       status: query.status,
+      search: query.search,
+      sort: query.sort,
     },
   });
 

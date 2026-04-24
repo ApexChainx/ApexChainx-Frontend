@@ -1,0 +1,30 @@
+name: Claude Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to solve'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Go to https://github.com/OpSoll/noc-iq-fe/issues/${{ github.event.inputs.issue_number }} and read the issue carefully.
+            Then implement the fix in this codebase.
+            Create a new branch named fix/issue-${{ github.event.inputs.issue_number }},
+            commit the changes, and open a pull request against the upstream repo OpSoll/noc-iq-fe
+            with a clear description that includes "Closes #${{ github.event.inputs.issue_number }}" in the PR body.

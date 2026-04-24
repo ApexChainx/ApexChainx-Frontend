@@ -9,3 +9,13 @@ export interface BulkImportResult {
   skipped: number;
   errors: ImportValidationError[];
 }
+
+export interface BulkImportRecord {
+  id: string;
+  filename: string;
+  imported: number;
+  skipped: number;
+  error_count: number;
+  errors: ImportValidationError[];
+  created_at: string;
+}
