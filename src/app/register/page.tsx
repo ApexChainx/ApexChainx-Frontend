@@ -1,0 +1,117 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { api } from "@/lib/api";
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.post("/auth/register", { email, password });
+      // Auto-login after registration
+      await api.post("/auth/login", { email, password });
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-gray-800">Create account</h1>
+        <p className="text-sm text-gray-500">Register to access the NOC IQ platform.</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1">
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="confirm" className="block text-sm font-medium text-gray-700">
+            Confirm password
+          </label>
+          <input
+            id="confirm"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        {error && (
+          <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? "Creating account…" : "Create account"}
+        </button>
+      </form>
+
+      <p className="text-center text-sm text-gray-500">
+        Already have an account?{" "}
+        <Link href="/login" className="text-blue-600 hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  );
+}
