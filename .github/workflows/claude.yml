@@ -21,6 +21,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             Solve GitHub issue #${{ github.event.inputs.issue_number }}.
             Read the issue, create a new branch named fix/issue-${{ github.event.inputs.issue_number }},
