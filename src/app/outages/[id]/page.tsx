@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
 import { SLADisputesPanel } from "@/components/outages/SLADisputesPanel";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Separator } from "@/components/ui/separator";
-import { getOutage, resolveOutage } from "@/services/outages";
+import { getOutage, resolveOutage, deleteOutage } from "@/services/outages";
 import type { Outage, OutageResolutionPayment } from "@/types/outages";
 
 function getErrorMessage(error: unknown) {
@@ -18,6 +18,7 @@ function getErrorMessage(error: unknown) {
 
 export default function OutageDetailsPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params?.id;
   const [outage, setOutage] = useState<Outage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,11 @@ export default function OutageDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
+
+  // Delete state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isFetching = useRef(false);
   const hasOutageRef = useRef(false);
@@ -100,6 +106,19 @@ export default function OutageDetailsPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!id) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteOutage(id);
+      router.push("/outages");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Deletion failed. Please try again.");
+      setDeleting(false);
+    }
+  }
+
   if (loading) {
     return (
       <RouteLoadingState
@@ -144,17 +163,25 @@ export default function OutageDetailsPage() {
           </Badge>
         </div>
 
-        <button
-          onClick={() => setIsResolveModalOpen(true)}
-          disabled={isResolved || resolving}
-          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-            isResolved
-              ? "cursor-not-allowed bg-gray-100 text-gray-500"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          }`}
-        >
-          {isResolved ? "Outage Resolved" : resolving ? "Resolving…" : "Resolve Outage"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsResolveModalOpen(true)}
+            disabled={isResolved || resolving}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              isResolved
+                ? "cursor-not-allowed bg-gray-100 text-gray-500"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            }`}
+          >
+            {isResolved ? "Outage Resolved" : resolving ? "Resolving…" : "Resolve Outage"}
+          </button>
+          <button
+            onClick={() => { setShowDeleteConfirm(true); setDeleteError(null); }}
+            className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -292,6 +319,70 @@ export default function OutageDetailsPage() {
           </CardContent>
         </Card>
 
+        {/* FE-063: Location visualization */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle>Location</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {outage.location ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-6">
+                  <div>
+                    <span className="text-muted-foreground">Latitude</span>
+                    <p className="font-medium font-mono">{outage.location.latitude.toFixed(6)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Longitude</span>
+                    <p className="font-medium font-mono">{outage.location.longitude.toFixed(6)}</p>
+                  </div>
+                </div>
+                <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50" style={{ paddingBottom: "40%" }}>
+                  {/* Static map via OpenStreetMap tile — no API key required */}
+                  <iframe
+                    title="Outage location map"
+                    className="absolute inset-0 h-full w-full"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${outage.location.longitude - 0.05},${outage.location.latitude - 0.05},${outage.location.longitude + 0.05},${outage.location.latitude + 0.05}&layer=mapnik&marker=${outage.location.latitude},${outage.location.longitude}`}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <p className="text-xs text-slate-400">
+                  Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors
+                </p>
+              </div>
+            ) : (
+              <span className="italic text-muted-foreground">No location data available for this outage.</span>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* FE-064: Root cause and resolution notes */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle>Post-Incident Analysis</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Root Cause</p>
+              {outage.root_cause ? (
+                <p className="text-slate-900 whitespace-pre-wrap">{outage.root_cause}</p>
+              ) : (
+                <p className="italic text-muted-foreground">No root cause recorded.</p>
+              )}
+            </div>
+            <Separator />
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Resolution Notes</p>
+              {outage.resolution_notes ? (
+                <p className="text-slate-900 whitespace-pre-wrap">{outage.resolution_notes}</p>
+              ) : (
+                <p className="italic text-muted-foreground">No resolution notes recorded.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <SLADisputesPanel outageId={outage.id} canResolve={isResolved} />
       </div>
 
@@ -312,6 +403,55 @@ export default function OutageDetailsPage() {
         }}
         onConfirmResolve={handleResolve}
       />
+
+      {/* FE-062: Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl space-y-4">
+            <h2 id="delete-dialog-title" className="text-lg font-semibold text-slate-900">
+              Delete outage?
+            </h2>
+            <p className="text-sm text-slate-600">
+              This will permanently delete outage{" "}
+              <span className="font-medium">{outage.id}</span> ({outage.site_name}). This action
+              cannot be undone.
+            </p>
+            {deleteError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {deleteError}{" "}
+                <button
+                  className="underline font-medium"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                disabled={deleting}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
