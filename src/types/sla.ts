@@ -20,3 +20,27 @@ export interface SLADispute {
   resolved_at?: string | null;
   resolution_note?: string | null;
 }
+
+export interface FlagDisputePayload {
+  outage_id: string;
+  reason: string;
+}
+
+export interface ResolveDisputePayload {
+  action: "resolve" | "reject";
+  resolution_note?: string;
+}
+
+export interface DisputeListParams {
+  outage_id: string;
+  status?: DisputeStatus;
+  page?: number;
+  page_size?: number;
+}
+
+export interface PaginatedDisputes {
+  items: SLADispute[];
+  total: number;
+  page: number;
+  page_size: number;
+}

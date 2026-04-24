@@ -1,14 +1,22 @@
 "use client";
 
+import { useState } from "react";
+import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
+import { useOutage, useResolveOutage } from "@/features/outages/hooks/useOutageMutations";
 import { SLADisputesPanel } from "@/components/outages/SLADisputesPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Separator } from "@/components/ui/separator";
+import type { OutageResolutionPayment } from "@/types/outages";
+
+export default function OutageDetailsPage() {
+  const params = useParams<{ id: string }>();
+  const id = params?.id ?? "";
 import { getOutage, resolveOutage, updateOutage } from "@/services/outages";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 import { getOutage, resolveOutage, deleteOutage } from "@/services/outages";
@@ -58,6 +66,16 @@ export default function OutageDetailsPage() {
   const isFetching = useRef(false);
   const hasOutageRef = useRef(false);
 
+  const { data: outage, isLoading, isError } = useOutage(id);
+  const resolveMutation = useResolveOutage(id);
+
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
+
+  async function handleResolve(mttrMinutes: number) {
+    const result = await resolveMutation.mutateAsync(mttrMinutes);
+    setResolutionPayment(result.payment);
+    setIsResolveModalOpen(false);
   useEffect(() => {
     hasOutageRef.current = outage !== null;
   }, [outage]);
@@ -140,6 +158,7 @@ export default function OutageDetailsPage() {
     }
   }
 
+  if (isLoading) {
   async function handleDelete() {
     if (!id) return;
     setDeleting(true);
@@ -162,11 +181,11 @@ export default function OutageDetailsPage() {
     );
   }
 
-  if (error && !outage) {
+  if (isError) {
     return (
       <RouteErrorState
         title="Error loading outage"
-        description={error}
+        description="Failed to load outage"
         actionLabel="Reload page"
         onAction={() => window.location.reload()}
       />
@@ -198,6 +217,17 @@ export default function OutageDetailsPage() {
           </Badge>
         </div>
 
+        <button
+          onClick={() => setIsResolveModalOpen(true)}
+          disabled={isResolved || resolveMutation.isPending}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            isResolved
+              ? "cursor-not-allowed bg-gray-100 text-gray-500"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+        >
+          {isResolved ? "Outage Resolved" : resolveMutation.isPending ? "Resolving…" : "Resolve Outage"}
+        </button>
         <div className="flex gap-2">
           {!editing && (
             <button
@@ -228,11 +258,13 @@ export default function OutageDetailsPage() {
         </div>
       </div>
 
-      {error ? (
+      {resolveMutation.isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-          {error}
+          {resolveMutation.error instanceof Error
+            ? resolveMutation.error.message
+            : "Failed to resolve outage"}
         </div>
-      ) : null}
+      )}
 
       {/* FE-018: Inline edit panel */}
       {editing && (
@@ -549,15 +581,20 @@ export default function OutageDetailsPage() {
         severity={outage.severity}
         initialMttrMinutes={outage.sla_status?.mttr_minutes}
         isOpen={isResolveModalOpen}
-        isResolving={resolving}
-        error={error}
+        isResolving={resolveMutation.isPending}
+        error={
+          resolveMutation.isError
+            ? resolveMutation.error instanceof Error
+              ? resolveMutation.error.message
+              : "Failed to resolve outage"
+            : null
+        }
         onClose={() => {
-          if (!resolving) {
+          if (!resolveMutation.isPending) {
             setIsResolveModalOpen(false);
-            setError(null);
           }
         }}
-        onConfirmResolve={handleResolve}
+        onConfirmResolve={(mttr) => handleResolve(mttr)}
       />
 
       {/* FE-062: Delete confirmation dialog */}
