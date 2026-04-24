@@ -18,6 +18,9 @@ export async function getOutages(params: {
   page_size?: number;
   severity?: string;
   status?: string;
+  search?: string;
+  sort_field?: string;
+  sort_order?: string;
 }): Promise<PaginatedOutages> {
   const res = await api.get<PaginatedOutages>("/outages", { params });
   return res.data;

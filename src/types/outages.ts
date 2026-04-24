@@ -45,6 +45,8 @@ export interface Outage {
   created_by?: string;
   location?: Location;
   sla_status?: SLAResult;
+  root_cause?: string;
+  resolution_notes?: string;
 }
 
 export interface OutageCreate {

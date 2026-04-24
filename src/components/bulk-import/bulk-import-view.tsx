@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { bulkImportOutages } from "@/services/bulkImportService";
@@ -91,7 +92,15 @@ export default function BulkImportView() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
+          <Link
+            href="/bulk-import/history"
+            className="text-sm text-blue-600 hover:underline"
+          >
+            View history →
+          </Link>
+        </div>
         <p className="text-sm text-gray-500">
           Upload a `.csv` or `.json` file to create outages in one pass.
         </p>
