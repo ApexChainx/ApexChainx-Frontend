@@ -92,11 +92,19 @@ export function OutagesPageClient() {
 
     return (
         <div className="space-y-6 p-6">
-            <div className="space-y-1">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Outages</h1>
-                <p className="text-sm text-slate-500">
-                    Review live incidents, filter by severity and status, and page through the active outage feed.
-                </p>
+            <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Outages</h1>
+                    <p className="text-sm text-slate-500">
+                        Review live incidents, filter by severity and status, and page through the active outage feed.
+                    </p>
+                </div>
+                <Link
+                    href="/outages/new"
+                    className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                    + New Outage
+                </Link>
             </div>
 
             <div className="flex justify-end">
