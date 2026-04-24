@@ -1,13 +1,19 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { api, clearTokens, getAccessToken, setTokens } from "@/lib/api";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 export type SessionState = "loading" | "authenticated" | "unauthenticated";
 
-interface SessionUser {
+export interface SessionUser {
   id: string;
   email: string;
+  role: string;
+  full_name?: string | null;
+  stellar_wallet?: string | null;
+  created_at?: string;
 }
 
 type SessionMessage =
@@ -45,6 +51,25 @@ export function useSession() {
 
   useEffect(() => {
     let isMounted = true;
+
+    function handleAuthLogout() {
+      if (isMounted) {
+        setUser(null);
+        setState("unauthenticated");
+      }
+    }
+
+    window.addEventListener("auth:logout", handleAuthLogout);
+
+    // Restore session if a token is already stored
+    if (!getAccessToken()) {
+      setState("unauthenticated");
+      return () => {
+        isMounted = false;
+        window.removeEventListener("auth:logout", handleAuthLogout);
+      };
+    }
+
     api
       .get<SessionUser>("/auth/me")
       .then((res) => {
@@ -60,17 +85,29 @@ export function useSession() {
       })
       .catch(() => {
         if (isMounted) {
+          clearTokens();
           setUser(null);
           setState("unauthenticated");
         }
       });
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("auth:logout", handleAuthLogout);
+    };
   }, []);
+
+  function storeSession(accessToken: string, refreshToken: string, sessionUser: SessionUser) {
+    setTokens(accessToken, refreshToken);
+    setUser(sessionUser);
+    setState("authenticated");
+  }
 
   async function logout() {
     try {
       await api.post("/auth/logout");
     } finally {
+      clearTokens();
       setUser(null);
       setState("unauthenticated");
       // Broadcast logout to other tabs (FE-057)
@@ -78,5 +115,5 @@ export function useSession() {
     }
   }
 
-  return { state, user, logout };
+  return { state, user, logout, storeSession };
 }

@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
+import RouteGuard from "@/components/RouteGuard";
 import { ReactQueryProvider } from "@/providers/react-query";
 
 export const metadata = {
@@ -16,8 +17,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body>
-        <Navigation />
-        <ReactQueryProvider>{children}</ReactQueryProvider>
+        <ReactQueryProvider>
+          <RouteGuard>
+            <Navigation />
+            {children}
+          </RouteGuard>
+        </ReactQueryProvider>
       </body>
     </html>
   );

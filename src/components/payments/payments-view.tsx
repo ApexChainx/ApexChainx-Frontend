@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchPayments } from "@/services/paymentService";
 import type { PaginatedPayments, Payment } from "@/types/payment";
 
-const PER_PAGE = 10;
+type SortKey = "created_at" | "amount" | "status";
+type SortDir = "asc" | "desc";
+type Density = "default" | "compact";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-green-100 text-green-700",
@@ -24,177 +27,240 @@ const typeStyles: Record<string, string> = {
 export default function PaymentsView() {
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
+  const [perPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
-  const requestKey = useMemo(() => `${page}:${PER_PAGE}`, [page]);
+
+  // FE-069: filter state
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // FE-072: sort + density
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [density, setDensity] = useState<Density>("default");
+
+  const requestKey = useMemo(
+    () => `${page}:${perPage}:${statusFilter}:${typeFilter}:${dateFrom}:${dateTo}`,
+    [page, perPage, statusFilter, typeFilter, dateFrom, dateTo]
+  );
 
   useEffect(() => {
     let isMounted = true;
-
-    fetchPayments(page, PER_PAGE)
-      .then((response) => {
-        if (isMounted) {
-          setData(response);
-          setError(null);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setError("Failed to load payments.");
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [requestKey, page]);
-
-  function goToPreviousPage() {
     setLoading(true);
-    setError(null);
-    setPage((currentPage) => Math.max(1, currentPage - 1));
+    fetchPayments({
+      page,
+      page_size: perPage,
+      status: statusFilter || undefined,
+      type: typeFilter || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+    })
+      .then((response) => { if (isMounted) { setData(response); setError(null); } })
+      .catch(() => { if (isMounted) setError("Failed to load payments."); })
+      .finally(() => { if (isMounted) setLoading(false); });
+    return () => { isMounted = false; };
+  }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // FE-072: client-side sort
+  const sortedItems = useMemo(() => {
+    if (!data) return [];
+    return [...data.items].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "created_at") {
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortKey === "amount") {
+        cmp = a.amount - b.amount;
+      } else if (sortKey === "status") {
+        cmp = a.status.localeCompare(b.status);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [data, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
-  function goToNextPage() {
-    if (!data) {
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setPage((currentPage) => Math.min(Math.ceil(data.total / data.page_size), currentPage + 1));
+  function SortIndicator({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <span className="ml-1 text-gray-300">↕</span>;
+    return <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>;
   }
 
-  function renderBody() {
-    if (loading) {
-      return (
-        <tr>
-          <td colSpan={6} className="p-0">
-            <RouteLoadingState
-              title="Loading payments"
-              description="Retrieving the latest reward and penalty records."
-            />
-          </td>
-        </tr>
-      );
-    }
-
-    if (error) {
-      return (
-        <tr>
-          <td colSpan={6} className="p-0">
-            <RouteErrorState
-              title="Payments unavailable"
-              description={error}
-              actionLabel="Reload page"
-              onAction={() => window.location.reload()}
-            />
-          </td>
-        </tr>
-      );
-    }
-
-    if (!data || data.items.length === 0) {
-      return (
-        <tr>
-          <td colSpan={6} className="p-0">
-            <RouteEmptyState
-              title="No payments yet"
-              description="Resolved outages with financial outcomes will appear here."
-            />
-          </td>
-        </tr>
-      );
-    }
-
-    return data.items.map((payment: Payment) => (
-      <tr
-        key={payment.id}
-        className="border-t transition-colors hover:bg-gray-50 cursor-pointer"
-        onClick={() => setSelectedPaymentId(payment.id)}
-      >
-        <td className="px-4 py-3 text-sm font-mono text-gray-700">{payment.outage_id}</td>
-        <td className="px-4 py-3">
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${typeStyles[payment.type]}`}
-          >
-            {payment.type}
-          </span>
-        </td>
-        <td
-          className={`px-4 py-3 text-sm font-semibold ${
-            payment.type === "penalty" ? "text-red-600" : "text-green-600"
-          }`}
-        >
-          {payment.type === "penalty" ? "-" : "+"}$
-          {payment.amount.toLocaleString()}
-        </td>
-        <td className="px-4 py-3 text-sm text-gray-600">
-          {new Date(payment.created_at).toLocaleDateString()}
-        </td>
-        <td className="px-4 py-3 text-xs font-mono text-gray-500">{payment.asset_code}</td>
-        <td className="px-4 py-3">
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-              statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"
-            }`}
-          >
-            {payment.status}
-          </span>
-        </td>
-      </tr>
-    ));
-  }
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / perPage)) : 1;
+  const cell = density === "compact" ? "px-3 py-1.5 text-xs" : "px-4 py-3 text-sm";
 
   return (
     <div className="space-y-4 p-6">
-      <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
+        {/* FE-072: density toggle */}
+        <div className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-medium">Density:</span>
+          {(["default", "compact"] as Density[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDensity(d)}
+              className={`rounded px-2 py-0.5 capitalize border ${density === d ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 hover:bg-slate-100"}`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* FE-069: filter bar */}
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">Status</span>
+          <select
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">Type</span>
+          <select
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={typeFilter}
+            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">All</option>
+            <option value="reward">Reward</option>
+            <option value="penalty">Penalty</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">From</span>
+          <input
+            type="date"
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">To</span>
+          <input
+            type="date"
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+          />
+        </label>
+      </div>
+
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <table className="w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              {["Outage ID", "Type", "Amount", "Date", "Asset", "Status"].map((column) => (
-                <th
-                  key={column}
-                  className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500"
-                >
-                  {column}
-                </th>
-              ))}
+              {/* FE-070: Outage ID column is now a link */}
+              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Outage</th>
+              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Type</th>
+              {/* FE-072: sortable Amount */}
+              <th
+                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
+                onClick={() => toggleSort("amount")}
+              >
+                Amount <SortIndicator col="amount" />
+              </th>
+              {/* FE-072: sortable Date */}
+              <th
+                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
+                onClick={() => toggleSort("created_at")}
+              >
+                Date <SortIndicator col="created_at" />
+              </th>
+              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Asset</th>
+              {/* FE-072: sortable Status */}
+              <th
+                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
+                onClick={() => toggleSort("status")}
+              >
+                Status <SortIndicator col="status" />
+              </th>
             </tr>
           </thead>
-          <tbody>{renderBody()}</tbody>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} className="p-0">
+                <RouteLoadingState title="Loading payments" description="Retrieving the latest reward and penalty records." />
+              </td></tr>
+            ) : error ? (
+              <tr><td colSpan={6} className="p-0">
+                <RouteErrorState title="Payments unavailable" description={error} actionLabel="Reload page" onAction={() => window.location.reload()} />
+              </td></tr>
+            ) : sortedItems.length === 0 ? (
+              <tr><td colSpan={6} className="p-0">
+                <RouteEmptyState title="No payments found" description="Try adjusting your filters." />
+              </td></tr>
+            ) : sortedItems.map((payment: Payment) => (
+              <tr
+                key={payment.id}
+                className="border-t transition-colors hover:bg-gray-50 cursor-pointer"
+                onClick={() => setSelectedPaymentId(payment.id)}
+              >
+                {/* FE-070: outage link in table */}
+                <td className={`${cell} font-mono text-gray-700`}>
+                  {payment.outage_id ? (
+                    <Link
+                      href={`/outages/${payment.outage_id}`}
+                      className="text-blue-600 hover:underline underline-offset-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {payment.outage_id}
+                    </Link>
+                  ) : (
+                    <span className="italic text-gray-400">—</span>
+                  )}
+                </td>
+                <td className={cell}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${typeStyles[payment.type]}`}>
+                    {payment.type}
+                  </span>
+                </td>
+                <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-600" : "text-green-600"}`}>
+                  {payment.type === "penalty" ? "-" : "+"}${payment.amount.toLocaleString()}
+                </td>
+                <td className={`${cell} text-gray-600`}>
+                  {new Date(payment.created_at).toLocaleDateString()}
+                </td>
+                <td className={`${cell} font-mono text-gray-500`}>{payment.asset_code}</td>
+                <td className={cell}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"}`}>
+                    {payment.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
 
-      {data && Math.ceil(data.total / data.page_size) > 1 ? (
+      {data && totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
-          <span>
-            Page {data.page} of {Math.ceil(data.total / data.page_size)} - {data.total} total
-          </span>
+          <span>Page {page} of {totalPages} — {data.total} total</span>
           <div className="flex gap-2">
-            <button
-              onClick={goToPreviousPage}
-              disabled={page === 1}
-              className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <button
-              onClick={goToNextPage}
-              disabled={page === Math.ceil(data.total / data.page_size)}
-              className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40"
-            >
-              Next
-            </button>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40">Previous</button>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded-lg border px-3 py-1.5 transition-colors hover:bg-gray-100 disabled:opacity-40">Next</button>
           </div>
         </div>
-      ) : null}
+      )}
 
       <PaymentDetailDrawer
         paymentId={selectedPaymentId}
