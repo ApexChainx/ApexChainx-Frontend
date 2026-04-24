@@ -7,13 +7,15 @@ on:
         description: 'Issue number to solve'
         required: true
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
 jobs:
   claude:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: anthropics/claude-code-action@v1
@@ -23,4 +25,3 @@ jobs:
             Solve GitHub issue #${{ github.event.inputs.issue_number }}.
             Read the issue, create a new branch named fix/issue-${{ github.event.inputs.issue_number }},
             implement the fix, then open a pull request with a clear description.
-          allowed_tools: "Bash(git *),Bash(gh *),Bash(npm *),Bash(yarn *)"
