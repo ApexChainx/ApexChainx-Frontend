@@ -9,64 +9,146 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { useOutages } from "@/features/outages/hooks/useOutages";
-import { useFilterPresets, useOutagesTableState } from "@/hooks/useOutagesTableState";
+import { useFilterPresets, useOutagesTableState, type SortField, type SortOrder } from "@/hooks/useOutagesTableState";
 import type { Outage } from "@/types/outages";
 import type { ColumnDef } from "@tanstack/react-table";
 
-const columns: ColumnDef<Outage>[] = [
-  {
-    accessorKey: "id",
-    header: "Outage",
-    cell: ({ row }) => (
-      <Link
-        href={`/outages/${row.original.id}`}
-        className="font-medium text-blue-600 underline-offset-4 hover:underline"
-      >
-        {row.original.id}
-      </Link>
-    ),
-  },
-  {
-    accessorKey: "site_name",
-    header: "Site",
-  },
-  {
-    accessorKey: "severity",
-    header: "Severity",
-    cell: ({ row }) => (
-      <Badge variant={row.original.severity === "critical" ? "destructive" : "secondary"}>
-        {row.original.severity}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => (
-      <Badge variant={row.original.status === "resolved" ? "secondary" : "outline"}>
-        {row.original.status}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: "detected_at",
-    header: "Detected",
-    cell: ({ row }) => new Date(row.original.detected_at).toLocaleString(),
-  },
-  {
-    accessorKey: "affected_services",
-    header: "Services",
-    cell: ({ row }) => row.original.affected_services.join(", "),
-  },
+const SORT_FIELDS: { value: SortField; label: string }[] = [
+  { value: "detected_at", label: "Detected" },
+  { value: "severity", label: "Severity" },
+  { value: "status", label: "Status" },
 ];
+
+function SortHeader({
+  label,
+  field,
+  currentField,
+  currentOrder,
+  onSort,
+}: {
+  label: string;
+  field: SortField;
+  currentField?: SortField;
+  currentOrder: SortOrder;
+  onSort: (field: SortField, order: SortOrder) => void;
+}) {
+  const isActive = currentField === field;
+  const nextOrder: SortOrder = isActive && currentOrder === "asc" ? "desc" : "asc";
+  return (
+    <button
+      className="flex items-center gap-1 font-medium hover:text-slate-900"
+      onClick={() => onSort(field, nextOrder)}
+      aria-label={`Sort by ${label}`}
+    >
+      {label}
+      <span className="text-slate-400">
+        {isActive ? (currentOrder === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </button>
+  );
+}
 
 export function OutagesPageClient() {
     const { state, actions } = useOutagesTableState();
     const { presets, savePreset, deletePreset } = useFilterPresets();
-    const { data, isLoading, isError } = useOutages(state);
+
+    // Build sort param for API: "field:order"
+    const sortParam = state.sort_field
+      ? `${state.sort_field}:${state.sort_order}`
+      : undefined;
+
+    const { data, isLoading, isError } = useOutages({
+      page: state.page,
+      page_size: state.page_size,
+      severity: state.severity,
+      status: state.status,
+      search: state.search,
+      sort: sortParam,
+    });
+
     const totalItems = data?.total ?? 0;
     const totalPages = Math.max(1, Math.ceil(totalItems / state.page_size));
     const [presetName, setPresetName] = useState("");
+    const [searchInput, setSearchInput] = useState(state.search ?? "");
+
+    const columns: ColumnDef<Outage>[] = [
+      {
+        accessorKey: "id",
+        header: () => (
+          <SortHeader
+            label="Outage"
+            field="detected_at"
+            currentField={state.sort_field}
+            currentOrder={state.sort_order}
+            onSort={actions.setSort}
+          />
+        ),
+        cell: ({ row }) => (
+          <Link
+            href={`/outages/${row.original.id}`}
+            className="font-medium text-blue-600 underline-offset-4 hover:underline"
+          >
+            {row.original.id}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "site_name",
+        header: "Site",
+      },
+      {
+        accessorKey: "severity",
+        header: () => (
+          <SortHeader
+            label="Severity"
+            field="severity"
+            currentField={state.sort_field}
+            currentOrder={state.sort_order}
+            onSort={actions.setSort}
+          />
+        ),
+        cell: ({ row }) => (
+          <Badge variant={row.original.severity === "critical" ? "destructive" : "secondary"}>
+            {row.original.severity}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: () => (
+          <SortHeader
+            label="Status"
+            field="status"
+            currentField={state.sort_field}
+            currentOrder={state.sort_order}
+            onSort={actions.setSort}
+          />
+        ),
+        cell: ({ row }) => (
+          <Badge variant={row.original.status === "resolved" ? "secondary" : "outline"}>
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "detected_at",
+        header: () => (
+          <SortHeader
+            label="Detected"
+            field="detected_at"
+            currentField={state.sort_field}
+            currentOrder={state.sort_order}
+            onSort={actions.setSort}
+          />
+        ),
+        cell: ({ row }) => new Date(row.original.detected_at).toLocaleString(),
+      },
+      {
+        accessorKey: "affected_services",
+        header: "Services",
+        cell: ({ row }) => row.original.affected_services.join(", "),
+      },
+    ];
 
     if (isLoading) {
         return (
@@ -107,6 +189,40 @@ export function OutagesPageClient() {
                     }}
                 />
             </div>
+
+            {/* FE-058: Search bar */}
+            <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    actions.setSearch(searchInput.trim() || undefined);
+                }}
+            >
+                <input
+                    type="search"
+                    className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    placeholder="Search by site ID, site name, or outage ID…"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    aria-label="Search outages"
+                />
+                <Button type="submit" variant="outline" className="text-sm">
+                    Search
+                </Button>
+                {state.search && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        className="text-sm text-slate-500"
+                        onClick={() => {
+                            setSearchInput("");
+                            actions.setSearch(undefined);
+                        }}
+                    >
+                        Clear
+                    </Button>
+                )}
+            </form>
 
             {/* Filter presets */}
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -181,6 +297,47 @@ export function OutagesPageClient() {
                     </select>
                 </label>
 
+                {/* FE-059: Sort controls */}
+                <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Sort by</span>
+                    <select
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={state.sort_field ?? ""}
+                        onChange={(e) => {
+                            const field = e.target.value as SortField;
+                            if (field) {
+                                actions.setSort(field, state.sort_order);
+                            } else {
+                                actions.clearSort();
+                            }
+                        }}
+                    >
+                        <option value="">Default order</option>
+                        {SORT_FIELDS.map((f) => (
+                            <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Sort direction</span>
+                    <select
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={state.sort_order}
+                        disabled={!state.sort_field}
+                        onChange={(e) => {
+                            if (state.sort_field) {
+                                actions.setSort(state.sort_field, e.target.value as SortOrder);
+                            }
+                        }}
+                    >
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
+                    </select>
+                </label>
+            </div>
+
+            <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
                 <label className="space-y-2 text-sm">
                     <span className="font-medium text-slate-700">Rows per page</span>
                     <select
@@ -196,7 +353,7 @@ export function OutagesPageClient() {
                     </select>
                 </label>
 
-                <div className="rounded-lg bg-slate-50 p-4">
+                <div className="rounded-lg bg-slate-50 p-4 md:col-start-4">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         Result count
                     </p>
