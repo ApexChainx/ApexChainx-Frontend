@@ -1,106 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
+import { useOutage, useResolveOutage } from "@/features/outages/hooks/useOutageMutations";
 import { SLADisputesPanel } from "@/components/outages/SLADisputesPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Separator } from "@/components/ui/separator";
-import { getOutage, resolveOutage } from "@/services/outages";
-import type { Outage, OutageResolutionPayment } from "@/types/outages";
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Failed to load outage";
-}
+import type { OutageResolutionPayment } from "@/types/outages";
 
 export default function OutageDetailsPage() {
   const params = useParams<{ id: string }>();
-  const id = params?.id;
-  const [outage, setOutage] = useState<Outage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [resolving, setResolving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const id = params?.id ?? "";
+
+  const { data: outage, isLoading, isError } = useOutage(id);
+  const resolveMutation = useResolveOutage(id);
+
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
 
-  const isFetching = useRef(false);
-  const hasOutageRef = useRef(false);
-
-  useEffect(() => {
-    hasOutageRef.current = outage !== null;
-  }, [outage]);
-
-  useEffect(() => {
-    if (!id) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const fetchOutage = async () => {
-      if (isFetching.current) {
-        return;
-      }
-      isFetching.current = true;
-
-      try {
-        const data = await getOutage(id);
-        if (isMounted) {
-          setOutage(data);
-          setError(null);
-        }
-      } catch (issue) {
-        if (isMounted && !hasOutageRef.current) {
-          setError(getErrorMessage(issue));
-        }
-      } finally {
-        isFetching.current = false;
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void fetchOutage();
-
-    const intervalId =
-      outage?.status === "resolved" ? null : setInterval(() => void fetchOutage(), 15000);
-
-    return () => {
-      isMounted = false;
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [id, outage?.status]);
-
   async function handleResolve(mttrMinutes: number) {
-    if (!id) {
-      return;
-    }
-
-    setResolving(true);
-    setError(null);
-
-    try {
-      const updated = await resolveOutage(id, { mttr_minutes: mttrMinutes });
-      setOutage({
-        ...updated.outage,
-        sla_status: updated.sla,
-      });
-      setResolutionPayment(updated.payment);
-      setIsResolveModalOpen(false);
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setResolving(false);
-    }
+    const result = await resolveMutation.mutateAsync(mttrMinutes);
+    setResolutionPayment(result.payment);
+    setIsResolveModalOpen(false);
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <RouteLoadingState
         title="Loading outage details"
@@ -109,11 +37,11 @@ export default function OutageDetailsPage() {
     );
   }
 
-  if (error && !outage) {
+  if (isError) {
     return (
       <RouteErrorState
         title="Error loading outage"
-        description={error}
+        description="Failed to load outage"
         actionLabel="Reload page"
         onAction={() => window.location.reload()}
       />
@@ -146,22 +74,24 @@ export default function OutageDetailsPage() {
 
         <button
           onClick={() => setIsResolveModalOpen(true)}
-          disabled={isResolved || resolving}
+          disabled={isResolved || resolveMutation.isPending}
           className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
             isResolved
               ? "cursor-not-allowed bg-gray-100 text-gray-500"
               : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
         >
-          {isResolved ? "Outage Resolved" : resolving ? "Resolving…" : "Resolve Outage"}
+          {isResolved ? "Outage Resolved" : resolveMutation.isPending ? "Resolving…" : "Resolve Outage"}
         </button>
       </div>
 
-      {error ? (
+      {resolveMutation.isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-          {error}
+          {resolveMutation.error instanceof Error
+            ? resolveMutation.error.message
+            : "Failed to resolve outage"}
         </div>
-      ) : null}
+      )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
@@ -302,15 +232,20 @@ export default function OutageDetailsPage() {
         severity={outage.severity}
         initialMttrMinutes={outage.sla_status?.mttr_minutes}
         isOpen={isResolveModalOpen}
-        isResolving={resolving}
-        error={error}
+        isResolving={resolveMutation.isPending}
+        error={
+          resolveMutation.isError
+            ? resolveMutation.error instanceof Error
+              ? resolveMutation.error.message
+              : "Failed to resolve outage"
+            : null
+        }
         onClose={() => {
-          if (!resolving) {
+          if (!resolveMutation.isPending) {
             setIsResolveModalOpen(false);
-            setError(null);
           }
         }}
-        onConfirmResolve={handleResolve}
+        onConfirmResolve={(mttr) => handleResolve(mttr)}
       />
     </div>
   );

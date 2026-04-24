@@ -1,14 +1,19 @@
 import { api } from "@/lib/api";
-import type { SLAResult, SLADispute } from "@/types/sla";
+import type {
+  DisputeListParams,
+  FlagDisputePayload,
+  PaginatedDisputes,
+  ResolveDisputePayload,
+  SLADispute,
+  SLAResult,
+} from "@/types/sla";
 
 export async function calculateSLA(params: {
   outage_id: string;
   severity: string;
   mttr_minutes: number;
 }): Promise<SLAResult> {
-  const res = await api.get<SLAResult>("/sla/calculate", {
-    params,
-  });
+  const res = await api.get<SLAResult>("/sla/calculate", { params });
   return res.data;
 }
 
@@ -20,17 +25,20 @@ export async function previewSLA(params: {
   return res.data;
 }
 
-export async function getDisputes(outageId: string): Promise<SLADispute[]> {
-  const res = await api.get<SLADispute[]>(`/sla/disputes`, { params: { outage_id: outageId } });
+export async function getDisputes(params: DisputeListParams): Promise<PaginatedDisputes> {
+  const res = await api.get<PaginatedDisputes>("/sla/disputes", { params });
   return res.data;
 }
 
-export async function flagDispute(outageId: string, reason: string): Promise<SLADispute> {
-  const res = await api.post<SLADispute>(`/sla/disputes`, { outage_id: outageId, reason });
+export async function flagDispute(payload: FlagDisputePayload): Promise<SLADispute> {
+  const res = await api.post<SLADispute>("/sla/disputes", payload);
   return res.data;
 }
 
-export async function resolveDispute(disputeId: string, action: "resolve" | "reject", note?: string): Promise<SLADispute> {
-  const res = await api.patch<SLADispute>(`/sla/disputes/${disputeId}`, { action, resolution_note: note });
+export async function resolveDispute(
+  disputeId: string,
+  payload: ResolveDisputePayload,
+): Promise<SLADispute> {
+  const res = await api.patch<SLADispute>(`/sla/disputes/${disputeId}`, payload);
   return res.data;
 }

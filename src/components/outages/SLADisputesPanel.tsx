@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { flagDispute, getDisputes, resolveDispute } from "@/services/sla";
-import type { SLADispute } from "@/types/sla";
+import type { DisputeStatus, SLADispute } from "@/types/sla";
+
+const PAGE_SIZE = 5;
 
 const statusVariant: Record<string, "outline" | "secondary" | "destructive" | "default"> = {
   open: "destructive",
@@ -22,49 +25,58 @@ interface Props {
 }
 
 export function SLADisputesPanel({ outageId, canResolve = false }: Props) {
-  const [disputes, setDisputes] = useState<SLADispute[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  const [statusFilter, setStatusFilter] = useState<DisputeStatus | "">("");
+  const [page, setPage] = useState(1);
   const [reason, setReason] = useState("");
-  const [flagging, setFlagging] = useState(false);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  // resolution note state: keyed by disputeId
+  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    getDisputes(outageId)
-      .then((data) => { if (isMounted) setDisputes(data); })
-      .catch(() => { if (isMounted) setError("Failed to load disputes."); })
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
-  }, [outageId]);
+  const queryKey = ["disputes", outageId, statusFilter, page];
 
-  async function handleFlag() {
-    if (!reason.trim()) return;
-    setFlagging(true);
-    setError(null);
-    try {
-      const dispute = await flagDispute(outageId, reason.trim());
-      setDisputes((prev) => [dispute, ...prev]);
+  const { data, isLoading, isError } = useQuery({
+    queryKey,
+    queryFn: () =>
+      getDisputes({
+        outage_id: outageId,
+        status: statusFilter || undefined,
+        page,
+        page_size: PAGE_SIZE,
+      }),
+  });
+
+  const disputes: SLADispute[] = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const flagMutation = useMutation({
+    mutationFn: () => flagDispute({ outage_id: outageId, reason: reason.trim() }),
+    onSuccess: () => {
       setReason("");
-    } catch {
-      setError("Failed to flag dispute.");
-    } finally {
-      setFlagging(false);
-    }
-  }
+      void qc.invalidateQueries({ queryKey: ["disputes", outageId] });
+    },
+  });
 
-  async function handleAction(disputeId: string, action: "resolve" | "reject") {
-    setResolvingId(disputeId);
-    setError(null);
-    try {
-      const updated = await resolveDispute(disputeId, action);
-      setDisputes((prev) => prev.map((d) => (d.id === disputeId ? updated : d)));
-    } catch {
-      setError(`Failed to ${action} dispute.`);
-    } finally {
-      setResolvingId(null);
-    }
+  const resolveMutation = useMutation({
+    mutationFn: ({
+      disputeId,
+      action,
+      note,
+    }: {
+      disputeId: string;
+      action: "resolve" | "reject";
+      note?: string;
+    }) => resolveDispute(disputeId, { action, resolution_note: note }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["disputes", outageId] });
+    },
+  });
+
+  function handleAction(dispute: SLADispute, action: "resolve" | "reject") {
+    const note = noteInputs[dispute.id]?.trim();
+    resolveMutation.mutate({ disputeId: dispute.id, action, note });
+    setNoteInputs((prev) => ({ ...prev, [dispute.id]: "" }));
   }
 
   return (
@@ -80,25 +92,47 @@ export function SLADisputesPanel({ outageId, canResolve = false }: Props) {
             placeholder="Reason for dispute…"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            disabled={flagging}
+            disabled={flagMutation.isPending}
           />
           <Button
             variant="outline"
-            disabled={!reason.trim() || flagging}
-            onClick={() => void handleFlag()}
+            disabled={!reason.trim() || flagMutation.isPending}
+            onClick={() => flagMutation.mutate()}
           >
-            {flagging ? "Flagging…" : "Flag dispute"}
+            {flagMutation.isPending ? "Flagging…" : "Flag dispute"}
           </Button>
         </div>
 
-        {error && (
-          <p className="text-xs text-red-600">{error}</p>
+        {flagMutation.isError && (
+          <p className="text-xs text-red-600">Failed to flag dispute.</p>
+        )}
+        {resolveMutation.isError && (
+          <p className="text-xs text-red-600">Failed to update dispute.</p>
         )}
 
-        {loading && <p className="text-slate-400 italic">Loading disputes…</p>}
+        {/* Status filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Filter:</span>
+          {(["", "open", "under_review", "resolved", "rejected"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+              className={`rounded-full border px-3 py-0.5 text-xs capitalize transition-colors ${
+                statusFilter === s
+                  ? "border-slate-700 bg-slate-700 text-white"
+                  : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {s === "" ? "All" : s.replace("_", " ")}
+            </button>
+          ))}
+        </div>
 
-        {!loading && disputes.length === 0 && (
-          <p className="italic text-slate-400">No disputes filed for this outage.</p>
+        {isLoading && <p className="italic text-slate-400">Loading disputes…</p>}
+        {isError && <p className="text-xs text-red-600">Failed to load disputes.</p>}
+
+        {!isLoading && disputes.length === 0 && (
+          <p className="italic text-slate-400">No disputes found.</p>
         )}
 
         {disputes.map((dispute, i) => (
@@ -115,31 +149,69 @@ export function SLADisputesPanel({ outageId, canResolve = false }: Props) {
               </div>
               <p className="text-slate-700">{dispute.reason}</p>
               {dispute.resolution_note && (
-                <p className="text-xs text-slate-500 italic">Note: {dispute.resolution_note}</p>
+                <p className="text-xs italic text-slate-500">Note: {dispute.resolution_note}</p>
               )}
               {canResolve && dispute.status === "open" && (
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={resolvingId === dispute.id}
-                    onClick={() => void handleAction(dispute.id, "resolve")}
-                  >
-                    Resolve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={resolvingId === dispute.id}
-                    onClick={() => void handleAction(dispute.id, "reject")}
-                  >
-                    Reject
-                  </Button>
+                <div className="space-y-2 pt-1">
+                  <input
+                    className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-xs"
+                    placeholder="Resolution note (optional)…"
+                    value={noteInputs[dispute.id] ?? ""}
+                    onChange={(e) =>
+                      setNoteInputs((prev) => ({ ...prev, [dispute.id]: e.target.value }))
+                    }
+                    disabled={resolveMutation.isPending}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={resolveMutation.isPending}
+                      onClick={() => handleAction(dispute, "resolve")}
+                    >
+                      Resolve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={resolveMutation.isPending}
+                      onClick={() => handleAction(dispute, "reject")}
+                    >
+                      Reject
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         ))}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <span>
+              Page {page} of {totalPages} ({total} total)
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
