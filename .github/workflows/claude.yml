@@ -1,0 +1,26 @@
+name: Claude Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to solve'
+        required: true
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Solve GitHub issue #${{ github.event.inputs.issue_number }}.
+            Read the issue, create a new branch named fix/issue-${{ github.event.inputs.issue_number }},
+            implement the fix, then open a pull request with a clear description.
+          allowed_tools: "Bash(git *),Bash(gh *),Bash(npm *),Bash(yarn *)"
