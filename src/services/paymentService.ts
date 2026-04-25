@@ -20,8 +20,9 @@ export const fetchPayments = async (
   return response.data;
 };
 
-export const fetchPayment = async (id: string): Promise<Payment> => {
-  const response = await api.get<Payment>(`/payments/${id}`);
+export const fetchPayment = async (id: string, signal?: AbortSignal): Promise<Payment> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await api.get<Payment>(`/payments/${id}`, { signal } as any);
   return response.data;
 };
 

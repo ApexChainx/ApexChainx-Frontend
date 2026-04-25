@@ -27,15 +27,19 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
   useEffect(() => {
     if (!paymentId) { setPayment(null); return; }
-    let isMounted = true;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     setActionState(null);
-    fetchPayment(paymentId)
-      .then((data) => { if (isMounted) setPayment(data); })
-      .catch(() => { if (isMounted) setError("Failed to load payment details."); })
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
+    fetchPayment(paymentId, controller.signal)
+      .then((data) => { setPayment(data); })
+      .catch((err: unknown) => {
+        if ((err as { name?: string }).name !== "CanceledError") {
+          setError("Failed to load payment details.");
+        }
+      })
+      .finally(() => { setLoading(false); });
+    return () => { controller.abort(); };
   }, [paymentId]);
 
   async function handleAction(type: "retry" | "reconcile") {
@@ -77,9 +81,14 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
               onAction={() => {
                 setError(null);
                 setLoading(true);
-                fetchPayment(paymentId!)
+                const ctrl = new AbortController();
+                fetchPayment(paymentId!, ctrl.signal)
                   .then(setPayment)
-                  .catch(() => setError("Failed to load payment details."))
+                  .catch((err: unknown) => {
+                    if ((err as { name?: string }).name !== "CanceledError") {
+                      setError("Failed to load payment details.");
+                    }
+                  })
                   .finally(() => setLoading(false));
               }}
             />

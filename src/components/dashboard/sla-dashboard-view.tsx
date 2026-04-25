@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+
 import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
   const snapshot = {
@@ -37,43 +37,27 @@ function delta(a: number, b: number) {
 const SEVERITIES = ["", "low", "medium", "high", "critical"];
 
 export default function SLADashboardView() {
-  const [compareMode, setCompareMode] = useState(false);
-
-  const primary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics"],
-    queryFn: fetchDashboardMetrics,
-    staleTime: 30_000,
-  });
-
-  // Second window: same endpoint, separate cache key, only fetched when compare mode is on
-  const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare"],
-    queryFn: fetchDashboardMetrics,
-    staleTime: 30_000,
-    enabled: compareMode,
-  });
-
-  if (primary.isLoading) {
   const router = useRouter();
+  const [compareMode, setCompareMode] = useState(false);
   const [filters, setFilters] = useState<DashboardFilters>({});
 
-  const {
-    data: metrics,
-    isLoading,
-    isError,
-    refetch,
-    dataUpdatedAt,
-  } = useQuery<DashboardMetrics>({
+  const primary = useQuery<DashboardMetrics>({
     queryKey: ["dashboard-metrics", filters],
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
+  });
+
+  const secondary = useQuery<DashboardMetrics>({
+    queryKey: ["dashboard-metrics-compare"],
+    queryFn: () => fetchDashboardMetrics(),
+    staleTime: 30_000,
+    enabled: compareMode,
   });
 
   function set(key: keyof DashboardFilters, value: string) {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  // FE-076: drilldown — navigate to outages/payments with filter context
   function onTrendClick(point: TrendPoint) {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
@@ -96,7 +80,7 @@ export default function SLADashboardView() {
     router.push(`/payments?${params.toString()}`);
   }
 
-  if (isLoading) {
+  if (primary.isLoading) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -165,7 +149,7 @@ export default function SLADashboardView() {
       {compareMode && secondary.isLoading ? (
         <p className="text-sm text-gray-400">Loading comparison window…</p>
       ) : null}
-      {/* FE-074 + FE-075: date range + severity/site filters */}
+
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">From</span>
@@ -241,7 +225,6 @@ export default function SLADashboardView() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* FE-076: pass drilldown handlers */}
         <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
         <PenaltiesRewardsChart
           data={metrics.trends}

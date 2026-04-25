@@ -26,8 +26,9 @@ export async function getOutages(params: {
   return res.data;
 }
 
-export async function getOutage(id: string): Promise<Outage> {
-  const res = await api.get<Outage>(`/outages/${id}`);
+export async function getOutage(id: string, options?: { signal?: AbortSignal }): Promise<Outage> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await api.get<Outage>(`/outages/${id}`, { signal: options?.signal } as any);
   return res.data;
 }
 
