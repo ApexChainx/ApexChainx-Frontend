@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
-import { fetchPayments } from "@/services/paymentService";
+import { exportPayments, fetchPayments } from "@/services/paymentService";
 import type { PaginatedPayments, Payment } from "@/types/payment";
 
 type SortKey = "created_at" | "amount" | "status";
@@ -31,6 +31,8 @@ export default function PaymentsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // FE-069: filter state
   const [statusFilter, setStatusFilter] = useState("");
@@ -98,22 +100,49 @@ export default function PaymentsView() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / perPage)) : 1;
   const cell = density === "compact" ? "px-3 py-1.5 text-xs" : "px-4 py-3 text-sm";
 
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportPayments({
+        status: statusFilter || undefined,
+        type: typeFilter || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
+    } catch {
+      setExportError("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
-        {/* FE-072: density toggle */}
-        <div className="flex items-center gap-1 text-xs text-slate-600">
-          <span className="font-medium">Density:</span>
-          {(["default", "compact"] as Density[]).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDensity(d)}
-              className={`rounded px-2 py-0.5 capitalize border ${density === d ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 hover:bg-slate-100"}`}
-            >
-              {d}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {exportError && <span className="text-xs text-red-600">{exportError}</span>}
+          <button
+            onClick={() => void handleExport()}
+            disabled={exporting}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+          {/* FE-072: density toggle */}
+          <div className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-medium">Density:</span>
+            {(["default", "compact"] as Density[]).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDensity(d)}
+                className={`rounded px-2 py-0.5 capitalize border ${density === d ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 hover:bg-slate-100"}`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -34,3 +34,16 @@ export const reconcilePayment = async (id: string): Promise<Payment> => {
   const response = await api.post<Payment>(`/payments/${id}/reconcile`);
   return response.data;
 };
+
+export const exportPayments = async (filters: Omit<PaymentFilters, "page" | "page_size"> = {}): Promise<void> => {
+  const response = await api.get("/payments/export", {
+    params: filters,
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(response.data as Blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
