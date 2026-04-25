@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+
 import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
   const snapshot = {
@@ -37,43 +37,27 @@ function delta(a: number, b: number) {
 const SEVERITIES = ["", "low", "medium", "high", "critical"];
 
 export default function SLADashboardView() {
-  const [compareMode, setCompareMode] = useState(false);
-
-  const primary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics"],
-    queryFn: fetchDashboardMetrics,
-    staleTime: 30_000,
-  });
-
-  // Second window: same endpoint, separate cache key, only fetched when compare mode is on
-  const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare"],
-    queryFn: fetchDashboardMetrics,
-    staleTime: 30_000,
-    enabled: compareMode,
-  });
-
-  if (primary.isLoading) {
   const router = useRouter();
+  const [compareMode, setCompareMode] = useState(false);
   const [filters, setFilters] = useState<DashboardFilters>({});
-
-  const {
-    data: metrics,
-    isLoading,
-    isError,
-    refetch,
-    dataUpdatedAt,
-  } = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics", filters],
-    queryFn: () => fetchDashboardMetrics(filters),
-    staleTime: 30_000,
-  });
 
   function set(key: keyof DashboardFilters, value: string) {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  // FE-076: drilldown — navigate to outages/payments with filter context
+  const primary = useQuery<DashboardMetrics>({
+    queryKey: ["dashboard-metrics", filters],
+    queryFn: () => fetchDashboardMetrics(filters),
+    staleTime: 30_000,
+  });
+
+  const secondary = useQuery<DashboardMetrics>({
+    queryKey: ["dashboard-metrics-compare"],
+    queryFn: () => fetchDashboardMetrics(),
+    staleTime: 30_000,
+    enabled: compareMode,
+  });
+
   function onTrendClick(point: TrendPoint) {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
@@ -96,7 +80,7 @@ export default function SLADashboardView() {
     router.push(`/payments?${params.toString()}`);
   }
 
-  if (isLoading) {
+  if (primary.isLoading) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -121,7 +105,6 @@ export default function SLADashboardView() {
   const lastUpdated = primary.dataUpdatedAt
     ? new Date(primary.dataUpdatedAt).toLocaleString()
     : "Not synced yet";
-
   const cmp = compareMode && secondary.data ? secondary.data : null;
 
   return (
@@ -129,83 +112,41 @@ export default function SLADashboardView() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-gray-800">SLA Analytics Dashboard</h1>
-          <p className="text-sm text-gray-500">
-            Live backend analytics for compliance, payouts, and trend movement.
-          </p>
+          <p className="text-sm text-gray-500">Live backend analytics for compliance, payouts, and trend movement.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-gray-400">
-            Updated {lastUpdated}
-          </span>
+          <span className="text-xs uppercase tracking-wide text-gray-400">Updated {lastUpdated}</span>
           <button
             onClick={() => setCompareMode((v) => !v)}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              compareMode
-                ? "border-blue-400 bg-blue-50 text-blue-700"
-                : "border-gray-200 text-gray-600 hover:bg-gray-50"
-            }`}
+            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${compareMode ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
           >
             {compareMode ? "Exit Compare" : "Compare"}
           </button>
-          <button
-            onClick={() => exportSnapshot(metrics)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            Export
-          </button>
-          <button
-            onClick={() => void primary.refetch()}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            Refresh
-          </button>
+          <button onClick={() => exportSnapshot(metrics)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Export</button>
+          <button onClick={() => void primary.refetch()} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
         </div>
       </div>
 
-      {compareMode && secondary.isLoading ? (
-        <p className="text-sm text-gray-400">Loading comparison window…</p>
-      ) : null}
-      {/* FE-074 + FE-075: date range + severity/site filters */}
+      {compareMode && secondary.isLoading ? <p className="text-sm text-gray-400">Loading comparison window…</p> : null}
+
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">From</span>
-          <input
-            type="date"
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
-            value={filters.date_from ?? ""}
-            onChange={(e) => set("date_from", e.target.value)}
-          />
+          <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_from ?? ""} onChange={(e) => set("date_from", e.target.value)} />
         </label>
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">To</span>
-          <input
-            type="date"
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
-            value={filters.date_to ?? ""}
-            onChange={(e) => set("date_to", e.target.value)}
-          />
+          <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_to ?? ""} onChange={(e) => set("date_to", e.target.value)} />
         </label>
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">Severity</span>
-          <select
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
-            value={filters.severity ?? ""}
-            onChange={(e) => set("severity", e.target.value)}
-          >
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>{s || "All"}</option>
-            ))}
+          <select className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.severity ?? ""} onChange={(e) => set("severity", e.target.value)}>
+            {SEVERITIES.map((s) => <option key={s} value={s}>{s || "All"}</option>)}
           </select>
         </label>
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">Site</span>
-          <input
-            type="text"
-            placeholder="e.g. site-a"
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
-            value={filters.site ?? ""}
-            onChange={(e) => set("site", e.target.value)}
-          />
+          <input type="text" placeholder="e.g. site-a" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.site ?? ""} onChange={(e) => set("site", e.target.value)} />
         </label>
       </div>
 
@@ -241,20 +182,13 @@ export default function SLADashboardView() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* FE-076: pass drilldown handlers */}
         <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
-        <PenaltiesRewardsChart
-          data={metrics.trends}
-          onPenaltyClick={onPenaltyClick}
-          onRewardClick={onRewardClick}
-        />
+        <PenaltiesRewardsChart data={metrics.trends} onPenaltyClick={onPenaltyClick} onRewardClick={onRewardClick} />
       </div>
 
       {cmp && cmp.trends.length > 0 ? (
         <div>
-          <p className="mb-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
-            Comparison Window
-          </p>
+          <p className="mb-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">Comparison Window</p>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SLATrendChart data={cmp.trends} />
             <PenaltiesRewardsChart data={cmp.trends} />
@@ -263,9 +197,7 @@ export default function SLADashboardView() {
       ) : null}
 
       {compareMode && cmp && cmp.trends.length === 0 ? (
-        <p className="rounded-lg bg-yellow-50 px-4 py-2 text-sm text-yellow-700">
-          No data available for the comparison window.
-        </p>
+        <p className="rounded-lg bg-yellow-50 px-4 py-2 text-sm text-yellow-700">No data available for the comparison window.</p>
       ) : null}
     </div>
   );

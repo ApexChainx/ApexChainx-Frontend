@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { useToast } from "@/components/ui/toast";
+import { explorerLink } from "@/lib/explorer";
 import { fetchPayment, retryPayment, reconcilePayment } from "@/services/paymentService";
 import type { Payment } from "@/types/payment";
 
@@ -24,6 +26,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionState, setActionState] = useState<{ type: "retry" | "reconcile"; status: "loading" | "success" | "error"; message?: string } | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (!paymentId) { setPayment(null); return; }
@@ -46,13 +49,13 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
         ? await retryPayment(payment.id)
         : await reconcilePayment(payment.id);
       setPayment(updated);
-      setActionState({ type, status: "success", message: `${type === "retry" ? "Retry" : "Reconciliation"} succeeded.` });
+      const msg = `${type === "retry" ? "Retry" : "Reconciliation"} succeeded.`;
+      setActionState({ type, status: "success", message: msg });
+      toast(msg, "success");
     } catch (err) {
-      setActionState({
-        type,
-        status: "error",
-        message: err instanceof Error ? err.message : `${type} failed. Please try again.`,
-      });
+      const msg = err instanceof Error ? err.message : `${type} failed. Please try again.`;
+      setActionState({ type, status: "error", message: msg });
+      toast(msg, "error");
     }
   }
 
@@ -125,9 +128,21 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
                     </span>
                   }
                 />
-                <Row label="From" value={payment.from_address} mono />
-                <Row label="To" value={payment.to_address} mono />
-                <Row label="Transaction Hash" value={payment.transaction_hash} mono />
+                <Row label="From" value={
+                  explorerLink("account", payment.from_address)
+                    ? <a href={explorerLink("account", payment.from_address)!} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-blue-600 hover:underline break-all">{payment.from_address}</a>
+                    : <span className="font-mono text-xs">{payment.from_address}</span>
+                } />
+                <Row label="To" value={
+                  explorerLink("account", payment.to_address)
+                    ? <a href={explorerLink("account", payment.to_address)!} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-blue-600 hover:underline break-all">{payment.to_address}</a>
+                    : <span className="font-mono text-xs">{payment.to_address}</span>
+                } />
+                <Row label="Transaction Hash" value={
+                  explorerLink("tx", payment.transaction_hash)
+                    ? <a href={explorerLink("tx", payment.transaction_hash)!} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-blue-600 hover:underline break-all">{payment.transaction_hash}</a>
+                    : <span className="font-mono text-xs">{payment.transaction_hash || "—"}</span>
+                } />
                 <Row label="Created" value={new Date(payment.created_at).toLocaleString()} />
                 {payment.confirmed_at && (
                   <Row label="Confirmed" value={new Date(payment.confirmed_at).toLocaleString()} />

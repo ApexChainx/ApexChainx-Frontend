@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
+import { explorerLink } from "@/lib/explorer";
 import { useSession } from "@/hooks/useSession";
 
 type AuthUser = {
@@ -658,7 +659,11 @@ export default function SettingsPage() {
                   <div className="flex justify-between gap-4">
                     <dt>Address</dt>
                     <dd className="break-all text-right font-medium text-slate-900">
-                      {wallet.public_key}
+                      {explorerLink("account", wallet.public_key) ? (
+                        <a href={explorerLink("account", wallet.public_key)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {wallet.public_key}
+                        </a>
+                      ) : wallet.public_key}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">

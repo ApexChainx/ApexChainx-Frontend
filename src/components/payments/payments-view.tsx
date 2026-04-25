@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
@@ -25,14 +26,28 @@ const typeStyles: Record<string, string> = {
 };
 
 export default function PaymentsView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
   const [perPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
+    () => searchParams.get("paymentId")
+  );
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // Sync drawer open/close with URL
+  function openDrawer(id: string) {
+    setSelectedPaymentId(id);
+    router.replace(`/payments?paymentId=${id}`, { scroll: false });
+  }
+  function closeDrawer() {
+    setSelectedPaymentId(null);
+    router.replace("/payments", { scroll: false });
+  }
 
   // FE-069: filter state
   const [statusFilter, setStatusFilter] = useState("");
@@ -242,7 +257,7 @@ export default function PaymentsView() {
               <tr
                 key={payment.id}
                 className="border-t transition-colors hover:bg-gray-50 cursor-pointer"
-                onClick={() => setSelectedPaymentId(payment.id)}
+                onClick={() => openDrawer(payment.id)}
               >
                 {/* FE-070: outage link in table */}
                 <td className={`${cell} font-mono text-gray-700`}>
@@ -293,7 +308,7 @@ export default function PaymentsView() {
 
       <PaymentDetailDrawer
         paymentId={selectedPaymentId}
-        onClose={() => setSelectedPaymentId(null)}
+        onClose={closeDrawer}
       />
     </div>
   );

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, clearTokens, getAccessToken, setTokens } from "@/lib/api";
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, clearTokens, getAccessToken, setTokens } from "@/lib/api";
 
 export type SessionState = "loading" | "authenticated" | "unauthenticated";
 
