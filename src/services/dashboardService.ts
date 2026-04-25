@@ -17,10 +17,18 @@ interface DashboardTrendResponse {
   penalties: number;
 }
 
-export const fetchDashboardMetrics = async (): Promise<DashboardMetrics> => {
+export interface DashboardFilters {
+  date_from?: string;
+  date_to?: string;
+  severity?: string;
+  site?: string;
+}
+
+export const fetchDashboardMetrics = async (filters: DashboardFilters = {}): Promise<DashboardMetrics> => {
+  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
   const [kpiResponse, trendResponse] = await Promise.all([
-    api.get<DashboardKPIResponse>("/sla/analytics/dashboard"),
-    api.get<DashboardTrendResponse[]>("/sla/analytics/trends"),
+    api.get<DashboardKPIResponse>("/sla/analytics/dashboard", { params }),
+    api.get<DashboardTrendResponse[]>("/sla/analytics/trends", { params }),
   ]);
 
   const kpis = kpiResponse.data;

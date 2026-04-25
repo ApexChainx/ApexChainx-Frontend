@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
-import { fetchDashboardMetrics } from "@/services/dashboardService";
-import type { DashboardMetrics } from "@/types/dashboard";
+import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
+import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -32,6 +34,8 @@ function delta(a: number, b: number) {
   return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
 }
 
+const SEVERITIES = ["", "low", "medium", "high", "critical"];
+
 export default function SLADashboardView() {
   const [compareMode, setCompareMode] = useState(false);
 
@@ -50,6 +54,49 @@ export default function SLADashboardView() {
   });
 
   if (primary.isLoading) {
+  const router = useRouter();
+  const [filters, setFilters] = useState<DashboardFilters>({});
+
+  const {
+    data: metrics,
+    isLoading,
+    isError,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery<DashboardMetrics>({
+    queryKey: ["dashboard-metrics", filters],
+    queryFn: () => fetchDashboardMetrics(filters),
+    staleTime: 30_000,
+  });
+
+  function set(key: keyof DashboardFilters, value: string) {
+    setFilters((f) => ({ ...f, [key]: value || undefined }));
+  }
+
+  // FE-076: drilldown — navigate to outages/payments with filter context
+  function onTrendClick(point: TrendPoint) {
+    const params = new URLSearchParams();
+    if (point.period) params.set("date_from", point.period);
+    if (filters.severity) params.set("severity", filters.severity);
+    if (filters.site) params.set("site", filters.site);
+    router.push(`/outages?${params.toString()}`);
+  }
+
+  function onPenaltyClick(point: TrendPoint) {
+    const params = new URLSearchParams();
+    if (point.period) params.set("date_from", point.period);
+    params.set("type", "penalty");
+    router.push(`/payments?${params.toString()}`);
+  }
+
+  function onRewardClick(point: TrendPoint) {
+    const params = new URLSearchParams();
+    if (point.period) params.set("date_from", point.period);
+    params.set("type", "reward");
+    router.push(`/payments?${params.toString()}`);
+  }
+
+  if (isLoading) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -118,6 +165,49 @@ export default function SLADashboardView() {
       {compareMode && secondary.isLoading ? (
         <p className="text-sm text-gray-400">Loading comparison window…</p>
       ) : null}
+      {/* FE-074 + FE-075: date range + severity/site filters */}
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">From</span>
+          <input
+            type="date"
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={filters.date_from ?? ""}
+            onChange={(e) => set("date_from", e.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">To</span>
+          <input
+            type="date"
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={filters.date_to ?? ""}
+            onChange={(e) => set("date_to", e.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">Severity</span>
+          <select
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={filters.severity ?? ""}
+            onChange={(e) => set("severity", e.target.value)}
+          >
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>{s || "All"}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="font-medium text-slate-600">Site</span>
+          <input
+            type="text"
+            placeholder="e.g. site-a"
+            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            value={filters.site ?? ""}
+            onChange={(e) => set("site", e.target.value)}
+          />
+        </label>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
@@ -151,8 +241,13 @@ export default function SLADashboardView() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <SLATrendChart data={metrics.trends} />
-        <PenaltiesRewardsChart data={metrics.trends} />
+        {/* FE-076: pass drilldown handlers */}
+        <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
+        <PenaltiesRewardsChart
+          data={metrics.trends}
+          onPenaltyClick={onPenaltyClick}
+          onRewardClick={onRewardClick}
+        />
       </div>
 
       {cmp && cmp.trends.length > 0 ? (

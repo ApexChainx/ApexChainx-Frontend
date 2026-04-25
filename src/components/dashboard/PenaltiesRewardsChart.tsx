@@ -2,13 +2,16 @@ import { TrendPoint } from "../../types/dashboard";
 
 interface PenaltiesRewardsChartProps {
   data: TrendPoint[];
+  onPenaltyClick?: (point: TrendPoint) => void;
+  onRewardClick?: (point: TrendPoint) => void;
 }
 
-const formatCurrency = (value: number) =>
-  `$${value.toLocaleString()}`;
+const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
 
 const PenaltiesRewardsChart: React.FC<PenaltiesRewardsChartProps> = ({
   data,
+  onPenaltyClick,
+  onRewardClick,
 }) => {
   return (
     <div className="rounded-xl bg-white p-5 shadow-sm">
@@ -25,12 +28,18 @@ const PenaltiesRewardsChart: React.FC<PenaltiesRewardsChartProps> = ({
               className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-lg border border-gray-100 p-3"
             >
               <span className="text-sm font-medium text-gray-700">{point.period}</span>
-              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600">
+              <button
+                onClick={() => onPenaltyClick?.(point)}
+                className={`rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 ${onPenaltyClick ? "hover:bg-red-100 transition-colors cursor-pointer" : "cursor-default"}`}
+              >
                 Penalties: {formatCurrency(point.penalties)}
-              </span>
-              <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600">
+              </button>
+              <button
+                onClick={() => onRewardClick?.(point)}
+                className={`rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600 ${onRewardClick ? "hover:bg-green-100 transition-colors cursor-pointer" : "cursor-default"}`}
+              >
                 Rewards: {formatCurrency(point.rewards)}
-              </span>
+              </button>
             </div>
           ))
         )}
