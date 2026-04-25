@@ -17,3 +17,14 @@ export interface DashboardMetrics {
   };
   trends: TrendPoint[];
 }
+
+export interface CompareWindow {
+  label: string;
+  from: string;
+  to: string;
+}
+
+export interface CompareMetrics {
+  a: DashboardMetrics;
+  b: DashboardMetrics;
+}
