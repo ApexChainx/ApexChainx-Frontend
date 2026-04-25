@@ -12,9 +12,10 @@ const Navigation = () => {
         <Link href="/">Dashboard</Link> |{" "}
         <Link href="/outages">Outages</Link> |{" "}
         <Link href="/bulk-import">Bulk Import</Link> |{" "}
+        <Link href="/setting">Wallet &amp; Settings</Link> |{" "}
         <Link href="/webhooks">Webhooks</Link> |{" "}
-        <Link href="/payments">Payments</Link> |{" "}
-        <Link href="/setting">Wallet &amp; Settings</Link>
+        <Link href="/payments">Payments</Link> 
+        
       </div>
 
       <div className="text-sm text-slate-600">
