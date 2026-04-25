@@ -13,13 +13,14 @@ import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageM
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Failed to load outage";
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : "Failed to load outage";
 }
 
 function buildTimeline(outage: Outage) {
-  const events: { label: string; time: string; note?: string }[] = [];
-  events.push({ label: "Outage detected", time: outage.detected_at });
+  const events: { label: string; time: string; note?: string }[] = [
+    { label: "Outage detected", time: outage.detected_at },
+  ];
   if (outage.sla_status) {
     events.push({
       label: "SLA computed",
@@ -38,10 +39,11 @@ export default function OutageDetailsPage() {
   const router = useRouter();
   const toast = useToast();
   const id = params?.id;
+
   const [outage, setOutage] = useState<Outage | null>(null);
   const [loading, setLoading] = useState(true);
-  const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
 
@@ -52,10 +54,32 @@ export default function OutageDetailsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const isFetching = useRef(false);
-  const hasOutageRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+
+    // Cancel any in-flight fetch on id change or unmount (#128)
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(null);
+
+    getOutage(id, { signal: controller.signal })
+      .then((data) => {
+        setOutage(data);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string }).name === "CanceledError") return;
+        setError(getErrorMessage(err));
+        setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
     hasOutageRef.current = outage !== null;
   }, [outage]);
 
@@ -76,7 +100,27 @@ export default function OutageDetailsPage() {
         if (isMounted) setLoading(false);
       }
     };
+  }, [id]);
 
+  // Poll for updates while outage is open
+  useEffect(() => {
+    if (!id || !outage || outage.status === "resolved") return;
+
+    const controller = new AbortController();
+    const intervalId = setInterval(() => {
+      getOutage(id, { signal: controller.signal })
+        .then((data) => setOutage(data))
+        .catch((err: unknown) => {
+          if ((err as { name?: string }).name !== "CanceledError") {
+            console.error("Poll error:", err);
+          }
+        });
+    }, 15_000);
+
+    return () => {
+      controller.abort();
+      clearInterval(intervalId);
+    };
     void fetchOutage();
     const intervalId = outage?.status === "resolved" ? null : setInterval(() => void fetchOutage(), 15000);
     return () => { isMounted = false; if (intervalId) clearInterval(intervalId); };
@@ -104,6 +148,8 @@ export default function OutageDetailsPage() {
       const updated = await updateOutage(id, editForm);
       setOutage({ ...outage, ...updated });
       setEditing(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
       toast("Outage updated.", "success");
     } catch (issue) {
       setError(getErrorMessage(issue));
@@ -121,6 +167,8 @@ export default function OutageDetailsPage() {
       setOutage({ ...updated.outage, sla_status: updated.sla });
       setResolutionPayment(updated.payment);
       setIsResolveModalOpen(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
       toast("Outage resolved successfully.", "success");
     } catch (issue) {
       const msg = getErrorMessage(issue);
@@ -153,6 +201,7 @@ export default function OutageDetailsPage() {
     );
   }
 
+  if (error) {
   if (error && !outage) {
     return (
       <RouteErrorState
@@ -288,6 +337,17 @@ export default function OutageDetailsPage() {
               />
             </div>
             <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setEditing(false)}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleSaveEdit()}
+                disabled={saving}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
               <button onClick={() => setEditing(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
               <button onClick={handleSaveEdit} disabled={saving} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">
                 {saving ? "Saving…" : "Save Changes"}
@@ -373,6 +433,9 @@ export default function OutageDetailsPage() {
                 <Separator />
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Transaction</span>
+                  <span className="break-all text-right font-mono text-xs text-slate-900">
+                    {resolutionPayment.transaction_hash}
+                  </span>
                   <span className="break-all text-right font-medium text-slate-900">{resolutionPayment.transaction_hash}</span>
                 </div>
               </>
@@ -387,6 +450,9 @@ export default function OutageDetailsPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Affected Services</span>
+              <span className="font-medium">
+                {outage.affected_services.length > 0 ? outage.affected_services.join(", ") : "Not provided"}
+              </span>
               <span className="font-medium">{outage.affected_services.length > 0 ? outage.affected_services.join(", ") : "Not provided"}</span>
             </div>
             <Separator />
@@ -442,7 +508,11 @@ export default function OutageDetailsPage() {
                   />
                 </div>
                 <p className="text-xs text-slate-400">
-                  Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a> contributors
+                  Map data ©{" "}
+                  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
+                    OpenStreetMap
+                  </a>{" "}
+                  contributors
                 </p>
               </div>
             ) : (
@@ -494,11 +564,31 @@ export default function OutageDetailsPage() {
           <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl space-y-4">
             <h2 id="delete-dialog-title" className="text-lg font-semibold text-slate-900">Delete outage?</h2>
             <p className="text-sm text-slate-600">
+              This will permanently delete outage{" "}
+              <span className="font-medium">{outage.id}</span> ({outage.site_name}). This action cannot be undone.
               This will permanently delete outage <span className="font-medium">{outage.id}</span> ({outage.site_name}). This action cannot be undone.
             </p>
             {deleteError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {deleteError}{" "}
+                <button className="underline font-medium" onClick={() => void handleDelete()} disabled={deleting}>
+                  Retry
+                </button>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                disabled={deleting}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
                 <button className="underline font-medium" onClick={handleDelete} disabled={deleting}>Retry</button>
               </div>
             )}

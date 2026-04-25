@@ -58,6 +58,10 @@ export default function SLADashboardView() {
     enabled: compareMode,
   });
 
+  function set(key: keyof DashboardFilters, value: string) {
+    setFilters((f) => ({ ...f, [key]: value || undefined }));
+  }
+
   function onTrendClick(point: TrendPoint) {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
@@ -127,6 +131,9 @@ export default function SLADashboardView() {
         </div>
       </div>
 
+      {compareMode && secondary.isLoading ? (
+        <p className="text-sm text-gray-400">Loading comparison window…</p>
+      ) : null}
       {compareMode && secondary.isLoading ? <p className="text-sm text-gray-400">Loading comparison window…</p> : null}
 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">

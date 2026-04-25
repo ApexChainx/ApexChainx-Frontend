@@ -98,10 +98,12 @@ async function buildPreview(file: File): Promise<PreviewState> {
 
 export default function BulkImportView() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -144,24 +146,39 @@ export default function BulkImportView() {
 
   async function handleSubmit() {
     if (!file) return;
-    // Block upload if client-side errors found
     if (preview && preview.errors.length > 0) return;
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
+    setProgress(0);
     setSubmitError(null);
     setResult(null);
 
     try {
-      const response = await bulkImportOutages(file);
+      const response = await bulkImportOutages(file, {
+        signal: controller.signal,
+        onProgress: setProgress,
+      });
       setResult(response);
       setFile(null);
       setPreview(null);
       if (inputRef.current) inputRef.current.value = "";
-    } catch {
-      setSubmitError("Upload failed. Please try again.");
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name === "CanceledError") {
+        // cancelled — form stays ready
+      } else {
+        setSubmitError("Upload failed. Please try again.");
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
+      setProgress(0);
     }
+  }
+
+  function handleCancel() {
+    abortRef.current?.abort();
   }
 
   function handleReset() {
@@ -279,13 +296,35 @@ export default function BulkImportView() {
         </div>
       ) : null}
 
-      <button
-        onClick={() => void handleSubmit()}
-        disabled={!file || loading || hasBlockingErrors}
-        className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {loading ? "Uploading..." : "Upload File"}
-      </button>
+      <div className="space-y-2">
+        {loading ? (
+          <>
+            <div className="w-full rounded-full bg-gray-200 h-2 overflow-hidden">
+              <div
+                className="h-2 rounded-full bg-blue-600 transition-all duration-200"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">{progress}% uploaded</span>
+              <button
+                onClick={handleCancel}
+                className="text-xs text-red-500 hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={() => void handleSubmit()}
+            disabled={!file || hasBlockingErrors}
+            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Upload File
+          </button>
+        )}
+      </div>
 
       {submitError ? (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{submitError}</p>
@@ -307,9 +346,34 @@ export default function BulkImportView() {
 
           {result.errors.length > 0 ? (
             <div>
-              <p className="mb-2 text-sm font-semibold text-red-600">
-                {result.errors.length} validation error{result.errors.length > 1 ? "s" : ""}
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold text-red-600">
+                  {result.errors.length} validation error{result.errors.length > 1 ? "s" : ""}
+                </p>
+                <button
+                  onClick={() => {
+                    const rows = [
+                      ["row", "field", "message"],
+                      ...result.errors.map((e) => [
+                        e.row != null ? String(e.row) : "",
+                        e.field ?? "",
+                        e.message,
+                      ]),
+                    ];
+                    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `import-errors-${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Download report
+                </button>
+              </div>
               <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-red-50 p-3">
                 {result.errors.map((error, index) => (
                   <li key={`${error.message}-${index}`} className="text-xs text-red-700">

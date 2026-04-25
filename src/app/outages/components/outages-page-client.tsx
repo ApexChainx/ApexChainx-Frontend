@@ -47,6 +47,10 @@ export function OutagesPageClient() {
   const { state, actions } = useOutagesTableState();
   const { presets, savePreset, deletePreset } = useFilterPresets();
 
+  const sortParam = state.sort_field
+    ? `${state.sort_field}:${state.sort_order}`
+    : undefined;
+
   const sortParam = state.sort_field ? `${state.sort_field}:${state.sort_order}` : undefined;
   const { data, isLoading, isError, refetch } = useOutages({
     page: state.page,
@@ -72,6 +76,13 @@ export function OutagesPageClient() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  useEffect(() => {
+    localStorage.setItem(VISIBILITY_KEY, JSON.stringify(columnVisibility));
+  }, [columnVisibility]);
+
+  useEffect(() => {
+    localStorage.setItem(DENSITY_KEY, JSON.stringify(density));
+  }, [density]);
   useEffect(() => { localStorage.setItem(VISIBILITY_KEY, JSON.stringify(columnVisibility)); }, [columnVisibility]);
   useEffect(() => { localStorage.setItem(DENSITY_KEY, JSON.stringify(density)); }, [density]);
 
@@ -93,7 +104,15 @@ export function OutagesPageClient() {
   const columns: ColumnDef<Outage>[] = [
     {
       accessorKey: "id",
-      header: "Outage",
+      header: () => (
+        <SortHeader
+          label="Outage"
+          field="detected_at"
+          currentField={state.sort_field}
+          currentOrder={state.sort_order}
+          onSort={actions.setSort}
+        />
+      ),
       cell: ({ row }) => (
         <Link href={`/outages/${row.original.id}`} className="font-medium text-blue-600 underline-offset-4 hover:underline">
           {row.original.id}
@@ -103,7 +122,15 @@ export function OutagesPageClient() {
     { accessorKey: "site_name", header: "Site" },
     {
       accessorKey: "severity",
-      header: "Severity",
+      header: () => (
+        <SortHeader
+          label="Severity"
+          field="severity"
+          currentField={state.sort_field}
+          currentOrder={state.sort_order}
+          onSort={actions.setSort}
+        />
+      ),
       cell: ({ row }) => (
         <Badge variant={row.original.severity === "critical" ? "destructive" : "secondary"}>
           {row.original.severity}
@@ -112,7 +139,15 @@ export function OutagesPageClient() {
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: () => (
+        <SortHeader
+          label="Status"
+          field="status"
+          currentField={state.sort_field}
+          currentOrder={state.sort_order}
+          onSort={actions.setSort}
+        />
+      ),
       cell: ({ row }) => (
         <Badge variant={row.original.status === "resolved" ? "secondary" : "outline"}>
           {row.original.status}
@@ -121,7 +156,15 @@ export function OutagesPageClient() {
     },
     {
       accessorKey: "detected_at",
-      header: "Detected",
+      header: () => (
+        <SortHeader
+          label="Detected"
+          field="detected_at"
+          currentField={state.sort_field}
+          currentOrder={state.sort_order}
+          onSort={actions.setSort}
+        />
+      ),
       cell: ({ row }) => new Date(row.original.detected_at).toLocaleString(),
     },
     {
@@ -177,6 +220,10 @@ export function OutagesPageClient() {
         </div>
         <div className="flex items-center gap-2">
           <ExportDropdown filters={{ severity: state.severity, status: state.status }} />
+          <Link
+            href="/outages/new"
+            className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
           <Link href="/outages/new" className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             + New Outage
           </Link>
@@ -186,6 +233,10 @@ export function OutagesPageClient() {
       {/* Search */}
       <form
         className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          actions.setSearch(searchInput.trim() || undefined);
+        }}
         onSubmit={(e) => { e.preventDefault(); actions.setSearch(searchInput.trim() || undefined); }}
       >
         <input
@@ -198,6 +249,12 @@ export function OutagesPageClient() {
         />
         <Button type="submit" variant="outline" className="text-sm">Search</Button>
         {state.search && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-sm text-slate-500"
+            onClick={() => { setSearchInput(""); actions.setSearch(undefined); }}
+          >
           <Button type="button" variant="ghost" className="text-sm text-slate-500" onClick={() => { setSearchInput(""); actions.setSearch(undefined); }}>
             Clear
           </Button>
@@ -231,6 +288,15 @@ export function OutagesPageClient() {
         </div>
       </div>
 
+      {/* Filters + sort */}
+      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <label className="space-y-2 text-sm">
+          <span className="font-medium text-slate-700">Severity</span>
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={state.severity ?? ""}
+            onChange={(e) => actions.setSeverity(e.target.value || undefined)}
+          >
       {/* Filters */}
       <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
         <label className="space-y-2 text-sm">
@@ -245,12 +311,68 @@ export function OutagesPageClient() {
         </label>
         <label className="space-y-2 text-sm">
           <span className="font-medium text-slate-700">Status</span>
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={state.status ?? ""}
+            onChange={(e) => actions.setStatus(e.target.value || undefined)}
+          >
           <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.status ?? ""} onChange={(e) => actions.setStatus(e.target.value || undefined)}>
             <option value="">All statuses</option>
             <option value="open">Open</option>
             <option value="resolved">Resolved</option>
           </select>
         </label>
+        <label className="space-y-2 text-sm">
+          <span className="font-medium text-slate-700">Sort by</span>
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={state.sort_field ?? ""}
+            onChange={(e) => {
+              const field = e.target.value as SortField;
+              if (field) { actions.setSort(field, state.sort_order); } else { actions.clearSort(); }
+            }}
+          >
+            <option value="">Default order</option>
+            {SORT_FIELDS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-2 text-sm">
+          <span className="font-medium text-slate-700">Sort direction</span>
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={state.sort_order}
+            disabled={!state.sort_field}
+            onChange={(e) => {
+              if (state.sort_field) { actions.setSort(state.sort_field, e.target.value as SortOrder); }
+            }}
+          >
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
+          </select>
+        </label>
+      </div>
+
+      {/* Pagination controls + result count */}
+      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <label className="space-y-2 text-sm">
+          <span className="font-medium text-slate-700">Rows per page</span>
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            value={state.page_size}
+            onChange={(e) => actions.setPageSize(Number(e.target.value))}
+          >
+            {[10, 20, 50].map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </label>
+        <div className="rounded-lg bg-slate-50 p-4 md:col-start-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Result count</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{totalItems}</p>
+          <p className="mt-1 text-sm text-slate-500">Page {state.page} of {totalPages}</p>
+        </div>
         <label className="space-y-2 text-sm">
           <span className="font-medium text-slate-700">Sort by</span>
           <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.sort_field ?? ""} onChange={(e) => { const f = e.target.value as SortField; f ? actions.setSort(f, state.sort_order) : actions.clearSort(); }}>
@@ -289,6 +411,27 @@ export function OutagesPageClient() {
             density={density}
             onDensityChange={setDensity}
           />
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Showing {(state.page - 1) * state.page_size + 1}–
+              {Math.min(state.page * state.page_size, totalItems)} of {totalItems}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => actions.setPage(state.page - 1)}
+                disabled={state.page <= 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => actions.setPage(state.page + 1)}
+                disabled={state.page >= totalPages}
+              >
+                Next
+              </Button>
+            </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
             <Button variant="outline" onClick={() => actions.setPage(state.page - 1)} disabled={state.page <= 1}>Previous</Button>
             <Button variant="outline" onClick={() => actions.setPage(state.page + 1)} disabled={state.page >= totalPages}>Next</Button>
@@ -301,11 +444,38 @@ export function OutagesPageClient() {
           <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl space-y-4">
             <h2 id="delete-dialog-title" className="text-lg font-semibold text-slate-900">Delete outage?</h2>
             <p className="text-sm text-slate-600">
+              This will permanently delete outage{" "}
+              <span className="font-medium">{pendingDelete.id}</span> ({pendingDelete.site_name}).
+              This action cannot be undone.
               This will permanently delete outage <span className="font-medium">{pendingDelete.id}</span> ({pendingDelete.site_name}). This action cannot be undone.
             </p>
             {deleteError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {deleteError}{" "}
+                <button
+                  className="underline font-medium"
+                  onClick={() => void handleDeleteConfirm()}
+                  disabled={deleting}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => { setPendingDelete(null); setDeleteError(null); }}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void handleDeleteConfirm()}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </Button>
                 <button className="underline font-medium" onClick={handleDeleteConfirm} disabled={deleting}>Retry</button>
               </div>
             )}

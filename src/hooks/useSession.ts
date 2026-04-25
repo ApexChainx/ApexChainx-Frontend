@@ -68,20 +68,22 @@ export function useSession() {
       };
     }
 
+    const controller = new AbortController();
+
     api
-      .get<SessionUser>("/auth/me")
+      .get<SessionUser>("/auth/me", { signal: controller.signal } as Parameters<typeof api.get>[1])
       .then((res) => {
         if (isMounted) {
           setUser(res.data);
           setState("authenticated");
-          // Broadcast to other tabs
           channelRef.current?.postMessage({
             type: "authenticated",
             user: res.data,
           } satisfies SessionMessage);
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if ((err as { name?: string }).name === "CanceledError") return;
         if (isMounted) {
           clearTokens();
           setUser(null);
@@ -91,6 +93,7 @@ export function useSession() {
 
     return () => {
       isMounted = false;
+      controller.abort();
       window.removeEventListener("auth:logout", handleAuthLogout);
     };
   }, []);
