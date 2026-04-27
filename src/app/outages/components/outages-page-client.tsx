@@ -43,6 +43,31 @@ const SORT_FIELDS: { value: SortField; label: string }[] = [
   { value: "status", label: "Status" },
 ];
 
+function SortHeader({
+  label,
+  field,
+  currentField,
+  currentOrder,
+  onSort,
+}: {
+  label: string;
+  field: SortField;
+  currentField?: SortField;
+  currentOrder: SortOrder;
+  onSort: (field: SortField, order: SortOrder) => void;
+}) {
+  const active = currentField === field;
+  return (
+    <button
+      className="flex items-center gap-1 font-medium"
+      onClick={() => onSort(field, active && currentOrder === "asc" ? "desc" : "asc")}
+    >
+      {label}
+      {active && <span className="text-xs">{currentOrder === "asc" ? "↑" : "↓"}</span>}
+    </button>
+  );
+}
+
 export function OutagesPageClient() {
   const { state, actions } = useOutagesTableState();
   const { presets, savePreset, deletePreset } = useFilterPresets();
@@ -51,7 +76,6 @@ export function OutagesPageClient() {
     ? `${state.sort_field}:${state.sort_order}`
     : undefined;
 
-  const sortParam = state.sort_field ? `${state.sort_field}:${state.sort_order}` : undefined;
   const { data, isLoading, isError, refetch } = useOutages({
     page: state.page,
     page_size: state.page_size,
@@ -83,8 +107,6 @@ export function OutagesPageClient() {
   useEffect(() => {
     localStorage.setItem(DENSITY_KEY, JSON.stringify(density));
   }, [density]);
-  useEffect(() => { localStorage.setItem(VISIBILITY_KEY, JSON.stringify(columnVisibility)); }, [columnVisibility]);
-  useEffect(() => { localStorage.setItem(DENSITY_KEY, JSON.stringify(density)); }, [density]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!pendingDelete) return;
@@ -224,7 +246,6 @@ export function OutagesPageClient() {
             href="/outages/new"
             className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-          <Link href="/outages/new" className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             + New Outage
           </Link>
         </div>
@@ -237,7 +258,6 @@ export function OutagesPageClient() {
           e.preventDefault();
           actions.setSearch(searchInput.trim() || undefined);
         }}
-        onSubmit={(e) => { e.preventDefault(); actions.setSearch(searchInput.trim() || undefined); }}
       >
         <input
           type="search"
@@ -255,7 +275,6 @@ export function OutagesPageClient() {
             className="text-sm text-slate-500"
             onClick={() => { setSearchInput(""); actions.setSearch(undefined); }}
           >
-          <Button type="button" variant="ghost" className="text-sm text-slate-500" onClick={() => { setSearchInput(""); actions.setSearch(undefined); }}>
             Clear
           </Button>
         )}
@@ -272,7 +291,13 @@ export function OutagesPageClient() {
             >
               {preset.name}
             </button>
-            <button className="text-slate-400 hover:text-red-500 text-xs" onClick={() => deletePreset(preset.name)} aria-label={`Delete preset ${preset.name}`}>×</button>
+            <button
+              className="text-slate-400 hover:text-red-500 text-xs"
+              onClick={() => deletePreset(preset.name)}
+              aria-label={`Delete preset ${preset.name}`}
+            >
+              ×
+            </button>
           </div>
         ))}
         <div className="ml-auto flex items-center gap-2">
@@ -282,7 +307,15 @@ export function OutagesPageClient() {
             value={presetName}
             onChange={(e) => setPresetName(e.target.value)}
           />
-          <Button variant="outline" className="text-xs h-7 px-2" disabled={!presetName.trim()} onClick={() => { savePreset({ name: presetName.trim(), severity: state.severity, status: state.status }); setPresetName(""); }}>
+          <Button
+            variant="outline"
+            className="text-xs h-7 px-2"
+            disabled={!presetName.trim()}
+            onClick={() => {
+              savePreset({ name: presetName.trim(), severity: state.severity, status: state.status });
+              setPresetName("");
+            }}
+          >
             Save preset
           </Button>
         </div>
@@ -297,11 +330,6 @@ export function OutagesPageClient() {
             value={state.severity ?? ""}
             onChange={(e) => actions.setSeverity(e.target.value || undefined)}
           >
-      {/* Filters */}
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
-        <label className="space-y-2 text-sm">
-          <span className="font-medium text-slate-700">Severity</span>
-          <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.severity ?? ""} onChange={(e) => actions.setSeverity(e.target.value || undefined)}>
             <option value="">All severities</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
@@ -316,7 +344,6 @@ export function OutagesPageClient() {
             value={state.status ?? ""}
             onChange={(e) => actions.setStatus(e.target.value || undefined)}
           >
-          <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.status ?? ""} onChange={(e) => actions.setStatus(e.target.value || undefined)}>
             <option value="">All statuses</option>
             <option value="open">Open</option>
             <option value="resolved">Resolved</option>
@@ -373,30 +400,6 @@ export function OutagesPageClient() {
           <p className="mt-2 text-2xl font-semibold text-slate-900">{totalItems}</p>
           <p className="mt-1 text-sm text-slate-500">Page {state.page} of {totalPages}</p>
         </div>
-        <label className="space-y-2 text-sm">
-          <span className="font-medium text-slate-700">Sort by</span>
-          <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.sort_field ?? ""} onChange={(e) => { const f = e.target.value as SortField; f ? actions.setSort(f, state.sort_order) : actions.clearSort(); }}>
-            <option value="">Default order</option>
-            {SORT_FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-        </label>
-        <label className="space-y-2 text-sm">
-          <span className="font-medium text-slate-700">Direction</span>
-          <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.sort_order} disabled={!state.sort_field} onChange={(e) => { if (state.sort_field) actions.setSort(state.sort_field, e.target.value as SortOrder); }}>
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Rows per page</span>
-          <select className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm" value={state.page_size} onChange={(e) => actions.setPageSize(Number(e.target.value))}>
-            {[10, 20, 50].map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
-        <span className="text-sm text-slate-500 ml-auto">{totalItems} results · Page {state.page} of {totalPages}</span>
       </div>
 
       {outages.length === 0 ? (
@@ -432,9 +435,6 @@ export function OutagesPageClient() {
                 Next
               </Button>
             </div>
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-            <Button variant="outline" onClick={() => actions.setPage(state.page - 1)} disabled={state.page <= 1}>Previous</Button>
-            <Button variant="outline" onClick={() => actions.setPage(state.page + 1)} disabled={state.page >= totalPages}>Next</Button>
           </div>
         </div>
       )}
@@ -447,7 +447,6 @@ export function OutagesPageClient() {
               This will permanently delete outage{" "}
               <span className="font-medium">{pendingDelete.id}</span> ({pendingDelete.site_name}).
               This action cannot be undone.
-              This will permanently delete outage <span className="font-medium">{pendingDelete.id}</span> ({pendingDelete.site_name}). This action cannot be undone.
             </p>
             {deleteError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -476,12 +475,6 @@ export function OutagesPageClient() {
               >
                 {deleting ? "Deleting…" : "Delete"}
               </Button>
-                <button className="underline font-medium" onClick={handleDeleteConfirm} disabled={deleting}>Retry</button>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setPendingDelete(null); setDeleteError(null); }} disabled={deleting}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>{deleting ? "Deleting…" : "Delete"}</Button>
             </div>
           </div>
         </div>

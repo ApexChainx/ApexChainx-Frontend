@@ -3,6 +3,7 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import { ReactQueryProvider } from "@/providers/react-query";
+import { SessionProvider } from "@/providers/session";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata = {
@@ -19,12 +20,14 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en">
       <body>
         <ReactQueryProvider>
-          <ToastProvider>
-            <RouteGuard>
-              <Navigation />
-              {children}
-            </RouteGuard>
-          </ToastProvider>
+          <SessionProvider>
+            <ToastProvider>
+              <RouteGuard>
+                <Navigation />
+                {children}
+              </RouteGuard>
+            </ToastProvider>
+          </SessionProvider>
         </ReactQueryProvider>
       </body>
     </html>

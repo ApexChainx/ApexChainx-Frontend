@@ -58,10 +58,6 @@ export default function SLADashboardView() {
     enabled: compareMode,
   });
 
-  function set(key: keyof DashboardFilters, value: string) {
-    setFilters((f) => ({ ...f, [key]: value || undefined }));
-  }
-
   function onTrendClick(point: TrendPoint) {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);

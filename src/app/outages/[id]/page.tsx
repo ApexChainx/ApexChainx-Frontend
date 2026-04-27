@@ -59,7 +59,6 @@ export default function OutageDetailsPage() {
   useEffect(() => {
     if (!id) return;
 
-    // Cancel any in-flight fetch on id change or unmount (#128)
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -80,25 +79,6 @@ export default function OutageDetailsPage() {
 
     return () => {
       controller.abort();
-    hasOutageRef.current = outage !== null;
-  }, [outage]);
-
-  useEffect(() => {
-    if (!id) return;
-    let isMounted = true;
-
-    const fetchOutage = async () => {
-      if (isFetching.current) return;
-      isFetching.current = true;
-      try {
-        const data = await getOutage(id);
-        if (isMounted) { setOutage(data); setError(null); }
-      } catch (issue) {
-        if (isMounted && !hasOutageRef.current) setError(getErrorMessage(issue));
-      } finally {
-        isFetching.current = false;
-        if (isMounted) setLoading(false);
-      }
     };
   }, [id]);
 
@@ -121,9 +101,6 @@ export default function OutageDetailsPage() {
       controller.abort();
       clearInterval(intervalId);
     };
-    void fetchOutage();
-    const intervalId = outage?.status === "resolved" ? null : setInterval(() => void fetchOutage(), 15000);
-    return () => { isMounted = false; if (intervalId) clearInterval(intervalId); };
   }, [id, outage?.status]);
 
   function startEdit() {
@@ -148,11 +125,9 @@ export default function OutageDetailsPage() {
       const updated = await updateOutage(id, editForm);
       setOutage({ ...outage, ...updated });
       setEditing(false);
+      toast("Outage updated.", "success");
     } catch (err) {
       setError(getErrorMessage(err));
-      toast("Outage updated.", "success");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
     } finally {
       setSaving(false);
     }
@@ -167,11 +142,9 @@ export default function OutageDetailsPage() {
       setOutage({ ...updated.outage, sla_status: updated.sla });
       setResolutionPayment(updated.payment);
       setIsResolveModalOpen(false);
-    } catch (err) {
-      setError(getErrorMessage(err));
       toast("Outage resolved successfully.", "success");
-    } catch (issue) {
-      const msg = getErrorMessage(issue);
+    } catch (err) {
+      const msg = getErrorMessage(err);
       setError(msg);
       toast(msg, "error");
     } finally {
@@ -201,7 +174,6 @@ export default function OutageDetailsPage() {
     );
   }
 
-  if (error) {
   if (error && !outage) {
     return (
       <RouteErrorState
@@ -348,8 +320,6 @@ export default function OutageDetailsPage() {
                 disabled={saving}
                 className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
               >
-              <button onClick={() => setEditing(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSaveEdit} disabled={saving} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">
                 {saving ? "Saving…" : "Save Changes"}
               </button>
             </div>
@@ -436,7 +406,6 @@ export default function OutageDetailsPage() {
                   <span className="break-all text-right font-mono text-xs text-slate-900">
                     {resolutionPayment.transaction_hash}
                   </span>
-                  <span className="break-all text-right font-medium text-slate-900">{resolutionPayment.transaction_hash}</span>
                 </div>
               </>
             ) : (
@@ -453,7 +422,6 @@ export default function OutageDetailsPage() {
               <span className="font-medium">
                 {outage.affected_services.length > 0 ? outage.affected_services.join(", ") : "Not provided"}
               </span>
-              <span className="font-medium">{outage.affected_services.length > 0 ? outage.affected_services.join(", ") : "Not provided"}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -566,7 +534,6 @@ export default function OutageDetailsPage() {
             <p className="text-sm text-slate-600">
               This will permanently delete outage{" "}
               <span className="font-medium">{outage.id}</span> ({outage.site_name}). This action cannot be undone.
-              This will permanently delete outage <span className="font-medium">{outage.id}</span> ({outage.site_name}). This action cannot be undone.
             </p>
             {deleteError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -589,12 +556,6 @@ export default function OutageDetailsPage() {
                 disabled={deleting}
                 className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
-                <button className="underline font-medium" onClick={handleDelete} disabled={deleting}>Retry</button>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }} disabled={deleting} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
                 {deleting ? "Deleting…" : "Delete"}
               </button>
             </div>
