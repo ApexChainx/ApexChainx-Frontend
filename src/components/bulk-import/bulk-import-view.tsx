@@ -1,156 +1,397 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback, useId } from "react";
 
 import { bulkImportOutages } from "@/services/bulkImportService";
 import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
 
-const ACCEPTED_TYPES = ["text/csv", "application/json"];
-const ACCEPTED_EXTENSIONS = [".csv", ".json"];
+// ─── Constants ───────────────────────────────────────────────────────────────
+const ACCEPTED_TYPES = ["text/csv", "application/json"] as const;
+const ACCEPTED_EXTENSIONS = [".csv", ".json"] as const;
 const MAX_PREVIEW_ROWS = 5;
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+const REQUIRED_FIELDS = ["service_id", "start_time", "end_time"] as const;
+
+type AcceptedExtension = (typeof ACCEPTED_EXTENSIONS)[number];
+type AcceptedMimeType = (typeof ACCEPTED_TYPES)[number];
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface PreviewState {
   headers: string[];
   rows: string[][];
   warnings: ImportValidationError[];
   errors: ImportValidationError[];
+  totalRows: number; // Added: track total for "showing X of Y" messaging
 }
 
-const REQUIRED_CSV_FIELDS = ["service_id", "start_time", "end_time"];
-
-function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.trim().split("\n").filter(Boolean);
-  if (lines.length === 0) return { headers: [], rows: [] };
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-  const rows = lines.slice(1, MAX_PREVIEW_ROWS + 1).map((l) =>
-    l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
-  );
-  return { headers, rows };
+interface FileValidationResult {
+  valid: boolean;
+  error?: string;
 }
 
+type UploadStatus = "idle" | "validating" | "uploading" | "success" | "error" | "cancelled";
+
+// ─── CSV Parsing ─────────────────────────────────────────────────────────────
+interface ParsedCSV {
+  headers: string[];
+  rows: string[][];
+  totalRows: number;
+}
+
+function parseCSV(text: string): ParsedCSV {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  
+  if (lines.length === 0) {
+    return { headers: [], rows: [], totalRows: 0 };
+  }
+
+  // Robust CSV parsing: handles quoted fields containing commas
+  const parseLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"';
+          i++; // Skip escaped quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        result.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  const headers = parseLine(lines[0]).map((h) => h.replace(/^"|"$/g, ""));
+  const allRows = lines.slice(1).map(parseLine);
+  
+  return {
+    headers,
+    rows: allRows.slice(0, MAX_PREVIEW_ROWS),
+    totalRows: allRows.length,
+  };
+}
+
+// ─── Validation ──────────────────────────────────────────────────────────────
 function validateCSV(headers: string[], rows: string[][]): ImportValidationError[] {
   const errors: ImportValidationError[] = [];
-  const missing = REQUIRED_CSV_FIELDS.filter((f) => !headers.includes(f));
+  
+  const missing = REQUIRED_FIELDS.filter((f) => !headers.includes(f));
   if (missing.length > 0) {
-    errors.push({ message: `Missing required columns: ${missing.join(", ")}` });
+    errors.push({ 
+      message: `Missing required columns: ${missing.join(", ")}`,
+      field: missing.join(", "),
+    });
   }
+
   rows.forEach((row, i) => {
     if (row.length !== headers.length) {
-      errors.push({ row: i + 2, message: `Column count mismatch (expected ${headers.length}, got ${row.length})` });
+      errors.push({
+        row: i + 2,
+        message: `Column count mismatch (expected ${headers.length}, got ${row.length})`,
+      });
     }
-  });
-  return errors;
-}
-
-function validateJSON(text: string): ImportValidationError[] {
-  const errors: ImportValidationError[] = [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    errors.push({ message: "Invalid JSON: could not parse file." });
-    return errors;
-  }
-  if (!Array.isArray(parsed)) {
-    errors.push({ message: "JSON must be an array of outage records." });
-    return errors;
-  }
-  (parsed as Record<string, unknown>[]).slice(0, MAX_PREVIEW_ROWS).forEach((item, i) => {
-    REQUIRED_CSV_FIELDS.forEach((field) => {
-      if (item[field] == null) {
-        errors.push({ row: i + 1, field, message: `Missing required field "${field}"` });
+    
+    // Validate required fields have values
+    REQUIRED_FIELDS.forEach((field) => {
+      const colIndex = headers.indexOf(field);
+      if (colIndex !== -1 && (!row[colIndex] || row[colIndex].trim() === "")) {
+        errors.push({
+          row: i + 2,
+          field,
+          message: `Required field "${field}" is empty`,
+        });
       }
     });
   });
+
   return errors;
 }
 
+function validateJSON(text: string): { errors: ImportValidationError[]; parsed?: Record<string, unknown>[] } {
+  const errors: ImportValidationError[] = [];
+  let parsed: unknown;
+  
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    const message = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : "Invalid JSON: could not parse file.";
+    errors.push({ message });
+    return { errors };
+  }
+
+  if (!Array.isArray(parsed)) {
+    errors.push({ message: "JSON must be an array of outage records." });
+    return { errors };
+  }
+
+  if (parsed.length === 0) {
+    errors.push({ message: "JSON array is empty." });
+    return { errors };
+  }
+
+  const records = parsed as Record<string, unknown>[];
+  
+  records.slice(0, MAX_PREVIEW_ROWS).forEach((item, i) => {
+    if (item === null || typeof item !== "object") {
+      errors.push({ row: i + 1, message: `Item ${i + 1} is not a valid object` });
+      return;
+    }
+    
+    REQUIRED_FIELDS.forEach((field) => {
+      if (item[field] == null || item[field] === "") {
+        errors.push({
+          row: i + 1,
+          field,
+          message: `Missing required field "${field}"`,
+        });
+      }
+    });
+  });
+
+  return { errors, parsed: records };
+}
+
+// ─── Preview Builder ─────────────────────────────────────────────────────────
 async function buildPreview(file: File): Promise<PreviewState> {
   const text = await file.text();
-  const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase() as AcceptedExtension;
 
-  if (ext === ".csv") {
-    const { headers, rows } = parseCSV(text);
+  if (ext === ".csv" || file.type === "text/csv") {
+    const { headers, rows, totalRows } = parseCSV(text);
     const errors = validateCSV(headers, rows);
     const warnings: ImportValidationError[] = [];
-    if (rows.length === 0 && errors.length === 0) {
+    
+    if (totalRows === 0 && errors.length === 0) {
       warnings.push({ message: "File has a header row but no data rows." });
+    } else if (totalRows > MAX_PREVIEW_ROWS) {
+      warnings.push({ message: `Showing ${MAX_PREVIEW_ROWS} of ${totalRows} total rows.` });
     }
-    return { headers, rows, errors, warnings };
+    
+    return { headers, rows, errors, warnings, totalRows };
   }
 
   // JSON
-  const errors = validateJSON(text);
-  let headers: string[] = [];
-  let rows: string[][] = [];
-  if (errors.length === 0) {
-    const parsed = JSON.parse(text) as Record<string, unknown>[];
-    if (parsed.length > 0) {
-      headers = Object.keys(parsed[0]);
-      rows = parsed.slice(0, MAX_PREVIEW_ROWS).map((r) => headers.map((h) => String(r[h] ?? "")));
-    } else {
-      return { headers: [], rows: [], errors: [], warnings: [{ message: "JSON array is empty." }] };
-    }
+  const { errors, parsed } = validateJSON(text);
+  
+  if (errors.length > 0 || !parsed) {
+    return { headers: [], rows: [], errors, warnings: [], totalRows: 0 };
   }
-  return { headers, rows, errors, warnings: [] };
+
+  const headers = parsed.length > 0 ? Object.keys(parsed[0]) : [];
+  const rows = parsed.slice(0, MAX_PREVIEW_ROWS).map((r) => 
+    headers.map((h) => String(r[h] ?? ""))
+  );
+  
+  const warnings: ImportValidationError[] = [];
+  if (parsed.length > MAX_PREVIEW_ROWS) {
+    warnings.push({ message: `Showing ${MAX_PREVIEW_ROWS} of ${parsed.length} total records.` });
+  }
+
+  return { headers, rows, errors, warnings, totalRows: parsed.length };
 }
 
+// ─── Components ──────────────────────────────────────────────────────────────
+
+function Alert({ 
+  type, 
+  title, 
+  children, 
+  onDismiss 
+}: { 
+  type: "error" | "warning" | "success"; 
+  title?: string; 
+  children: React.ReactNode;
+  onDismiss?: () => void;
+}) {
+  const styles = {
+    error: "border-red-200 bg-red-50 text-red-700",
+    warning: "border-yellow-200 bg-yellow-50 text-yellow-700",
+    success: "border-green-200 bg-green-50 text-green-700",
+  };
+
+  const icon = {
+    error: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    warning: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    ),
+    success: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+    ),
+  };
+
+  return (
+    <div className={`relative rounded-lg border p-3 ${styles[type]}`} role="alert">
+      <div className="flex items-start gap-2">
+        {icon[type]}
+        <div className="flex-1">
+          {title && <p className="text-sm font-semibold">{title}</p>}
+          <div className={title ? "mt-0.5" : ""}>{children}</div>
+        </div>
+        {onDismiss && (
+          <button 
+            onClick={onDismiss}
+            className="ml-auto -mr-1 -mt-1 p-1 hover:opacity-70 transition-opacity"
+            aria-label="Dismiss"
+          >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ValidationList({ errors }: { errors: ImportValidationError[] }) {
+  return (
+    <ul className="space-y-1">
+      {errors.map((e, i) => (
+        <li key={`${e.row}-${e.field}-${i}`} className="text-xs">
+          {e.row != null && <span className="font-semibold">Row {e.row}: </span>}
+          {e.field && <span className="font-semibold">[{e.field}] </span>}
+          <span>{e.message}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 export default function BulkImportView() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+  
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<UploadStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  
+  const id = useId();
+  const fileInputId = `file-input-${id}`;
 
-  function validateFile(nextFile: File): string | null {
-    const extension = nextFile.name.slice(nextFile.name.lastIndexOf(".")).toLowerCase();
-    if (!ACCEPTED_EXTENSIONS.includes(extension) && !ACCEPTED_TYPES.includes(nextFile.type)) {
-      return "Only .csv and .json files are allowed.";
+  // ─── File Validation ───────────────────────────────────────────────────────
+  const validateFile = useCallback((nextFile: File): FileValidationResult => {
+    const extension = nextFile.name.slice(nextFile.name.lastIndexOf(".")).toLowerCase() as AcceptedExtension;
+    const isAcceptedType = ACCEPTED_EXTENSIONS.includes(extension) || ACCEPTED_TYPES.includes(nextFile.type as AcceptedMimeType);
+    
+    if (!isAcceptedType) {
+      return { valid: false, error: `Invalid file type. Accepted formats: ${ACCEPTED_EXTENSIONS.join(", ")}` };
     }
-    return null;
-  }
+    
+    if (nextFile.size > MAX_FILE_SIZE_BYTES) {
+      return { valid: false, error: `File too large. Maximum size: ${MAX_FILE_SIZE_MB}MB` };
+    }
+    
+    if (nextFile.size === 0) {
+      return { valid: false, error: "File is empty." };
+    }
+    
+    return { valid: true };
+  }, []);
 
-  async function handleFile(nextFile: File) {
-    const validationError = validateFile(nextFile);
-    if (validationError) {
-      setFileError(validationError);
+  // ─── File Handling ─────────────────────────────────────────────────────────
+  const handleFile = useCallback(async (nextFile: File) => {
+    const validation = validateFile(nextFile);
+    if (!validation.valid) {
+      setFileError(validation.error ?? "Invalid file");
       setFile(null);
       setPreview(null);
       return;
     }
+
     setFileError(null);
     setFile(nextFile);
     setResult(null);
     setSubmitError(null);
-    const p = await buildPreview(nextFile);
-    setPreview(p);
-  }
+    setStatus("validating");
 
-  function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    try {
+      const p = await buildPreview(nextFile);
+      setPreview(p);
+      setStatus(p.errors.length > 0 ? "error" : "idle");
+    } catch (err) {
+      setFileError("Failed to read file. Please check the file format.");
+      setStatus("error");
+    }
+  }, [validateFile]);
+
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const nextFile = event.target.files?.[0];
     if (nextFile) void handleFile(nextFile);
-  }
+    // Reset input so same file can be selected again if needed
+    event.target.value = "";
+  }, [handleFile]);
 
-  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+  // ─── Drag & Drop ───────────────────────────────────────────────────────────
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    setDragging(false);
-    const nextFile = event.dataTransfer.files?.[0];
-    if (nextFile) void handleFile(nextFile);
-  }
+    event.stopPropagation();
+    setDragging(true);
+  }, []);
 
-  async function handleSubmit() {
-    if (!file) return;
-    if (preview && preview.errors.length > 0) return;
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    // Only set dragging false if leaving the dropzone, not entering a child
+    if (dropZoneRef.current && !dropZoneRef.current.contains(event.relatedTarget as Node)) {
+      setDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragging(false);
+    
+    const files = event.dataTransfer.files;
+    if (files.length > 1) {
+      setFileError("Please upload only one file at a time.");
+      return;
+    }
+    
+    const nextFile = files?.[0];
+    if (nextFile) void handleFile(nextFile);
+  }, [handleFile]);
+
+  // ─── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = useCallback(async () => {
+    if (!file || (preview && preview.errors.length > 0)) return;
 
     const controller = new AbortController();
     abortRef.current = controller;
-    setLoading(true);
+    setStatus("uploading");
     setProgress(0);
     setSubmitError(null);
     setResult(null);
@@ -160,148 +401,240 @@ export default function BulkImportView() {
         signal: controller.signal,
         onProgress: setProgress,
       });
+      
       setResult(response);
       setFile(null);
       setPreview(null);
+      setStatus("success");
+      
       if (inputRef.current) inputRef.current.value = "";
     } catch (err: unknown) {
-      if ((err as { name?: string }).name === "CanceledError") {
-        // cancelled — form stays ready
+      if ((err as { name?: string }).name === "CanceledError" || (err as { name?: string }).name === "AbortError") {
+        setStatus("cancelled");
+      } else if (err instanceof Error) {
+        setSubmitError(err.message || "Upload failed. Please try again.");
+        setStatus("error");
       } else {
         setSubmitError("Upload failed. Please try again.");
+        setStatus("error");
       }
     } finally {
       abortRef.current = null;
-      setLoading(false);
-      setProgress(0);
+      if (status !== "cancelled") {
+        setProgress(0);
+      }
     }
-  }
+  }, [file, preview, status]);
 
-  function handleCancel() {
+  const handleCancel = useCallback(() => {
     abortRef.current?.abort();
-  }
+    setStatus("cancelled");
+    setProgress(0);
+  }, []);
 
-  function handleReset() {
+  const handleReset = useCallback(() => {
     setFile(null);
     setFileError(null);
     setPreview(null);
     setResult(null);
     setSubmitError(null);
+    setStatus("idle");
+    setProgress(0);
     if (inputRef.current) inputRef.current.value = "";
-  }
+  }, []);
 
   const hasBlockingErrors = (preview?.errors.length ?? 0) > 0;
+  const isProcessing = status === "uploading" || status === "validating";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
+      {/* Header */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
-          <Link href="/bulk-import/history" className="text-sm text-blue-600 hover:underline">
+          <Link 
+            href="/bulk-import/history" 
+            className="text-sm text-blue-600 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+          >
             View history →
           </Link>
         </div>
         <p className="text-sm text-gray-500">
-          Upload a `.csv` or `.json` file to create outages in one pass.
+          Upload a <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.csv</code> or{" "}
+          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">.json</code> file to create outages in one pass.
         </p>
       </div>
 
+      {/* Drop Zone */}
       <div
-        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
+        ref={dropZoneRef}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
-          dragging ? "border-blue-400 bg-blue-50" : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50"
-        }`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label="File upload dropzone. Click or press Enter to browse files."
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+          dragging 
+            ? "border-blue-400 bg-blue-50" 
+            : "border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50"
+        } ${isProcessing ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
       >
-        <svg className="mb-3 h-10 w-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8 8m4-4l4 4" />
+        <svg 
+          className="mb-3 h-10 w-10 text-gray-400" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={1.5} 
+            d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12V4m0 0L8 8m4-4l4 4" 
+          />
         </svg>
         <p className="text-sm font-medium text-gray-600">
           Drag and drop or <span className="text-blue-600 underline">browse</span>
         </p>
-        <p className="mt-1 text-xs text-gray-400">Accepted formats: .csv, .json</p>
-        <input ref={inputRef} type="file" accept=".csv,.json" className="hidden" onChange={handleInputChange} />
+        <p className="mt-1 text-xs text-gray-400">
+          Accepted formats: {ACCEPTED_EXTENSIONS.join(", ")} (max {MAX_FILE_SIZE_MB}MB)
+        </p>
+        <input 
+          ref={inputRef} 
+          id={fileInputId}
+          type="file" 
+          accept={ACCEPTED_EXTENSIONS.join(",")}
+          className="hidden" 
+          onChange={handleInputChange}
+          aria-label="Choose file"
+          disabled={isProcessing}
+        />
       </div>
 
-      {fileError ? (
-        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{fileError}</p>
-      ) : null}
+      {/* File Error */}
+      {fileError && (
+        <Alert type="error" onDismiss={() => setFileError(null)}>
+          {fileError}
+        </Alert>
+      )}
 
-      {file ? (
+      {/* File Info */}
+      {file && !result && (
         <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
-          <span className="font-medium">{file.name}</span>
-          <button onClick={handleReset} className="text-gray-400 hover:text-red-500">&#x2715;</button>
+          <div className="flex items-center gap-2 min-w-0">
+            <svg className="h-4 w-4 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span className="font-medium truncate">{file.name}</span>
+            <span className="text-xs text-gray-400 flex-shrink-0">
+              ({(file.size / 1024).toFixed(1)} KB)
+            </span>
+          </div>
+          {!isProcessing && (
+            <button 
+              onClick={handleReset} 
+              className="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+              aria-label="Remove file"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
-      ) : null}
+      )}
 
-      {/* Client-side validation summary (issues 123 + 124) */}
-      {preview ? (
+      {/* Validation & Preview */}
+      {preview && !result && (
         <div className="space-y-3">
-          {preview.errors.length > 0 ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="mb-1 text-sm font-semibold text-red-700">
-                {preview.errors.length} blocking error{preview.errors.length > 1 ? "s" : ""} — fix before uploading
-              </p>
-              <ul className="space-y-0.5">
-                {preview.errors.map((e, i) => (
-                  <li key={i} className="text-xs text-red-600">
-                    {e.row != null ? <span className="font-semibold">Row {e.row}: </span> : null}
-                    {e.field ? <span className="font-semibold">[{e.field}] </span> : null}
-                    {e.message}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          {/* Errors */}
+          {preview.errors.length > 0 && (
+            <Alert 
+              type="error" 
+              title={`${preview.errors.length} blocking error${preview.errors.length > 1 ? "s" : ""} — fix before uploading`}
+            >
+              <ValidationList errors={preview.errors} />
+            </Alert>
+          )}
 
-          {preview.warnings.length > 0 ? (
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-              <p className="mb-1 text-sm font-semibold text-yellow-700">Warnings</p>
+          {/* Warnings */}
+          {preview.warnings.length > 0 && (
+            <Alert type="warning" title="Warnings">
               <ul className="space-y-0.5">
                 {preview.warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-yellow-700">{w.message}</li>
+                  <li key={i} className="text-xs">{w.message}</li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            </Alert>
+          )}
 
-          {/* File preview table */}
-          {preview.headers.length > 0 && preview.rows.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
-              <p className="border-b px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Preview (first {preview.rows.length} row{preview.rows.length > 1 ? "s" : ""})
-              </p>
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {preview.headers.map((h) => (
-                      <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.map((row, i) => (
-                    <tr key={i} className="border-t">
-                      {row.map((cell, j) => (
-                        <td key={j} className="px-3 py-2 text-gray-700">{cell}</td>
+          {/* Preview Table */}
+          {preview.headers.length > 0 && preview.rows.length > 0 && (
+            <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+              <div className="border-b px-4 py-2 flex items-center justify-between bg-gray-50">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Preview
+                </p>
+                <p className="text-xs text-gray-400">
+                  {preview.totalRows > MAX_PREVIEW_ROWS 
+                    ? `Showing ${preview.rows.length} of ${preview.totalRows} rows` 
+                    : `${preview.rows.length} row${preview.rows.length > 1 ? "s" : ""}`
+                  }
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {preview.headers.map((h) => (
+                        <th 
+                          key={h} 
+                          className={`px-3 py-2 text-left font-semibold text-gray-600 ${
+                            REQUIRED_FIELDS.includes(h as typeof REQUIRED_FIELDS[number]) ? "text-blue-700" : ""
+                          }`}
+                          title={REQUIRED_FIELDS.includes(h as typeof REQUIRED_FIELDS[number]) ? "Required field" : undefined}
+                        >
+                          {h}
+                          {REQUIRED_FIELDS.includes(h as typeof REQUIRED_FIELDS[number]) && (
+                            <span className="ml-0.5 text-blue-500">*</span>
+                          )}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map((row, i) => (
+                      <tr key={i} className="border-t hover:bg-gray-50 transition-colors">
+                        {row.map((cell, j) => (
+                          <td key={j} className="px-3 py-2 text-gray-700 max-w-[200px] truncate" title={cell}>
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
 
+      {/* Actions */}
       <div className="space-y-2">
-        {loading ? (
+        {status === "uploading" ? (
           <>
-            <div className="w-full rounded-full bg-gray-200 h-2 overflow-hidden">
+            <div className="w-full rounded-full bg-gray-200 h-2 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
               <div
-                className="h-2 rounded-full bg-blue-600 transition-all duration-200"
+                className="h-2 rounded-full bg-blue-600 transition-all duration-200 ease-out"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -309,7 +642,7 @@ export default function BulkImportView() {
               <span className="text-xs text-gray-500">{progress}% uploaded</span>
               <button
                 onClick={handleCancel}
-                className="text-xs text-red-500 hover:underline"
+                className="text-xs text-red-500 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
               >
                 Cancel
               </button>
@@ -318,22 +651,34 @@ export default function BulkImportView() {
         ) : (
           <button
             onClick={() => void handleSubmit()}
-            disabled={!file || hasBlockingErrors}
-            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!file || hasBlockingErrors || isProcessing}
+            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-blue-600"
           >
-            Upload File
+            {status === "validating" ? "Validating..." : "Upload File"}
           </button>
         )}
       </div>
 
-      {submitError ? (
-        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{submitError}</p>
-      ) : null}
+      {/* Submit Error */}
+      {submitError && (
+        <Alert type="error" onDismiss={() => setSubmitError(null)}>
+          {submitError}
+        </Alert>
+      )}
 
-      {result ? (
-        <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-700">Import Summary</h2>
-          <div className="grid grid-cols-2 gap-4">
+      {/* Success Result */}
+      {result && (
+        <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+              <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-base font-semibold text-gray-700">Import Summary</h2>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4">
             <div className="rounded-lg bg-green-50 p-4 text-center">
               <p className="text-2xl font-bold text-green-700">{result.imported}</p>
               <p className="text-xs text-green-600">Imported</p>
@@ -342,9 +687,13 @@ export default function BulkImportView() {
               <p className="text-2xl font-bold text-yellow-700">{result.skipped}</p>
               <p className="text-xs text-yellow-600">Skipped</p>
             </div>
+            <div className="rounded-lg bg-red-50 p-4 text-center">
+              <p className="text-2xl font-bold text-red-700">{result.errors.length}</p>
+              <p className="text-xs text-red-600">Errors</p>
+            </div>
           </div>
 
-          {result.errors.length > 0 ? (
+          {result.errors.length > 0 && (
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-red-600">
@@ -361,15 +710,17 @@ export default function BulkImportView() {
                       ]),
                     ];
                     const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
-                    const blob = new Blob([csv], { type: "text/csv" });
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
                     a.download = `import-errors-${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a);
                     a.click();
+                    document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                   }}
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-blue-600 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
                 >
                   Download report
                 </button>
@@ -377,16 +728,23 @@ export default function BulkImportView() {
               <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-red-50 p-3">
                 {result.errors.map((error, index) => (
                   <li key={`${error.message}-${index}`} className="text-xs text-red-700">
-                    {error.row != null ? <span className="font-semibold">Row {error.row}: </span> : null}
-                    {error.field ? <span className="font-semibold">[{error.field}] </span> : null}
+                    {error.row != null && <span className="font-semibold">Row {error.row}: </span>}
+                    {error.field && <span className="font-semibold">[{error.field}] </span>}
                     {error.message}
                   </li>
                 ))}
               </ul>
             </div>
-          ) : null}
+          )}
+
+          <button
+            onClick={handleReset}
+            className="w-full rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500"
+          >
+            Upload Another File
+          </button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
