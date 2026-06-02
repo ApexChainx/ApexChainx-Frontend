@@ -1,9 +1,27 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { api, clearTokens, getAccessToken, setTokens } from "@/lib/api";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
-export type SessionState = "loading" | "authenticated" | "unauthenticated";
+import {
+  api,
+  clearTokens,
+  getAccessToken,
+  setTokens,
+} from "@/lib/api";
+
+export type SessionState =
+  | "loading"
+  | "authenticated"
+  | "unauthenticated";
 
 export interface SessionUser {
   id: string;
@@ -17,117 +35,317 @@ export interface SessionUser {
 interface SessionContextValue {
   state: SessionState;
   user: SessionUser | null;
+  isAuthenticated: boolean;
+
   logout: () => Promise<void>;
-  storeSession: (accessToken: string, refreshToken: string, user: SessionUser) => void;
+
+  storeSession: (
+    accessToken: string,
+    refreshToken: string,
+    user: SessionUser
+  ) => void;
+
+  refreshSession: () => Promise<void>;
 }
 
-const SessionContext = createContext<SessionContextValue | null>(null);
+const SessionContext =
+  createContext<SessionContextValue | null>(null);
+
+const CHANNEL_NAME = "noc_iq_session";
 
 type SessionMessage =
   | { type: "logout" }
   | { type: "authenticated"; user: SessionUser };
 
-const CHANNEL_NAME = "noc_iq_session";
+function isBrowser() {
+  return typeof window !== "undefined";
+}
 
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SessionState>("loading");
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const channelRef = useRef<BroadcastChannel | null>(null);
+function createBroadcastChannel() {
+  if (!isBrowser() || !("BroadcastChannel" in window)) {
+    return null;
+  }
 
-  // Cross-tab sync
+  return new BroadcastChannel(CHANNEL_NAME);
+}
+
+export function SessionProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [state, setState] =
+    useState<SessionState>("loading");
+
+  const [user, setUser] =
+    useState<SessionUser | null>(null);
+
+  const channelRef =
+    useRef<BroadcastChannel | null>(null);
+
+  const mountedRef = useRef(true);
+
+  /**
+   * -------------------------
+   * Helpers
+   * -------------------------
+   */
+
+  const setAuthenticated = useCallback(
+    (sessionUser: SessionUser) => {
+      setUser(sessionUser);
+      setState("authenticated");
+    },
+    []
+  );
+
+  const clearSession = useCallback(() => {
+    clearTokens();
+    setUser(null);
+    setState("unauthenticated");
+  }, []);
+
+  /**
+   * -------------------------
+   * Cross-tab sync
+   * -------------------------
+   */
+
   useEffect(() => {
-    const channel = new BroadcastChannel(CHANNEL_NAME);
+    const channel = createBroadcastChannel();
+
+    if (!channel) return;
+
     channelRef.current = channel;
-    channel.onmessage = (event: MessageEvent<SessionMessage>) => {
-      const msg = event.data;
-      if (msg.type === "logout") {
-        setUser(null);
-        setState("unauthenticated");
-      } else if (msg.type === "authenticated") {
-        setUser(msg.user);
-        setState("authenticated");
+
+    channel.onmessage = (
+      event: MessageEvent<SessionMessage>
+    ) => {
+      const message = event.data;
+
+      switch (message.type) {
+        case "logout":
+          clearSession();
+          break;
+
+        case "authenticated":
+          setAuthenticated(message.user);
+          break;
+
+        default:
+          break;
       }
     };
+
     return () => {
       channel.close();
       channelRef.current = null;
     };
-  }, []);
+  }, [clearSession, setAuthenticated]);
 
-  // Bootstrap session once on mount
+  /**
+   * -------------------------
+   * Refresh Session
+   * -------------------------
+   */
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const response = await api.get<SessionUser>(
+        "/auth/me"
+      );
+
+      if (!mountedRef.current) return;
+
+      setAuthenticated(response.data);
+
+      channelRef.current?.postMessage({
+        type: "authenticated",
+        user: response.data,
+      } satisfies SessionMessage);
+    } catch (error) {
+      console.error(
+        "Failed to refresh session:",
+        error
+      );
+
+      if (!mountedRef.current) return;
+
+      clearSession();
+    }
+  }, [clearSession, setAuthenticated]);
+
+  /**
+   * -------------------------
+   * Bootstrap Session
+   * -------------------------
+   */
+
   useEffect(() => {
-    let isMounted = true;
+    mountedRef.current = true;
 
-    function handleAuthLogout() {
-      if (isMounted) {
-        setUser(null);
-        setState("unauthenticated");
-      }
-    }
-
-    window.addEventListener("auth:logout", handleAuthLogout);
-
-    if (!getAccessToken()) {
-      setState("unauthenticated");
-      return () => {
-        isMounted = false;
-        window.removeEventListener("auth:logout", handleAuthLogout);
-      };
-    }
+    if (!isBrowser()) return;
 
     const controller = new AbortController();
 
-    api
-      .get<SessionUser>("/auth/me", { signal: controller.signal } as Parameters<typeof api.get>[1])
-      .then((res) => {
-        if (isMounted) {
-          setUser(res.data);
-          setState("authenticated");
-          channelRef.current?.postMessage({ type: "authenticated", user: res.data } satisfies SessionMessage);
-        }
-      })
-      .catch((err: unknown) => {
-        if ((err as { name?: string }).name === "CanceledError") return;
-        if (isMounted) {
-          clearTokens();
-          setUser(null);
+    async function bootstrapSession() {
+      try {
+        const token = getAccessToken();
+
+        if (!token) {
           setState("unauthenticated");
+          return;
         }
-      });
+
+        const response = await api.get<SessionUser>(
+          "/auth/me",
+          {
+            signal: controller.signal,
+          } as Parameters<typeof api.get>[1]
+        );
+
+        if (!mountedRef.current) return;
+
+        setAuthenticated(response.data);
+      } catch (error: unknown) {
+        if (
+          (error as { name?: string }).name ===
+          "CanceledError"
+        ) {
+          return;
+        }
+
+        console.error(
+          "Session bootstrap failed:",
+          error
+        );
+
+        if (!mountedRef.current) return;
+
+        clearSession();
+      }
+    }
+
+    bootstrapSession();
+
+    function handleLogoutEvent() {
+      clearSession();
+    }
+
+    window.addEventListener(
+      "auth:logout",
+      handleLogoutEvent
+    );
 
     return () => {
-      isMounted = false;
+      mountedRef.current = false;
+
       controller.abort();
-      window.removeEventListener("auth:logout", handleAuthLogout);
+
+      window.removeEventListener(
+        "auth:logout",
+        handleLogoutEvent
+      );
     };
-  }, []);
+  }, [clearSession, setAuthenticated]);
 
-  function storeSession(accessToken: string, refreshToken: string, sessionUser: SessionUser) {
-    setTokens(accessToken, refreshToken);
-    setUser(sessionUser);
-    setState("authenticated");
-  }
+  /**
+   * -------------------------
+   * Store Session
+   * -------------------------
+   */
 
-  async function logout() {
+  const storeSession = useCallback(
+    (
+      accessToken: string,
+      refreshToken: string,
+      sessionUser: SessionUser
+    ) => {
+      setTokens(accessToken, refreshToken);
+
+      setAuthenticated(sessionUser);
+
+      channelRef.current?.postMessage({
+        type: "authenticated",
+        user: sessionUser,
+      } satisfies SessionMessage);
+    },
+    [setAuthenticated]
+  );
+
+  /**
+   * -------------------------
+   * Logout
+   * -------------------------
+   */
+
+  const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
+    } catch (error) {
+      console.error(
+        "Logout request failed:",
+        error
+      );
     } finally {
-      clearTokens();
-      setUser(null);
-      setState("unauthenticated");
-      channelRef.current?.postMessage({ type: "logout" } satisfies SessionMessage);
+      clearSession();
+
+      channelRef.current?.postMessage({
+        type: "logout",
+      } satisfies SessionMessage);
     }
-  }
+  }, [clearSession]);
+
+  /**
+   * -------------------------
+   * Memoized Context
+   * -------------------------
+   */
+
+  const value = useMemo<SessionContextValue>(
+    () => ({
+      state,
+      user,
+
+      isAuthenticated:
+        state === "authenticated",
+
+      logout,
+
+      storeSession,
+
+      refreshSession,
+    }),
+    [
+      state,
+      user,
+      logout,
+      storeSession,
+      refreshSession,
+    ]
+  );
 
   return (
-    <SessionContext.Provider value={{ state, user, logout, storeSession }}>
+    <SessionContext.Provider value={value}>
       {children}
     </SessionContext.Provider>
   );
 }
 
+/**
+ * -------------------------
+ * Hook
+ * -------------------------
+ */
+
 export function useSession(): SessionContextValue {
-  const ctx = useContext(SessionContext);
-  if (!ctx) throw new Error("useSession must be used within SessionProvider");
-  return ctx;
+  const context = useContext(SessionContext);
+
+  if (!context) {
+    throw new Error(
+      "useSession must be used within SessionProvider"
+    );
+  }
+
+  return context;
 }
