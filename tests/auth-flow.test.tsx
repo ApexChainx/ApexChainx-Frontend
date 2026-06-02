@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { useSession } from "@/hooks/useSession";
 
@@ -11,62 +11,193 @@ const mockSetTokens = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
-    get: (...a: unknown[]) => mockGet(...a),
-    post: (...a: unknown[]) => mockPost(...a),
+    get: (...args: unknown[]) => mockGet(...args),
+    post: (...args: unknown[]) => mockPost(...args),
   },
   clearTokens: () => mockClearTokens(),
   getAccessToken: () => mockGetAccessToken(),
-  setTokens: (...a: unknown[]) => mockSetTokens(...a),
+  setTokens: (...args: unknown[]) => mockSetTokens(...args),
 }));
 
-const user = { id: "u1", email: "op@example.com", role: "engineer" };
+const mockUser = {
+  id: "u1",
+  email: "op@example.com",
+  role: "engineer",
+};
 
 describe("useSession", () => {
   beforeEach(() => {
-    mockGet.mockReset(); mockPost.mockReset();
-    mockClearTokens.mockReset(); mockGetAccessToken.mockReset(); mockSetTokens.mockReset();
+    vi.clearAllMocks();
+
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockClearTokens.mockReset();
+    mockGetAccessToken.mockReset();
+    mockSetTokens.mockReset();
   });
 
-  it("authenticates when token exists and /auth/me succeeds", async () => {
-    mockGetAccessToken.mockReturnValue("tok");
-    mockGet.mockResolvedValue({ data: user });
-    const { result } = renderHook(() => useSession());
-    await waitFor(() => expect(result.current.state).toBe("authenticated"));
-    expect(result.current.user?.email).toBe("op@example.com");
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("falls back to unauthenticated when /auth/me fails", async () => {
-    mockGetAccessToken.mockReturnValue("tok");
-    mockGet.mockRejectedValue(new Error("401"));
-    const { result } = renderHook(() => useSession());
-    await waitFor(() => expect(result.current.state).toBe("unauthenticated"));
-    expect(mockClearTokens).toHaveBeenCalled();
+  describe("initial authentication state", () => {
+    it("authenticates when token exists and /auth/me succeeds", async () => {
+      mockGetAccessToken.mockReturnValue("valid-token");
+      mockGet.mockResolvedValue({ data: mockUser });
+
+      const { result } = renderHook(() => useSession());
+
+      expect(result.current.state).toBe("loading");
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("authenticated");
+      });
+
+      expect(result.current.user).toEqual(mockUser);
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/auth/me",
+        expect.any(Object),
+      );
+    });
+
+    it("falls back to unauthenticated when /auth/me fails", async () => {
+      mockGetAccessToken.mockReturnValue("expired-token");
+      mockGet.mockRejectedValue(new Error("401 Unauthorized"));
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("unauthenticated");
+      });
+
+      expect(result.current.user).toBeNull();
+
+      expect(mockClearTokens).toHaveBeenCalledTimes(1);
+    });
+
+    it("is unauthenticated when no token exists", async () => {
+      mockGetAccessToken.mockReturnValue(null);
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("unauthenticated");
+      });
+
+      expect(result.current.user).toBeNull();
+
+      expect(mockGet).not.toHaveBeenCalled();
+    });
   });
 
-  it("is unauthenticated with no stored token", async () => {
-    mockGetAccessToken.mockReturnValue(null);
-    const { result } = renderHook(() => useSession());
-    await waitFor(() => expect(result.current.state).toBe("unauthenticated"));
-    expect(mockGet).not.toHaveBeenCalled();
+  describe("storeSession", () => {
+    it("stores session and updates authenticated state", async () => {
+      mockGetAccessToken.mockReturnValue(null);
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("unauthenticated");
+      });
+
+      act(() => {
+        result.current.storeSession(
+          "access-token",
+          "refresh-token",
+          mockUser,
+        );
+      });
+
+      expect(mockSetTokens).toHaveBeenCalledWith(
+        "access-token",
+        "refresh-token",
+      );
+
+      expect(result.current.state).toBe("authenticated");
+      expect(result.current.user).toEqual(mockUser);
+    });
   });
 
-  it("storeSession sets authenticated state", async () => {
-    mockGetAccessToken.mockReturnValue(null);
-    const { result } = renderHook(() => useSession());
-    await waitFor(() => expect(result.current.state).toBe("unauthenticated"));
-    act(() => result.current.storeSession("at", "rt", user));
-    expect(result.current.state).toBe("authenticated");
-    expect(mockSetTokens).toHaveBeenCalledWith("at", "rt");
+  describe("logout", () => {
+    it("logs out successfully and clears session state", async () => {
+      mockGetAccessToken.mockReturnValue("valid-token");
+
+      mockGet.mockResolvedValue({
+        data: mockUser,
+      });
+
+      mockPost.mockResolvedValue({});
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("authenticated");
+      });
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/auth/logout");
+
+      expect(mockClearTokens).toHaveBeenCalledTimes(1);
+
+      expect(result.current.state).toBe("unauthenticated");
+      expect(result.current.user).toBeNull();
+    });
+
+    it("still clears local session when logout API fails", async () => {
+      mockGetAccessToken.mockReturnValue("valid-token");
+
+      mockGet.mockResolvedValue({
+        data: mockUser,
+      });
+
+      mockPost.mockRejectedValue(new Error("Network Error"));
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("authenticated");
+      });
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(mockClearTokens).toHaveBeenCalled();
+
+      expect(result.current.state).toBe("unauthenticated");
+      expect(result.current.user).toBeNull();
+    });
   });
 
-  it("logout clears state", async () => {
-    mockGetAccessToken.mockReturnValue("tok");
-    mockGet.mockResolvedValue({ data: user });
-    mockPost.mockResolvedValue({});
-    const { result } = renderHook(() => useSession());
-    await waitFor(() => expect(result.current.state).toBe("authenticated"));
-    await act(() => result.current.logout());
-    expect(result.current.state).toBe("unauthenticated");
-    expect(result.current.user).toBeNull();
+  describe("edge cases", () => {
+    it("handles malformed API response gracefully", async () => {
+      mockGetAccessToken.mockReturnValue("token");
+
+      mockGet.mockResolvedValue({
+        data: null,
+      });
+
+      const { result } = renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(result.current.state).toBe("authenticated");
+      });
+
+      expect(result.current.user).toBeNull();
+    });
+
+    it("does not call clearTokens unnecessarily", async () => {
+      mockGetAccessToken.mockReturnValue(null);
+
+      renderHook(() => useSession());
+
+      await waitFor(() => {
+        expect(mockClearTokens).not.toHaveBeenCalled();
+      });
+    });
   });
 });
