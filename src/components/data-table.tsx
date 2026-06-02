@@ -1,126 +1,431 @@
 "use client";
 
 import {
-    type ColumnDef,
-    type VisibilityState,
-    flexRender,
-    getCoreRowModel,
-    useReactTable,
+  type ColumnDef,
+  type VisibilityState,
+  type SortingState,
+  type PaginationState,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
 } from "@tanstack/react-table";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 
-export type TableDensity = "default" | "compact";
+// ─── Types ───────────────────────────────────────────────────────────────────
+export type TableDensity = "default" | "compact" | "comfortable";
 
 interface DataTableProps<TData, TValue> {
-    columns: ColumnDef<TData, TValue>[];
-    data: TData[];
-    columnVisibility?: VisibilityState;
-    onColumnVisibilityChange?: (visibility: VisibilityState) => void;
-    density?: TableDensity;
-    onDensityChange?: (density: TableDensity) => void;
+  columns: ColumnDef<TData, TValue>[];
+  data: TData[];
+  columnVisibility?: VisibilityState;
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void;
+  density?: TableDensity;
+  onDensityChange?: (density: TableDensity) => void;
+  sorting?: SortingState;
+  onSortingChange?: (sorting: SortingState) => void;
+  pagination?: PaginationState;
+  onPaginationChange?: (pagination: PaginationState) => void;
+  pageCount?: number;
+  rowCount?: number;
+  loading?: boolean;
+  emptyMessage?: string;
+  className?: string;
+  enableRowSelection?: boolean;
+  rowSelection?: Record<string, boolean>;
+  onRowSelectionChange?: (selection: Record<string, boolean>) => void;
+  getRowId?: (row: TData, index: number) => string;
 }
 
-export function DataTable<TData, TValue>({
-    columns,
-    data,
-    columnVisibility,
-    onColumnVisibilityChange,
-    density = "default",
-    onDensityChange,
-}: DataTableProps<TData, TValue>) {
-    const table = useReactTable({
-        data,
-        columns,
-        getCoreRowModel: getCoreRowModel(),
-        state: { columnVisibility: columnVisibility ?? {} },
-        onColumnVisibilityChange: (updater) => {
-            if (!onColumnVisibilityChange) return;
-            const next =
-                typeof updater === "function"
-                    ? updater(columnVisibility ?? {})
-                    : updater;
-            onColumnVisibilityChange(next);
-        },
-    });
+// ─── Density Configuration ───────────────────────────────────────────────────
+const DENSITY_CONFIG: Record<TableDensity, { padding: string; textSize: string; height: string }> = {
+  compact: { padding: "py-1 px-2", textSize: "text-xs", height: "h-7" },
+  default: { padding: "py-2 px-4", textSize: "text-sm", height: "h-9" },
+  comfortable: { padding: "py-3 px-6", textSize: "text-sm", height: "h-11" },
+};
 
-    const cellPadding = density === "compact" ? "py-1 px-2 text-xs" : "py-2 px-4 text-sm";
+const DENSITY_OPTIONS: TableDensity[] = ["compact", "default", "comfortable"];
 
+// ─── Sort Icon Component ─────────────────────────────────────────────────────
+function SortIcon({ direction }: { direction: "asc" | "desc" | false }) {
+  if (!direction) {
     return (
-        <div className="space-y-2">
-            {(onColumnVisibilityChange || onDensityChange) && (
-                <div className="flex flex-wrap items-center gap-3 pb-1">
-                    {onDensityChange && (
-                        <div className="flex items-center gap-1 text-xs text-slate-600">
-                            <span className="font-medium">Density:</span>
-                            {(["default", "compact"] as TableDensity[]).map((d) => (
-                                <button
-                                    key={d}
-                                    onClick={() => onDensityChange(d)}
-                                    className={`rounded px-2 py-0.5 capitalize border ${
-                                        density === d
-                                            ? "bg-slate-800 text-white border-slate-800"
-                                            : "border-slate-200 hover:bg-slate-100"
-                                    }`}
-                                >
-                                    {d}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {onColumnVisibilityChange && (
-                        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
-                            <span className="font-medium">Columns:</span>
-                            {table.getAllLeafColumns().map((col) => {
-                                const header = col.columnDef.header;
-                                const label = typeof header === "string" ? header : col.id;
-                                return (
-                                    <label key={col.id} className="flex items-center gap-1 cursor-pointer select-none">
-                                        <input
-                                            type="checkbox"
-                                            checked={col.getIsVisible()}
-                                            onChange={col.getToggleVisibilityHandler()}
-                                            className="accent-slate-800"
-                                        />
-                                        {label}
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            <Table>
-                <TableHeader>
-                    {table.getHeaderGroups().map((hg) => (
-                        <TableRow key={hg.id}>
-                            {hg.headers.map((h) => (
-                                <TableHead key={h.id} className={cellPadding}>
-                                    {flexRender(h.column.columnDef.header, h.getContext())}
-                                </TableHead>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableHeader>
-                <TableBody>
-                    {table.getRowModel().rows.map((row) => (
-                        <TableRow key={row.id}>
-                            {row.getVisibleCells().map((cell) => (
-                                <TableCell key={cell.id} className={cellPadding}>
-                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                </TableCell>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
+      <svg className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-50 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
     );
+  }
+  
+  return (
+    <svg 
+      className={`h-3 w-3 transition-transform ${direction === "asc" ? "" : "rotate-180"}`} 
+      fill="none" 
+      viewBox="0 0 24 24" 
+      stroke="currentColor"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+    </svg>
+  );
 }
+
+// ─── Loading Skeleton ────────────────────────────────────────────────────────
+function TableSkeleton({ columns, density }: { columns: number; density: TableDensity }) {
+  const config = DENSITY_CONFIG[density];
+  
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, rowIdx) => (
+        <TableRow key={rowIdx} className="animate-pulse">
+          {Array.from({ length: columns }).map((_, colIdx) => (
+            <TableCell key={colIdx} className={config.padding}>
+              <div className={`bg-slate-200 rounded ${config.textSize} ${config.height} w-3/4`} />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+// ─── Empty State ─────────────────────────────────────────────────────────────
+function EmptyState({ colSpan, message }: { colSpan: number; message: string }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan} className="h-48 text-center">
+        <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+          <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="text-sm font-medium">{message}</p>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// ─── Toolbar Components ──────────────────────────────────────────────────────
+function DensityControl({ 
+  density, 
+  onChange 
+}: { 
+  density: TableDensity; 
+  onChange: (d: TableDensity) => void 
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Density</span>
+      <div className="flex items-center rounded-lg border border-slate-200 overflow-hidden">
+        {DENSITY_OPTIONS.map((d) => (
+          <button
+            key={d}
+            onClick={() => onChange(d)}
+            className={`px-3 py-1 text-xs font-medium capitalize transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
+              density === d
+                ? "bg-slate-800 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+            aria-pressed={density === d}
+            title={`${d} density`}
+          >
+            {d === "default" ? "Normal" : d}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ColumnVisibilityControl<TData>({ 
+  table 
+}: { 
+  table: ReturnType<typeof useReactTable<TData>> 
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const allColumns = table.getAllLeafColumns();
+  const visibleCount = allColumns.filter((c) => c.getIsVisible()).length;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+        </svg>
+        Columns ({visibleCount}/{allColumns.length})
+      </button>
+      
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-lg animate-in fade-in zoom-in-95 duration-100">
+          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-xs font-medium text-slate-500">Toggle columns</span>
+            <button
+              onClick={() => allColumns.forEach((c) => c.toggleVisibility(true))}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Show all
+            </button>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {allColumns.map((col) => {
+              const header = col.columnDef.header;
+              const label = typeof header === "string" ? header : col.id;
+              const isVisible = col.getIsVisible();
+              
+              return (
+                <label 
+                  key={col.id} 
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    onChange={col.getToggleVisibilityHandler()}
+                    className="h-4 w-4 rounded border-slate-300 text-slate-800 focus:ring-slate-800"
+                  />
+                  <span className="flex-1 truncate">{label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  columnVisibility,
+  onColumnVisibilityChange,
+  density = "default",
+  onDensityChange,
+  sorting,
+  onSortingChange,
+  pagination,
+  onPaginationChange,
+  pageCount,
+  rowCount,
+  loading = false,
+  emptyMessage = "No data available",
+  className,
+  enableRowSelection = false,
+  rowSelection,
+  onRowSelectionChange,
+  getRowId,
+}: DataTableProps<TData, TValue>) {
+  const config = DENSITY_CONFIG[density];
+  const hasToolbar = onColumnVisibilityChange || onDensityChange;
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: {
+      columnVisibility: columnVisibility ?? {},
+      sorting: sorting ?? [],
+      pagination: pagination ?? { pageIndex: 0, pageSize: 10 },
+      rowSelection: rowSelection ?? {},
+    },
+    onColumnVisibilityChange: (updater) => {
+      if (!onColumnVisibilityChange) return;
+      const next = typeof updater === "function" ? updater(columnVisibility ?? {}) : updater;
+      onColumnVisibilityChange(next);
+    },
+    onSortingChange: (updater) => {
+      if (!onSortingChange) return;
+      const next = typeof updater === "function" ? updater(sorting ?? []) : updater;
+      onSortingChange(next);
+    },
+    onPaginationChange: (updater) => {
+      if (!onPaginationChange) return;
+      const next = typeof updater === "function" ? updater(pagination ?? { pageIndex: 0, pageSize: 10 }) : updater;
+      onPaginationChange(next);
+    },
+    onRowSelectionChange: (updater) => {
+      if (!onRowSelectionChange) return;
+      const next = typeof updater === "function" ? updater(rowSelection ?? {}) : updater;
+      onRowSelectionChange(next);
+    },
+    getRowId,
+    manualPagination: !!onPaginationChange,
+    manualSorting: !!onSortingChange,
+    pageCount: pageCount ?? -1,
+    rowCount: rowCount ?? data.length,
+    enableRowSelection,
+  });
+
+  const headerGroups = table.getHeaderGroups();
+  const rows = table.getRowModel().rows;
+  const leafColumns = table.getAllLeafColumns();
+  const visibleLeafColumns = leafColumns.filter((c) => c.getIsVisible());
+  const colSpan = visibleLeafColumns.length || 1;
+
+  return (
+    <div className={`space-y-3 ${className ?? ""}`}>
+      {/* Toolbar */}
+      {hasToolbar && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {onDensityChange && (
+              <DensityControl density={density} onChange={onDensityChange} />
+            )}
+          </div>
+          {onColumnVisibilityChange && (
+            <ColumnVisibilityControl table={table} />
+          )}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              {headerGroups.map((hg) => (
+                <TableRow key={hg.id} className="bg-slate-50 hover:bg-slate-50">
+                  {hg.headers.map((h) => {
+                    const canSort = h.column.getCanSort();
+                    const sortDir = h.column.getIsSorted();
+                    
+                    return (
+                      <TableHead 
+                        key={h.id} 
+                        className={`${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap ${
+                          canSort ? "cursor-pointer select-none group" : ""
+                        }`}
+                        onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
+                        aria-sort={
+                          sortDir === "asc" ? "ascending" : 
+                          sortDir === "desc" ? "descending" : "none"
+                        }
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {flexRender(h.column.columnDef.header, h.getContext())}
+                          {canSort && <SortIcon direction={sortDir} />}
+                        </div>
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableSkeleton columns={colSpan} density={density} />
+              ) : rows.length === 0 ? (
+                <EmptyState colSpan={colSpan} message={emptyMessage} />
+              ) : (
+                rows.map((row) => (
+                  <TableRow 
+                    key={row.id} 
+                    className={`transition-colors ${
+                      row.getIsSelected() ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-slate-50"
+                    } ${enableRowSelection ? "cursor-pointer" : ""}`}
+                    onClick={enableRowSelection ? row.getToggleSelectedHandler() : undefined}
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className={`${config.padding} ${config.textSize}`}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      {onPaginationChange && pagination && !loading && rows.length > 0 && (
+        <div className="flex items-center justify-between px-1">
+          <div className="text-xs text-slate-500">
+            Showing <span className="font-medium">{pagination.pageIndex * pagination.pageSize + 1}</span> to{" "}
+            <span className="font-medium">
+              {Math.min((pagination.pageIndex + 1) * pagination.pageSize, rowCount ?? data.length)}
+            </span> of{" "}
+            <span className="font-medium">{rowCount ?? data.length}</span> results
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+              className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="First page"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Previous page"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <span className="text-xs text-slate-600 px-2">
+              Page <span className="font-medium">{pagination.pageIndex + 1}</span> of{" "}
+              <span className="font-medium">{table.getPageCount()}</span>
+            </span>
+            
+            <button
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Next page"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+              className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Last page"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Re-exports ──────────────────────────────────────────────────────────────
+export type { ColumnDef, VisibilityState, SortingState, PaginationState };
