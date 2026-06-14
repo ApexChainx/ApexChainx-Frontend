@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
