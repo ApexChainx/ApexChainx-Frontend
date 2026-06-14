@@ -1,4 +1,6 @@
 import { TrendPoint } from "../../types/dashboard";
+/** ApexChain Network Operations Intelligence Platform */
+/** ApexChain Network Operations Intelligence Platform */
 
 interface SLATrendChartProps {
   data: TrendPoint[];
