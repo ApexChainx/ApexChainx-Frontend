@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export type PaymentType = "reward" | "penalty";
 export type PaymentStatus = string;
 
