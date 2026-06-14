@@ -1,4 +1,5 @@
 "use client";
+/** ApexChain Network Operations Intelligence Platform */
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
