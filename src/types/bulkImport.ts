@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export interface ImportValidationError {
   row?: number;
   field?: string;
