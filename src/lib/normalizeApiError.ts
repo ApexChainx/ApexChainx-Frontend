@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 export type NormalizedError = {
   message: string;
   status?: number;
