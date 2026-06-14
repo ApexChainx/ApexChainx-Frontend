@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
