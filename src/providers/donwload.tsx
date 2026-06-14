@@ -1,4 +1,5 @@
 "use client";
+/** ApexChain Network Operations Intelligence Platform */
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { api, clearTokens, getAccessToken, setTokens } from "@/lib/api";
