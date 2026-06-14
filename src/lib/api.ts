@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 import axios from "axios";
 
 export const TOKEN_KEY = "noc_access_token";
