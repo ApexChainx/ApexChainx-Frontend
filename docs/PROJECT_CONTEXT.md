@@ -1,17 +1,17 @@
-# NOC IQ System
+# ApexChain System
 
 ## Repositories
 
-- noc-iq-fe → frontend
-- noc-iq-be → backend
-- noc-iq-contracts → smart contracts
+- apexchainx-frontend → frontend
+- apexchainx-backend → backend
+- apexchainx-contracts → smart contracts
 
 ## System Flow
 
-User → FE → BE → Contracts → BE → FE
+User → Frontend → Backend → Contracts → Backend → Frontend
 
 ## Rules
 
-- FE never talks to contracts directly
-- BE is the bridge
+- Frontend never talks to contracts directly
+- Backend is the bridge
 - Contracts are execution layer only
