@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
