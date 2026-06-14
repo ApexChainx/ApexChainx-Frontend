@@ -1,4 +1,5 @@
 import { useState } from "react";
+/** ApexChain Network Operations Intelligence Platform */
 
 import { previewSLA } from "@/services/sla";
 import type { Severity } from "@/types/outages";
