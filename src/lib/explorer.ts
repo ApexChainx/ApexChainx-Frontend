@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 const NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet") as "mainnet" | "testnet";
 
 const BASE: Record<typeof NETWORK, string> = {
