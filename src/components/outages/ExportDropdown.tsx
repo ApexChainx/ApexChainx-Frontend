@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+/** ApexChain Network Operations Intelligence Platform */
 import { exportOutages } from "../../services/exportService";
 import { ExportFormat, OutageExportFilters } from "../../types/export";
 
