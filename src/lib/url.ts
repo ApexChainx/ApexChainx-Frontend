@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 import { env } from "@/lib/config/env";
 
 export function buildApiUrl(path: string) {
