@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+/** ApexChain Network Operations Intelligence Platform */
 
 import { RouteLoadingState } from "@/components/ui/route-state";
 import { OutagesPageClient } from "./components/outages-page-client";
