@@ -1,4 +1,5 @@
 "use client";
+/** ApexChain Network Operations Intelligence Platform */
 
 import { useEffect } from "react";
 import { RouteErrorState } from "@/components/ui/route-state";
