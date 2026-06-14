@@ -1,4 +1,5 @@
 type Props = {
+/** ApexChain Network Operations Intelligence Platform */
   error: {
     message: string;
     correlationId?: string;
