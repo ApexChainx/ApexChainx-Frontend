@@ -1,7 +1,7 @@
-# NOCIQ API Documentation
+# ApexChain API Documentation
 
 Version: 1.0.0  
-Base URL: `http://localhost:8000` (development) | `https://api.nociq.com` (production) - WIP
+Base URL: `http://localhost:8000` (development) | `https://api.apexchain.com` (production) - WIP
 
 ## Table of Contents
 
@@ -168,7 +168,7 @@ Get detailed information about a specific outage.
     "amount": 750.00,
     "asset_code": "USDC",
     "from_address": "GPOOL...",
-    "to_address": "GNOC...",
+    "to_address": "GAPEX...",
     "status": "confirmed",
     "created_at": "2026-01-16T09:46:00Z",
     "confirmed_at": "2026-01-16T09:46:05Z"
@@ -315,7 +315,7 @@ Execute payment based on SLA result.
 {
   "outage_id": "OUT001",
   "operator_wallet": "GOPER...",
-  "noc_team_wallet": "GNOC..."
+  "apexchain_team_wallet": "GAPEX..."
 }
 ```
 
@@ -392,7 +392,7 @@ Process SLA-based payment for a resolved outage.
     "transaction_hash": "xyz789...",
     "amount": 1500.00,
     "from": "GPOOL...",
-    "to": "GNOC...",
+    "to": "GAPEX...",
     "asset": "USDC",
     "status": "confirmed"
   }
@@ -425,7 +425,7 @@ Get payment transaction history.
       "amount": 1500.00,
       "asset_code": "USDC",
       "from_address": "GPOOL...",
-      "to_address": "GNOC...",
+      "to_address": "GAPEX...",
       "status": "confirmed",
       "outage_id": "OUT001",
       "created_at": "2026-01-16T09:46:00Z",
@@ -504,11 +504,11 @@ Get balance for a Stellar address.
       "asset_code": "USDC",
       "asset_issuer": "GBBD..."
     },
-    "NOCIQ": {
+    "APEX": {
       "balance": "500.0000000",
       "asset_type": "credit_alphanum12",
-      "asset_code": "NOCIQ",
-      "asset_issuer": "GNOC..."
+      "asset_code": "APEX",
+      "asset_issuer": "GAPEX..."
     }
   },
   "last_updated": "2026-01-16T11:05:00Z"
@@ -694,7 +694,7 @@ GET /api/v1/outages?limit=20&offset=40
 
 ## Webhooks
 
-NOCIQ can send webhooks for important events:
+ApexChain can send webhooks for important events:
 
 ### Webhook Events
 
@@ -735,11 +735,11 @@ http://localhost:8000/docs
 
 ### Postman Collection
 
-Download our Postman collection:[WIP]
+Download our Postman collection (WIP):
 ```
-https://github.com/OpSoll/noc-iq-be/blob/main/postman/NOCIQ-API.json
+https://github.com/ApexChainx/ApexChainx-Backend/blob/main/postman/ApexChain-API.json
 ```
 
 ---
 
-For more information, visit our [GitHub repository](https://github.com/OpSoll/noc-iq-be)
+For more information, visit our [GitHub repository](https://github.com/ApexChainx/ApexChainx-Backend)
