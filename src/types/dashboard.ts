@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export interface TrendPoint {
   period: string;
   compliance_percentage: number;
