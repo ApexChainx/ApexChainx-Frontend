@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 "use client";
 
 import { RefObject, useEffect } from "react";
