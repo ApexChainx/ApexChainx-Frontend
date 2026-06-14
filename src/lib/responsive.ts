@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 /**
  * Responsive layout utilities for dashboard, outages, and payments views.
  * Provides Tailwind class helpers that enforce consistent narrow-viewport behaviour.
