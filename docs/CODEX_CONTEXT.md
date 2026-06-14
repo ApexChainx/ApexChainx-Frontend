@@ -1,8 +1,8 @@
-# NOC IQ Frontend (noc-iq-fe) – Codex Context
+# ApexChain Frontend – Codex Context
 
 ## Overview
 
-This repository contains the frontend application for NOCIQ.
+This repository contains the frontend application for ApexChain.
 
 It provides the user interface for:
 
@@ -12,7 +12,7 @@ It provides the user interface for:
 - interacting with wallets
 - monitoring analytics dashboards
 
-The frontend consumes the backend API (noc-iq-be) and integrates with Stellar wallets.
+The frontend consumes the backend API (apexchainx-backend) and integrates with Stellar wallets.
 
 ---
 
@@ -20,7 +20,7 @@ The frontend consumes the backend API (noc-iq-be) and integrates with Stellar wa
 
 - Framework: Next.js / React
 - Language: TypeScript
-- State: Zustand or React Query
+- State: React Query
 - Styling: Tailwind CSS
 - Wallet: Freighter / Stellar wallet APIs
 
@@ -141,8 +141,8 @@ Depends on:
 
 ## Cross-Repo Dependencies
 
-- noc-iq-be → data source
-- noc-iq-contracts → indirectly via backend
+- apexchainx-backend → data source
+- apexchainx-contracts → indirectly via backend
 
 Important:
 - API changes must reflect in frontend
