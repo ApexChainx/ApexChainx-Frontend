@@ -27,7 +27,7 @@ type SessionMessage =
   | { type: "logout" }
   | { type: "authenticated"; user: SessionUser };
 
-const CHANNEL_NAME = "noc_iq_session";
+const CHANNEL_NAME = "apexchain_session";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>("loading");
