@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export interface SLAResult {
   outage_id: string;
   status: "met" | "violated";
