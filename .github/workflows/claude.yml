@@ -23,8 +23,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
-            Go to https://github.com/OpSoll/noc-iq-fe/issues/${{ github.event.inputs.issue_number }} and read the issue carefully.
+            Go to https://github.com/ApexChainx/ApexChainx-Frontend/issues/${{ github.event.inputs.issue_number }} and read the issue carefully.
             Then implement the fix in this codebase.
             Create a new branch named fix/issue-${{ github.event.inputs.issue_number }},
-            commit the changes, and open a pull request against the upstream repo OpSoll/noc-iq-fe
+            commit the changes, and open a pull request against the upstream repo ApexChainx/ApexChainx-Frontend
             with a clear description that includes "Closes #${{ github.event.inputs.issue_number }}" in the PR body.
