@@ -1,0 +1,12 @@
+# ApexChain Frontend Code Owners
+# These owners will be requested for review when someone opens a pull request.
+
+# Global owners
+* @ApexChainx/core-team
+
+# Documentation
+*.md @ApexChainx/docs-team
+docs/ @ApexChainx/docs-team
+
+# CI/CD
+.github/ @ApexChainx/devops-team
