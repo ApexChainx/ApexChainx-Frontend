@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 import { buildApiUrl } from "@/lib/api/url";
 import { normalizeApiError } from "@/lib/errors/normalizeApiError";
 
