@@ -7,7 +7,7 @@ import { SessionProvider } from "@/providers/session";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata = {
-  title: "NOCIQ",
+  title: "ApexChain",
   description: "Base app shell",
 };
 
