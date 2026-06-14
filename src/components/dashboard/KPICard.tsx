@@ -1,4 +1,5 @@
 import React from "react";
+/** ApexChain Network Operations Intelligence Platform */
 
 interface KPICardProps {
   title: string;
