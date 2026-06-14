@@ -1,4 +1,5 @@
 "use client";
+/** ApexChain Network Operations Intelligence Platform */
 
 import Link from "next/link";
 import { useRef, useState, useCallback, useId } from "react";
