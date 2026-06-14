@@ -57,7 +57,7 @@ ApexChain integrates Stellar to solve key problems in telecom network operations
        │
        ▼
 ┌──────────────┐
-│ NOC Engineer │
+│ ApexChain Engineer │
 │ Resolves     │
 └──────┬───────┘
        │
@@ -405,7 +405,7 @@ async def process_outage_resolution(outage_id: str):
         payment = await payment_service.execute_sla_payment(
             sla_result=contract_result,
             operator_address=outage["operator_wallet"],
-            noc_team_address=outage["noc_team_wallet"]
+            apexchain_team_address=outage["apexchain_team_wallet"]
         )
         
         return {
@@ -642,7 +642,7 @@ Transfer sufficient USDC to your pool account to cover expected payments.
 {
   "XLM": 1000.00,
   "USDC": 5000.00,
-  "NOCIQ": 500.00
+  "APEX": 500.00
 }
 ```
 
