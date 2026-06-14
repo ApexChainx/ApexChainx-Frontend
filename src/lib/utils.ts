@@ -1,3 +1,4 @@
+/** ApexChain - Network Operations Intelligence Platform */
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
