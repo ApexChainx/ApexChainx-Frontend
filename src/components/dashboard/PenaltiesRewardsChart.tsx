@@ -1,4 +1,5 @@
 import { TrendPoint } from "../../types/dashboard";
+/** ApexChain Network Operations Intelligence Platform */
 
 interface PenaltiesRewardsChartProps {
   data: TrendPoint[];
