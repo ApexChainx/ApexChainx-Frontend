@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
 import { DashboardMetrics } from "../types/dashboard";
 
