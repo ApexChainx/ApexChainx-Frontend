@@ -2,13 +2,13 @@
 
 ## Problem
 
-Frontend types in `src/types/` and backend response shapes in `noc-iq-be` evolve independently. Without a sync strategy, type drift causes silent runtime failures in service modules and view components.
+Frontend types in `src/types/` and backend response shapes in `apexchainx-backend` evolve independently. Without a sync strategy, type drift causes silent runtime failures in service modules and view components.
 
 ## Strategy
 
 ### Source of truth
 
-The backend (`noc-iq-be`) owns the canonical API contract. The frontend mirrors it in `src/types/`.
+The backend (`apexchainx-backend`) owns the canonical API contract. The frontend mirrors it in `src/types/`.
 
 ### Sync approach (manual + review-gated)
 
@@ -29,7 +29,7 @@ Until the backend exposes an OpenAPI spec, the process is:
 
 ### Future: OpenAPI codegen
 
-When `noc-iq-be` publishes an OpenAPI spec (`/openapi.json`), replace manual types with generated ones:
+When `apexchainx-backend` publishes an OpenAPI spec (`/openapi.json`), replace manual types with generated ones:
 
 ```bash
 npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.generated.ts
