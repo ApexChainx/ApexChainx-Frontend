@@ -63,7 +63,7 @@ ApexChain integrates Stellar to solve key problems in telecom network operations
        │
        ▼
 ┌──────────────────┐
-│ NOCIQ Calculates │──► MTTR: 25 minutes
+│ ApexChain Calculates │──► MTTR: 25 minutes
 │ MTTR             │    Threshold: 15 minutes
 └──────┬───────────┘    Status: VIOLATED
        │
@@ -88,8 +88,8 @@ ApexChain integrates Stellar to solve key problems in telecom network operations
 
 ### Components
 
-1. **NOCIQ Frontend**: User interface with wallet connection
-2. **NOCIQ Backend**: FastAPI server with Stellar SDK
+1. **ApexChain Frontend**: User interface with wallet connection
+2. **ApexChain Backend**: FastAPI server with Stellar SDK
 3. **Soroban Smart Contracts**: On-chain SLA calculation logic
 4. **Stellar Network**: Blockchain for payments and storage
 5. **Firestore**: Off-chain database for application data
@@ -137,7 +137,7 @@ VITE_STELLAR_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 # Smart Contract Addresses
 VITE_SLA_CONTRACT_ID=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 VITE_USDC_TOKEN_ADDRESS=CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-VITE_NOCIQ_TOKEN_ADDRESS=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+VITE_APEX_TOKEN_ADDRESS=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 ```
 
 **Backend (.env):**
@@ -154,7 +154,7 @@ STELLAR_POOL_PUBLIC_KEY=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # Smart Contract IDs
 SLA_CONTRACT_ID=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 USDC_TOKEN_ADDRESS=CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-NOCIQ_TOKEN_ADDRESS=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+APEX_TOKEN_ADDRESS=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 # Payment Settings
 AUTO_PAYMENT_ENABLED=true
