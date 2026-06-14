@@ -27,7 +27,7 @@ Important rule:
 
 ## Overview
 
-`noc-iq-fe` is a Next.js frontend for viewing outages, reviewing SLA outcomes, and exposing payment and configuration screens.
+`apexchainx-frontend` is a Next.js frontend for viewing outages, reviewing SLA outcomes, and exposing payment and configuration screens.
 
 The current codebase uses:
 
@@ -37,7 +37,8 @@ The current codebase uses:
 - Axios
 - TanStack React Query
 - TanStack Table
-- Tailwind utilities and small local UI primitives
+- Tailwind CSS 4 with utility primitives
+- Radix UI primitives
 
 ## Current App Surface
 
