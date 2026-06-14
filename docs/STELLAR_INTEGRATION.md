@@ -1,6 +1,6 @@
 # Stellar Integration Guide
 
-This guide explains how NOCIQ integrates with the Stellar blockchain network to enable automated SLA-based payments, instant settlements, and immutable audit trails.
+This guide explains how ApexChain integrates with the Stellar blockchain network to enable automated SLA-based payments, instant settlements, and immutable audit trails.
 
 ## Table of Contents
 
@@ -25,9 +25,9 @@ This guide explains how NOCIQ integrates with the Stellar blockchain network to 
 
 [Stellar](https://stellar.org/) is a fast, low-cost blockchain network designed for payments and asset transfers. Transactions confirm in 3-5 seconds with fees of ~$0.00001.
 
-### Why Stellar for NOCIQ?
+### Why Stellar for ApexChain?
 
-NOCIQ integrates Stellar to solve key problems in telecom network operations:
+ApexChain integrates Stellar to solve key problems in telecom network operations:
 
 1. **Slow Payments**: Traditional bank transfers take days. Stellar settles in seconds.
 2. **Manual SLA Tracking**: Smart contracts automatically calculate penalties/rewards.
@@ -39,7 +39,7 @@ NOCIQ integrates Stellar to solve key problems in telecom network operations:
 
 - **Automated SLA Payments**: Smart contracts trigger penalty or reward payments based on MTTR
 - **Instant Settlements**: Payments confirm in 3-5 seconds
-- **Multi-Currency**: Support for USDC (payments), NOCIQ tokens (rewards), XLM (fees)
+- **Multi-Currency**: Support for USDC (payments), APEX tokens (rewards), XLM (fees)
 - **Immutable Audit Trails**: RCA reports hashed and stored on-chain
 - **Transparent**: All transactions viewable on public ledger
 
