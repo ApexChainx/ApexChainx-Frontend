@@ -51,7 +51,7 @@ interface SessionContextValue {
 const SessionContext =
   createContext<SessionContextValue | null>(null);
 
-const CHANNEL_NAME = "noc_iq_session";
+const CHANNEL_NAME = "apexchain_session";
 
 type SessionMessage =
   | { type: "logout" }
