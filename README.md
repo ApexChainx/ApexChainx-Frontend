@@ -1,21 +1,29 @@
-# NOC IQ Frontend
+# ApexChain Frontend
 
-Frontend application for the NOC IQ system.
+<div align="center">
+  <strong>Enterprise Network Operations Intelligence Platform</strong>
+  <br/>
+  Real-time outage management, SLA enforcement, and automated blockchain payments.
+</div>
+
+<br/>
+
+Frontend application for the ApexChain network operations intelligence system.
 
 This repository is the user-facing layer in the 3-repo system:
 
-- `noc-iq-fe` -> frontend
-- `noc-iq-be` -> backend and integration layer
-- `noc-iq-contracts` -> Soroban smart contracts
+- `apexchainx-frontend` → frontend (this repo)
+- `apexchainx-backend` → backend and integration layer
+- `apexchainx-contracts` → Soroban smart contracts
 
 System flow:
 
-`User -> FE -> BE -> Contracts -> BE -> FE`
+`User → Frontend → Backend → Smart Contracts → Backend → Frontend`
 
 Important rule:
 
 - the frontend does not talk to contracts directly
-- all contract interaction must go through `noc-iq-be`
+- all contract interaction must go through `apexchainx-backend`
 
 ## Overview
 
