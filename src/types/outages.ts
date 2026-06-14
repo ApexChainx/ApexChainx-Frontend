@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export type Severity = "critical" | "high" | "medium" | "low";
 export type OutageStatus = "open" | "resolved";
 
