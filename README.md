@@ -3,7 +3,13 @@
 <div align="center">
   <strong>Enterprise Network Operations Intelligence Platform</strong>
   <br/>
-  Real-time outage management, SLA enforcement, and automated blockchain payments.
+  Real-time outage management, SLA enforcement, automated blockchain payments, and analytics.
+  <br/>
+  <br/>
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </div>
 
 <br/>
@@ -16,170 +22,234 @@ This repository is the user-facing layer in the 3-repo system:
 - `apexchainx-backend` → backend and integration layer
 - `apexchainx-contracts` → Soroban smart contracts
 
-System flow:
+### System Flow
 
-`User → Frontend → Backend → Smart Contracts → Backend → Frontend`
+```
+User → Frontend → Backend → Smart Contracts → Backend → Frontend
+```
 
-Important rule:
+### Important Rule
 
-- the frontend does not talk to contracts directly
-- all contract interaction must go through `apexchainx-backend`
+- The frontend does not talk to contracts directly
+- All contract interaction must go through `apexchainx-backend`
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Current App Surface](#current-app-surface)
+- [Backend Integration](#backend-integration)
+- [Local Setup](#local-setup)
+- [Project Structure](#project-structure)
+- [Stabilized Baseline](#stabilized-baseline)
+- [Current Limitations](#current-limitations)
+- [Contributing Notes](#contributing-notes)
+- [Related Repositories](#related-repositories)
+
+---
 
 ## Overview
 
-`apexchainx-frontend` is a Next.js frontend for viewing outages, reviewing SLA outcomes, and exposing payment and configuration screens.
+`apexchainx-frontend` is a Next.js frontend for viewing outages, reviewing SLA outcomes, exposing payment and configuration screens, and managing webhooks and bulk data imports.
 
-The current codebase uses:
+### Tech Stack
 
-- Next.js 16
-- React 19
-- TypeScript
-- Axios
-- TanStack React Query
-- TanStack Table
-- Tailwind CSS 4 with utility primitives
-- Radix UI primitives
+| Technology | Purpose |
+|-----------|---------|
+| **Next.js 16** | React framework with App Router |
+| **React 19** | UI component library |
+| **TypeScript 5** | Type-safe development |
+| **TanStack React Query** | Server state management and caching |
+| **TanStack Table** | Data table with sorting, filtering, pagination |
+| **Axios** | HTTP client for API communication |
+| **Tailwind CSS 4** | Utility-first CSS framework |
+| **Radix UI** | Unstyled, accessible UI primitives |
+| **Vitest** | Unit and integration testing |
+
+---
 
 ## Current App Surface
 
 Active App Router routes live under `src/app`:
 
-- `/` -> dashboard placeholder
-- `/outages` -> outages list
-- `/outages/[id]` -> outage details and resolve flow
-- `/payments` -> payments placeholder
-- `/config` -> SLA configuration page
-- `/setting` -> settings placeholder
+| Route | Description |
+|-------|-------------|
+| `/` | SLA dashboard with KPIs, trends, and analytics |
+| `/outages` | Outages list with advanced filtering and export |
+| `/outages/new` | Create new outage with validation |
+| `/outages/[id]` | Outage details, timeline, resolution, and editing |
+| `/payments` | Payment history and transaction tracking |
+| `/config` | SLA configuration management |
+| `/setting` | User and application settings |
+| `/webhooks` | Webhook configuration and event management |
+| `/bulk-import` | Bulk outage import with dry-run and history |
+| `/login` | User authentication |
+| `/register` | New user registration |
+
+### Architecture & State Management
 
 The shared shell and providers live in:
 
-- `src/app/layout.tsx`
-- `src/components/Navigation.tsx`
-- `src/providers/react-query.tsx`
+- `src/app/layout.tsx` — Root layout with providers
+- `src/components/Navigation.tsx` — Main navigation shell
+- `src/providers/react-query.tsx` — TanStack Query provider
+- `src/providers/session.tsx` — Authentication and session management
 
-There is also older UI and service code under `src/pages` and some feature modules under `src/features`. That code is still present, but the main runtime entrypoints are the App Router pages above.
+Feature modules are organized under `src/features/` for domain-specific UI and hooks.
+
+---
 
 ## Backend Integration
 
-The frontend currently uses the backend API client in `src/lib/api.ts`.
+The frontend uses the backend API client in `src/lib/api.ts`.
 
-At the moment, the base URL is configured in code as:
+**Base URL:** `http://localhost:8000/api/v1/`
 
-- `http://localhost:8000/api/v1/`
+Local development expects the backend running on port `8000`.
 
-That means local development assumes the backend is running on port `8000`.
+### Service Modules
 
-Main FE service modules:
+| Module | Purpose |
+|--------|---------|
+| `src/services/outages.ts` | Outage CRUD operations |
+| `src/services/paymentService.ts` | Payment processing and history |
+| `src/services/dashboardService.ts` | Dashboard analytics and KPIs |
+| `src/services/exportService.ts` | Data export (CSV, JSON) |
+| `src/services/bulkImportService.ts` | Bulk outage import and dry-run |
+| `src/services/sla.ts` | SLA status and configuration |
+| `src/services/webhookService.ts` | Webhook management |
 
-- `src/services/outages.ts`
-- `src/services/paymentService.ts`
-- `src/services/dashboardService.ts`
-- `src/services/exportService.ts`
-- `src/services/bulkImportService.ts`
+---
 
 ## Local Setup
 
 ### Prerequisites
 
-- Node.js 20+ recommended
-- npm
-- running backend from `noc-iq-be`
+- **Node.js** 20+ (LTS recommended)
+- **npm** 9+
+- Running backend from `apexchainx-backend`
 
-### Install
+### Quick Start
 
 ```bash
+# Clone the repository
+git clone https://github.com/ApexChainx/ApexChainx-Frontend.git
+cd ApexChainx-Frontend
+
+# Install dependencies
 npm install
-```
 
-### Run In Development
-
-```bash
+# Start development server
 npm run dev
 ```
 
-The app will be available at:
+The application will be available at **[http://localhost:3000](http://localhost:3000)**.
 
-- `http://localhost:3000`
+### Available Scripts
 
-### Build
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server with hot reload |
+| `npm run build` | Create optimized production build |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint for code quality |
+| `npm run test` | Run Vitest test suite |
 
-```bash
-npm run build
-```
-
-### Start Production Build
-
-```bash
-npm run start
-```
-
-### Lint
-
-```bash
-npm run lint
-```
+---
 
 ## Expected Local Setup
 
 For the frontend to function meaningfully, start the backend as well:
 
-1. run `noc-iq-be`
-2. ensure the backend API is reachable at `http://localhost:8000`
-3. then run this frontend on `http://localhost:3000`
+1. Run `apexchainx-backend` on port `8000`
+2. Ensure the backend API is reachable at `http://localhost:8000`
+3. Start this frontend on `http://localhost:3000`
 
-Without the backend, the app shell will load, but API-backed views such as outages, exports, bulk import, payments, and analytics will not have live data.
+> **Note:** Without the backend, the app shell will load, but API-backed views such as outages, exports, bulk import, payments, and analytics will not have live data.
+
+---
 
 ## Project Structure
 
-```text
-noc-iq-fe/
-├── src/
-│   ├── app/                  # Next.js App Router pages
-│   ├── components/           # shared UI and dashboard components
-│   ├── features/             # feature-specific UI/hooks
-│   ├── hooks/                # shared hooks
-│   ├── lib/                  # API client and shared helpers
-│   ├── pages/                # older page-based screens still in repo
-│   ├── providers/            # app providers
-│   ├── services/             # backend-facing service modules
-│   └── types/                # shared frontend types
-├── public/
-├── package.json
-└── README.md
 ```
+apexchainx-frontend/
+├── src/
+│   ├── app/                  # Next.js App Router pages and layouts
+│   ├── components/           # Shared UI components and dashboard widgets
+│   │   ├── dashboard/        # SLA dashboard views and charts
+│   │   ├── outages/          # Outage-specific UI components
+│   │   ├── payments/         # Payment views and drawers
+│   │   ├── bulk-import/      # Bulk import views
+│   │   ├── shared/           # Shared error states and utilities
+│   │   └── ui/               # Low-level UI primitives (button, table, card, etc.)
+│   ├── features/             # Feature-specific modules
+│   │   └── outages/          # Outage hooks, components, and helpers
+│   ├── hooks/                # Shared React hooks (session, SLA config, focus trap)
+│   ├── lib/                  # API client, auth helpers, URL utils, environment config
+│   │   ├── config/           # Environment configuration
+│   │   └── auth/             # Authentication redirect helpers
+│   ├── providers/            # React context providers
+│   ├── services/             # Backend-facing service modules
+│   └── types/                # Shared TypeScript type definitions
+├── docs/                     # Project documentation
+├── tests/                    # Test files
+├── vitest.config.ts          # Vitest test configuration
+├── tailwind.config.js        # Tailwind CSS configuration
+├── tsconfig.json             # TypeScript configuration
+└── package.json              # Project metadata and dependencies
+```
+
+---
 
 ## Stabilized Baseline
 
 As of the latest stabilization pass:
 
-- `npm run build` passes
-- `npm run lint` passes with one non-blocking warning from TanStack Table usage
-- missing local UI primitives were restored
-- stale `import.meta.env` usage was removed from active service modules
-- outage pages were aligned more closely with the backend response shape
+- ✅ `npm run build` passes without errors
+- ✅ `npm run lint` passes (one non-blocking TanStack Table warning)
+- ✅ All local UI primitives restored and functional
+- ✅ Stale `import.meta.env` usage removed from active service modules
+- ✅ Outage pages aligned with backend response shapes
+- ✅ Test suite passing with Vitest
+
+---
 
 ## Current Limitations
 
-This repo is healthier than before, but still not a finished product surface.
+This repository is actively being developed. Current areas of focus:
 
-Examples:
+- `/payments` — transitioning from placeholder to full-featured payment views
+- `/setting` — expanding settings capabilities
+- `/` — enhancing the SLA dashboard with richer analytics
+- Codebase consolidation: merging older page-style screens into the App Router pattern
+- API alignment: some frontend flows depend on backend endpoints still being stabilized in `apexchainx-backend`
 
-- `/payments` in `src/app` is still a placeholder page
-- `/setting` is still a placeholder page
-- `/` is still a simple dashboard placeholder
-- the codebase still contains a mix of newer App Router pages and older page-style screens
-- some frontend flows depend on backend endpoints that are still being stabilized in `noc-iq-be`
+---
 
 ## Contributing Notes
 
 When making frontend changes:
 
-- preserve the system rule: FE calls BE, never contracts directly
-- prefer updating the App Router implementation first
-- keep API shapes aligned with `noc-iq-be`
-- treat `src/services` and `src/lib/api.ts` as the integration boundary
+- **Preserve the system rule:** Frontend calls Backend, never Contracts directly
+- **Prefer App Router:** Update the App Router implementation first
+- **API alignment:** Keep API shapes synchronized with `apexchainx-backend`
+- **Integration boundary:** Treat `src/services/` and `src/lib/api.ts` as the boundary
+- **Type safety:** No `as` type assertions on raw API responses; use typed generics
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed contribution guidelines.
+
+---
 
 ## Related Repositories
 
-- `noc-iq-be` -> backend application
-- `noc-iq-contracts` -> Soroban smart contracts
+| Repository | Description |
+|-----------|-------------|
+| [`apexchainx-backend`](https://github.com/ApexChainx/apexchainx-backend) | Backend API and integration layer |
+| [`apexchainx-contracts`](https://github.com/ApexChainx/apexchainx-contracts) | Soroban smart contracts for SLA enforcement |
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by the ApexChain team</sub>
+</div>
