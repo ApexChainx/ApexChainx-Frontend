@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export type ExportFormat = "csv" | "json";
 
 export interface OutageExportFilters {
