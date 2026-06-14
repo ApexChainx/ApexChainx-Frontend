@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 export interface Webhook {
   id: string;
   url: string;
