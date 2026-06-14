@@ -1,3 +1,4 @@
+/** ApexChain Frontend Test Suite */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
