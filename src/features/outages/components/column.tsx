@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+/** ApexChain Network Operations Intelligence Platform */
 import { ColumnDef } from "@tanstack/react-table";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
