@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+/** ApexChain Network Operations Intelligence Platform */
 import "./globals.css";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
