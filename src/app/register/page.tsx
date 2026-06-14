@@ -44,7 +44,7 @@ export default function RegisterPage() {
     <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold text-gray-800">Create account</h1>
-        <p className="text-sm text-gray-500">Register to access the NOC IQ platform.</p>
+        <p className="text-sm text-gray-500">Register to access the ApexChain platform.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
