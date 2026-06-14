@@ -26,12 +26,12 @@ export const metadata = {
   authors: [{ name: "ApexChain" }],
   creator: "ApexChain",
   publisher: "ApexChain",
-  metadataBase: new URL("https://apexchain.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   openGraph: {
     title: "ApexChain — Network Operations Intelligence",
     description:
       "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, and automated blockchain payments.",
-    url: "https://apexchain.com",
+    url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
     siteName: "ApexChain",
     locale: "en_US",
     type: "website",
@@ -49,11 +49,9 @@ export const metadata = {
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon.png", sizes: "32x32", type: "image/png" },
     ],
     apple: [
       { url: "/apple-icon.svg", type: "image/svg+xml" },
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
 };
