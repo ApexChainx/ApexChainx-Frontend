@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+
+  <!-- Chain links forming "AC" -->
+  <!-- Left chain link (vertical, forms the A) -->
+  <path d="M152 208C152 176.536 177.536 151 209 151L233 151V185L209 185C196.298 185 186 195.298 186 208L186 304C186 316.702 196.298 327 209 327L233 327V361L209 361C177.536 361 152 335.464 152 304L152 208Z" fill="white"/>
+  <!-- Right chain link (vertical, forms the C shape) -->
+  <path d="M360 208C360 176.536 334.464 151 303 151L279 151V185L303 185C315.702 185 326 195.298 326 208L326 304C326 316.702 315.702 327 303 327L279 327V361L303 361C334.464 361 360 335.464 360 304L360 208Z" fill="white" opacity="0.85"/>
+  <!-- Top connector bar -->
+  <rect x="240" y="151" width="32" height="56" rx="8" fill="white" opacity="0.6"/>
+  <!-- Bottom connector bar -->
+  <rect x="240" y="305" width="32" height="56" rx="8" fill="white" opacity="0.6"/>
+  <!-- A letterform in center -->
+  <path d="M208 286L232 222H240L264 286H248L242 270H230L224 286H208ZM232 258H240L236 246H236L232 258Z" fill="white"/>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F46E5"/>
+      <stop offset="0.5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+</svg>
