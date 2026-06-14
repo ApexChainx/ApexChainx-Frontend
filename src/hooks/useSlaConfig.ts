@@ -1,3 +1,4 @@
+/** ApexChain Network Operations Intelligence Platform */
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
