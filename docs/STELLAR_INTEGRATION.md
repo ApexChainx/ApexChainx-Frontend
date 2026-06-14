@@ -57,15 +57,15 @@ ApexChain integrates Stellar to solve key problems in telecom network operations
        │
        ▼
 ┌──────────────┐
-│ ApexChain Engineer │
+│ NOC Engineer │
 │ Resolves     │
 └──────┬───────┘
        │
        ▼
-┌──────────────────┐
-│ ApexChain Calculates │──► MTTR: 25 minutes
-│ MTTR             │    Threshold: 15 minutes
-└──────┬───────────┘    Status: VIOLATED
+┌───────────────────────┐
+│ ApexChain Calculates  │──► MTTR: 25 minutes
+│ (MTTR)                │    Threshold: 15 minutes
+└───────┬───────────────┘    Status: VIOLATED
        │
        ▼
 ┌──────────────────────┐
@@ -128,17 +128,6 @@ ApexChain integrates Stellar to solve key problems in telecom network operations
 ### 1. Environment Variables
 
 **Frontend (.env.local):**
-```env
-# Stellar Network
-VITE_STELLAR_NETWORK=testnet
-VITE_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
-VITE_STELLAR_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
-
-# Smart Contract Addresses
-VITE_SLA_CONTRACT_ID=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-VITE_USDC_TOKEN_ADDRESS=CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-VITE_APEX_TOKEN_ADDRESS=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-```
 ```env
 # Stellar Network
 VITE_STELLAR_NETWORK=testnet
