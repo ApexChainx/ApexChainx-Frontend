@@ -31,7 +31,8 @@ export const exportOutages = async (
     responseType: "blob",
   });
 
-  const mimeType = response.headers["content-type"] ?? (
+  const rawContentType = response.headers["content-type"];
+  const mimeType = (typeof rawContentType === "string" ? rawContentType : undefined) ?? (
     format === "csv" ? "text/csv" : "application/json"
   );
   const blob =

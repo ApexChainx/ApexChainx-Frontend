@@ -55,7 +55,7 @@ function extractErrorMessage(error: unknown): string {
   );
 }
 
-function sanitizeParams<T extends Record<string, unknown>>(
+function sanitizeParams<T extends object>(
   params: T
 ): Partial<T> {
   return Object.fromEntries(

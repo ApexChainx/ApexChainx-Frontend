@@ -1,5 +1,5 @@
 /** ApexChain - Network Operations Intelligence Platform */
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
 
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
@@ -63,7 +63,7 @@ async function doRefresh(): Promise<string> {
 api.interceptors.response.use(
   (res) => res,
   async (err: unknown) => {
-    const axiosErr = err as { response?: { status?: number }; config?: object };
+    const axiosErr = err as { response?: { status?: number }; config?: InternalAxiosRequestConfig };
     const config = axiosErr?.config;
 
     if (axiosErr?.response?.status === 401 && config && !retried.has(config)) {
@@ -77,7 +77,7 @@ api.interceptors.response.use(
         const newToken = await refreshPromise;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (config as any).headers = { ...((config as any).headers ?? {}), Authorization: `Bearer ${newToken}` };
-        return api(config as Parameters<typeof api>[0]);
+        return api.request(config);
       } catch {
         clearTokens();
         if (typeof window !== "undefined") {
