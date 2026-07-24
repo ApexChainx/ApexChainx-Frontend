@@ -1,5 +1,6 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import axios, { type InternalAxiosRequestConfig } from "axios";
+import { getCookie } from "@/lib/csrf";
 
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
@@ -33,8 +34,13 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// Attach stored access token to every request
+// Attach CSRF token and access token to every request
 api.interceptors.request.use((config) => {
+  const csrfToken = getCookie("apex_csrf");
+  if (csrfToken && config.headers) {
+    config.headers["X-CSRF-Token"] = csrfToken;
+  }
+
   const token = getAccessToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
