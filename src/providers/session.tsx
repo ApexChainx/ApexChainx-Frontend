@@ -15,9 +15,11 @@ import {
 import {
   api,
   clearTokens,
-  getAccessToken,
   setTokens,
 } from "@/lib/api";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
 import { logger } from "@/lib/logger";
 
 export type SessionState =
@@ -191,12 +193,10 @@ export function SessionProvider({
 
     async function bootstrapSession() {
       try {
-        const token = getAccessToken();
-
-        if (!token) {
-          setState("unauthenticated");
-          return;
-        }
+        // With httpOnly cookies, we cannot read tokens directly.
+        // Always try /auth/me — the cookie will be sent automatically.
+        // If no valid session exists, the request will 401 and we'll
+        // set state to unauthenticated.
 
         const response = await api.get<SessionUser>(
           "/auth/me",
@@ -280,6 +280,11 @@ export function SessionProvider({
    */
 
   const logout = useCallback(async () => {
+    if (!checkRateLimit("auth:logout", LOGOUT_RATE_LIMIT.maxAttempts, LOGOUT_RATE_LIMIT.windowMs)) {
+      console.warn("Logout rate limit exceeded. Please wait before trying again.");
+      return;
+    }
+
     try {
       await api.post("/auth/logout");
     } catch (error) {

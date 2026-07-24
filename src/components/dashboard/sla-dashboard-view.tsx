@@ -62,9 +62,22 @@ export default function SLADashboardView() {
     },
   });
 
+  const comparisonFilters = useMemo(() => {
+    if (!filters.date_from && !filters.date_to) return {};
+    const end = new Date(filters.date_from || Date.now());
+    const start = new Date(end);
+    start.setDate(start.getDate() - 30);
+    return {
+      date_from: start.toISOString().split("T")[0],
+      date_to: end.toISOString().split("T")[0],
+      severity: filters.severity,
+      site: filters.site,
+    };
+  }, [filters]);
+
   const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare"],
-    queryFn: () => fetchDashboardMetrics(),
+    queryKey: ["dashboard-metrics-compare", comparisonFilters],
+    queryFn: () => fetchDashboardMetrics(comparisonFilters),
     staleTime: 30_000,
     enabled: compareMode,
   });
