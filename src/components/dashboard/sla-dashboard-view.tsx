@@ -51,6 +51,15 @@ export default function SLADashboardView() {
     queryKey: ["dashboard-metrics", filters],
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
+    structuralSharing: (oldData, newData) => {
+      if (!oldData || !newData) return newData;
+      if (oldData.sla_compliance_percentage === newData.sla_compliance_percentage &&
+          oldData.penalties.total === newData.penalties.total &&
+          oldData.rewards.total === newData.rewards.total) {
+        return oldData;
+      }
+      return newData;
+    },
   });
 
   const secondary = useQuery<DashboardMetrics>({
