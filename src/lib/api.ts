@@ -1,5 +1,6 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import axios, { type InternalAxiosRequestConfig } from "axios";
+import { getCookie } from "@/lib/csrf";
 import { normalizeApiError } from "@/lib/errors";
 import { env } from "@/lib/config/env";
 
@@ -37,7 +38,19 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// No request interceptor needed — httpOnly cookies are sent automatically.
+// Attach CSRF token and access token to every request
+api.interceptors.request.use((config) => {
+  const csrfToken = getCookie("apex_csrf");
+  if (csrfToken && config.headers) {
+    config.headers["X-CSRF-Token"] = csrfToken;
+  }
+
+  const token = getAccessToken();
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Single-flight refresh state
 let refreshPromise: Promise<string | null> | null = null;
