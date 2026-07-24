@@ -1,5 +1,6 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import axios, { type InternalAxiosRequestConfig } from "axios";
+import { normalizeApiError } from "@/lib/errors";
 
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
@@ -90,35 +91,3 @@ api.interceptors.response.use(
     return Promise.reject(normalizeApiError(err));
   },
 );
-
-export type ApiErrorKind = "auth" | "validation" | "not_found" | "unknown";
-
-export interface NormalizedApiError {
-  message: string;
-  kind: ApiErrorKind;
-  status?: number;
-}
-
-export function normalizeApiError(err: unknown): NormalizedApiError {
-  const e = err as {
-    response?: { status?: number; data?: { detail?: string | { msg: string }[]; message?: string } };
-    message?: string;
-  };
-  const status = e?.response?.status;
-  const detail = e?.response?.data?.detail;
-  const message =
-    Array.isArray(detail)
-      ? detail.map((d) => d.msg).join("; ")
-      : detail ?? e?.response?.data?.message ?? e?.message ?? "Unexpected API error";
-
-  const kind: ApiErrorKind =
-    status === 401 || status === 403
-      ? "auth"
-      : status === 422
-        ? "validation"
-        : status === 404
-          ? "not_found"
-          : "unknown";
-
-  return { message, kind, status };
-}
