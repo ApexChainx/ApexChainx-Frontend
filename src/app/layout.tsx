@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import "./globals.css";
+import "@/lib/register-sw";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import { ReactQueryProvider } from "@/providers/react-query";
