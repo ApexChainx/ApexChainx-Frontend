@@ -31,13 +31,13 @@ const PenaltiesRewardsChart: React.FC<PenaltiesRewardsChartProps> = ({
               <span className="text-sm font-medium text-gray-700">{point.period}</span>
               <button
                 onClick={() => onPenaltyClick?.(point)}
-                className={`rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 ${onPenaltyClick ? "hover:bg-red-100 transition-colors cursor-pointer" : "cursor-default"}`}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${onPenaltyClick ? "cursor-pointer" : "cursor-default"} bg-red-50 text-red-700 hover:bg-red-100`}
               >
                 Penalties: {formatCurrency(point.penalties)}
               </button>
               <button
                 onClick={() => onRewardClick?.(point)}
-                className={`rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-600 ${onRewardClick ? "hover:bg-green-100 transition-colors cursor-pointer" : "cursor-default"}`}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${onRewardClick ? "cursor-pointer" : "cursor-default"} bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}
               >
                 Rewards: {formatCurrency(point.rewards)}
               </button>
