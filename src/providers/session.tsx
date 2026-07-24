@@ -18,6 +18,9 @@ import {
   getAccessToken,
   setTokens,
 } from "@/lib/api";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
 
 export type SessionState =
   | "loading"
@@ -281,6 +284,11 @@ export function SessionProvider({
    */
 
   const logout = useCallback(async () => {
+    if (!checkRateLimit("auth:logout", LOGOUT_RATE_LIMIT.maxAttempts, LOGOUT_RATE_LIMIT.windowMs)) {
+      console.warn("Logout rate limit exceeded. Please wait before trying again.");
+      return;
+    }
+
     try {
       await api.post("/auth/logout");
     } catch (error) {
