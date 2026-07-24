@@ -1,6 +1,6 @@
 /** ApexChain - Network Operations Intelligence Platform */
-import { buildApiUrl } from "@/lib/api/url";
-import { normalizeApiError } from "@/lib/errors/normalizeApiError";
+import { buildApiUrl } from "@/lib/url";
+import { normalizeApiError } from "@/lib/errors";
 
 export async function apiClient(
   path: string,

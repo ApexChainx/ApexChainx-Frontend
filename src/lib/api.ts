@@ -1,5 +1,7 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import axios, { type InternalAxiosRequestConfig } from "axios";
+import { normalizeApiError } from "@/lib/errors";
+import { env } from "@/lib/config/env";
 
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
@@ -25,7 +27,7 @@ export function clearTokens(): void {
 }
 
 export const api = axios.create({
-  baseURL: "http://localhost:8000/api/v1/",
+  baseURL: env.API_BASE_URL,
   timeout: 15_000,
   headers: {
     "Content-Type": "application/json",
@@ -52,7 +54,7 @@ async function doRefresh(): Promise<string> {
   if (!refreshToken) throw new Error("No refresh token");
 
   const res = await axios.post<{ access_token: string; refresh_token: string }>(
-    "http://localhost:8000/api/v1/auth/refresh",
+    env.API_REFRESH_URL,
     { refresh_token: refreshToken },
   );
   setTokens(res.data.access_token, res.data.refresh_token);
@@ -90,35 +92,3 @@ api.interceptors.response.use(
     return Promise.reject(normalizeApiError(err));
   },
 );
-
-export type ApiErrorKind = "auth" | "validation" | "not_found" | "unknown";
-
-export interface NormalizedApiError {
-  message: string;
-  kind: ApiErrorKind;
-  status?: number;
-}
-
-export function normalizeApiError(err: unknown): NormalizedApiError {
-  const e = err as {
-    response?: { status?: number; data?: { detail?: string | { msg: string }[]; message?: string } };
-    message?: string;
-  };
-  const status = e?.response?.status;
-  const detail = e?.response?.data?.detail;
-  const message =
-    Array.isArray(detail)
-      ? detail.map((d) => d.msg).join("; ")
-      : detail ?? e?.response?.data?.message ?? e?.message ?? "Unexpected API error";
-
-  const kind: ApiErrorKind =
-    status === 401 || status === 403
-      ? "auth"
-      : status === 422
-        ? "validation"
-        : status === 404
-          ? "not_found"
-          : "unknown";
-
-  return { message, kind, status };
-}
