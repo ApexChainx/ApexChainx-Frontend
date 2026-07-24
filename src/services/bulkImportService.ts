@@ -11,6 +11,12 @@ import type {
 const BULK_IMPORT_ENDPOINT = "/outages/bulk";
 const BULK_IMPORT_HISTORY_ENDPOINT = "/outages/bulk/history";
 
+const MAGIC_BYTES: Record<string, number[]> = {
+  "text/csv": [0xEF, 0xBB, 0xBF], // UTF-8 BOM (optional for CSV)
+  "application/json": [0x7B], // {
+  "text/plain": [], // No magic bytes requirement
+};
+
 interface BulkImportOptions {
   signal?: AbortSignal;
   onProgress?: (progress: number) => void;
@@ -73,6 +79,32 @@ function buildUploadConfig(
 }
 
 /**
+ * Validate file magic bytes against declared MIME type.
+ * Returns true if valid, throws if suspicious.
+ */
+async function validateMagicBytes(file: File): Promise<void> {
+  const slice = file.slice(0, 8);
+  const buffer = await slice.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  if (file.type === "application/json") {
+    // JSON must start with { or [
+    const firstNonWhitespace = Array.from(bytes).find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0A && b !== 0x0D);
+    if (firstNonWhitespace !== undefined && firstNonWhitespace !== 0x7B && firstNonWhitespace !== 0x5B) {
+      throw new Error("File content does not match JSON format. Please upload a valid JSON file.");
+    }
+  }
+
+  if (file.type === "text/csv" || file.name.endsWith(".csv")) {
+    // CSV shouldn't start with binary null bytes
+    const hasNullBytes = Array.from(bytes).some((b) => b === 0x00);
+    if (hasNullBytes) {
+      throw new Error("File appears to contain binary data. Please upload a valid CSV file.");
+    }
+  }
+}
+
+/**
  * Upload outages file for bulk import.
  */
 export async function bulkImportOutages(
@@ -82,6 +114,8 @@ export async function bulkImportOutages(
   if (!file) {
     throw new Error("No file provided for upload.");
   }
+
+  await validateMagicBytes(file);
 
   try {
     const formData = createFormData(file);

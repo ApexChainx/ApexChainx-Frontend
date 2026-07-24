@@ -44,12 +44,13 @@ let refreshPromise: Promise<string | null> | null = null;
 // Track retried request IDs to prevent infinite loops
 const retried = new WeakSet<object>();
 
-async function doRefresh(): Promise<string | null> {
-  // Rely on httpOnly refresh cookie — no token in request body.
-  const res = await axios.post<{ access_token?: string }>(
+async function doRefresh(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) throw new Error("No refresh token");
+
+  const res = await axios.post<{ access_token: string; refresh_token: string }>(
     env.API_REFRESH_URL,
-    {},
-    { withCredentials: true },
+    { refresh_token: refreshToken },
   );
   return res.data.access_token ?? null;
 }
@@ -87,35 +88,3 @@ api.interceptors.response.use(
     return Promise.reject(normalizeApiError(err));
   },
 );
-
-export type ApiErrorKind = "auth" | "validation" | "not_found" | "unknown";
-
-export interface NormalizedApiError {
-  message: string;
-  kind: ApiErrorKind;
-  status?: number;
-}
-
-export function normalizeApiError(err: unknown): NormalizedApiError {
-  const e = err as {
-    response?: { status?: number; data?: { detail?: string | { msg: string }[]; message?: string } };
-    message?: string;
-  };
-  const status = e?.response?.status;
-  const detail = e?.response?.data?.detail;
-  const message =
-    Array.isArray(detail)
-      ? detail.map((d) => d.msg).join("; ")
-      : detail ?? e?.response?.data?.message ?? e?.message ?? "Unexpected API error";
-
-  const kind: ApiErrorKind =
-    status === 401 || status === 403
-      ? "auth"
-      : status === 422
-        ? "validation"
-        : status === 404
-          ? "not_found"
-          : "unknown";
-
-  return { message, kind, status };
-}

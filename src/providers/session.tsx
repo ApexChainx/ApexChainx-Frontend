@@ -17,6 +17,7 @@ import {
   clearTokens,
   setTokens,
 } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 export type SessionState =
   | "loading"
@@ -164,10 +165,9 @@ export function SessionProvider({
         user: response.data,
       } satisfies SessionMessage);
     } catch (error) {
-      console.error(
-        "Failed to refresh session:",
-        error
-      );
+      logger.error("session-refresh-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
 
       if (!mountedRef.current) return;
 
@@ -213,10 +213,9 @@ export function SessionProvider({
           return;
         }
 
-        console.error(
-          "Session bootstrap failed:",
-          error
-        );
+        logger.error("session-bootstrap-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
 
         if (!mountedRef.current) return;
 
@@ -281,10 +280,9 @@ export function SessionProvider({
     try {
       await api.post("/auth/logout");
     } catch (error) {
-      console.error(
-        "Logout request failed:",
-        error
-      );
+      logger.error("logout-request-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       clearSession();
 

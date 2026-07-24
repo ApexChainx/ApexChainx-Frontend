@@ -10,7 +10,33 @@ Frontend types in `src/types/` and backend response shapes in `apexchainx-backen
 
 The backend (`apexchainx-backend`) owns the canonical API contract. The frontend mirrors it in `src/types/`.
 
-### Sync approach (manual + review-gated)
+### OpenAPI codegen (preferred)
+
+When the backend exposes an OpenAPI spec (`/openapi.json`), types are generated automatically:
+
+```bash
+npm run codegen
+```
+
+This produces `src/types/api.generated.ts` with strict TypeScript types for all API schemas, paths, and operations.
+
+#### Setup
+
+1. Add `openapi-typescript` as a devDependency (already done).
+2. Run `npm run codegen` whenever the backend spec changes.
+3. The CI workflow (`.github/workflows/codegen-check.yml`) detects drift automatically.
+
+#### Re-exporting generated types
+
+Existing manual types in `src/types/*.ts` should re-export from the generated module where applicable:
+
+```typescript
+// src/types/outages.ts
+export type { components } from "./api.generated";
+export type Outage = components["schemas"]["Outage"];
+```
+
+### Manual sync (fallback)
 
 Until the backend exposes an OpenAPI spec, the process is:
 
@@ -26,16 +52,6 @@ Until the backend exposes an OpenAPI spec, the process is:
 | `Outage` | `src/types/outages.ts` | `GET /outages/:id` |
 | `SLAResult` | `src/types/outages.ts` | embedded in outage resolve response |
 | `OutageResolutionPayment` | `src/types/outages.ts` | `POST /outages/:id/resolve` |
-
-### Future: OpenAPI codegen
-
-When `apexchainx-backend` publishes an OpenAPI spec (`/openapi.json`), replace manual types with generated ones:
-
-```bash
-npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.generated.ts
-```
-
-Then re-export the relevant types from `src/types/` wrappers so call sites don't change.
 
 ### Checklist for service changes
 
