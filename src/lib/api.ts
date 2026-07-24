@@ -6,24 +6,26 @@ import { env } from "@/lib/config/env";
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
 
+// With httpOnly cookies, tokens are not accessible via JavaScript.
+// These functions exist for backward compatibility but are no-ops.
 export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return null;
 }
 
 export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_KEY);
+  return null;
 }
 
-export function setTokens(access: string, refresh: string): void {
-  localStorage.setItem(TOKEN_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+export function setTokens(_access: string, _refresh: string): void {
+  // No-op: backend sets httpOnly cookies via Set-Cookie headers.
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  // No-op: backend clears cookies via Set-Cookie headers on logout.
+  // Dispatch the logout event to clear client-side session state.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("auth:logout"));
+  }
 }
 
 export const api = axios.create({
@@ -35,17 +37,10 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// Attach stored access token to every request
-api.interceptors.request.use((config) => {
-  const token = getAccessToken();
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// No request interceptor needed — httpOnly cookies are sent automatically.
 
 // Single-flight refresh state
-let refreshPromise: Promise<string> | null = null;
+let refreshPromise: Promise<string | null> | null = null;
 // Track retried request IDs to prevent infinite loops
 const retried = new WeakSet<object>();
 
@@ -57,8 +52,7 @@ async function doRefresh(): Promise<string> {
     env.API_REFRESH_URL,
     { refresh_token: refreshToken },
   );
-  setTokens(res.data.access_token, res.data.refresh_token);
-  return res.data.access_token;
+  return res.data.access_token ?? null;
 }
 
 // Auto-refresh on 401 with single-flight dedup
@@ -77,14 +71,16 @@ api.interceptors.response.use(
           });
         }
         const newToken = await refreshPromise;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (config as any).headers = { ...((config as any).headers ?? {}), Authorization: `Bearer ${newToken}` };
-        return api.request(config);
+        if (newToken) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (config as any).headers = { ...((config as any).headers ?? {}), Authorization: `Bearer ${newToken}` };
+          return api.request(config);
+        }
+        // Refresh failed — session expired.
+        clearTokens();
+        return Promise.reject(new Error("Session expired. Please sign in again."));
       } catch {
         clearTokens();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("auth:logout"));
-        }
         return Promise.reject(new Error("Session expired. Please sign in again."));
       }
     }

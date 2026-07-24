@@ -15,7 +15,6 @@ import {
 import {
   api,
   clearTokens,
-  getAccessToken,
   setTokens,
 } from "@/lib/api";
 import { logger } from "@/lib/logger";
@@ -191,12 +190,10 @@ export function SessionProvider({
 
     async function bootstrapSession() {
       try {
-        const token = getAccessToken();
-
-        if (!token) {
-          setState("unauthenticated");
-          return;
-        }
+        // With httpOnly cookies, we cannot read tokens directly.
+        // Always try /auth/me — the cookie will be sent automatically.
+        // If no valid session exists, the request will 401 and we'll
+        // set state to unauthenticated.
 
         const response = await api.get<SessionUser>(
           "/auth/me",
