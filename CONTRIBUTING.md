@@ -123,6 +123,10 @@ git checkout -b docs/stellar-guide
 - Update documentation as needed
 - Keep commits focused and atomic
 
+### Architecture Decision Records (ADRs)
+
+For significant architectural decisions, add or update an ADR in `docs/adr/`. Use the MADR template format. ADRs are reviewed as part of pull requests and help maintain institutional context for future contributors.
+
 ### 3. Test Your Changes
 
 **Frontend:**
