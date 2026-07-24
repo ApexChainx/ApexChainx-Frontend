@@ -64,12 +64,20 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-blue-600"
+        >
+          Skip to content
+        </a>
         <ReactQueryProvider>
           <SessionProvider>
             <ToastProvider>
               <RouteGuard>
                 <Navigation />
-                {children}
+                <main id="main-content" role="main">
+                  {children}
+                </main>
               </RouteGuard>
             </ToastProvider>
           </SessionProvider>
