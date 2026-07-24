@@ -1,6 +1,7 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import axios, { type InternalAxiosRequestConfig } from "axios";
 import { normalizeApiError } from "@/lib/errors";
+import { env } from "@/lib/config/env";
 
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
@@ -26,7 +27,7 @@ export function clearTokens(): void {
 }
 
 export const api = axios.create({
-  baseURL: "http://localhost:8000/api/v1/",
+  baseURL: env.API_BASE_URL,
   timeout: 15_000,
   headers: {
     "Content-Type": "application/json",
@@ -53,7 +54,7 @@ async function doRefresh(): Promise<string> {
   if (!refreshToken) throw new Error("No refresh token");
 
   const res = await axios.post<{ access_token: string; refresh_token: string }>(
-    "http://localhost:8000/api/v1/auth/refresh",
+    env.API_REFRESH_URL,
     { refresh_token: refreshToken },
   );
   setTokens(res.data.access_token, res.data.refresh_token);
