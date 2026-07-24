@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import "./globals.css";
+import "@/lib/register-sw";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import { ReactQueryProvider } from "@/providers/react-query";
@@ -63,13 +64,27 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
+      <head>
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        />
+      </head>
       <body>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-blue-600"
+        >
+          Skip to content
+        </a>
         <ReactQueryProvider>
           <SessionProvider>
             <ToastProvider>
               <RouteGuard>
                 <Navigation />
-                {children}
+                <main id="main-content" role="main">
+                  {children}
+                </main>
               </RouteGuard>
             </ToastProvider>
           </SessionProvider>

@@ -15,12 +15,12 @@ import {
 import {
   api,
   clearTokens,
-  getAccessToken,
   setTokens,
 } from "@/lib/api";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
+import { logger } from "@/lib/logger";
 
 export type SessionState =
   | "loading"
@@ -168,10 +168,9 @@ export function SessionProvider({
         user: response.data,
       } satisfies SessionMessage);
     } catch (error) {
-      console.error(
-        "Failed to refresh session:",
-        error
-      );
+      logger.error("session-refresh-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
 
       if (!mountedRef.current) return;
 
@@ -194,12 +193,10 @@ export function SessionProvider({
 
     async function bootstrapSession() {
       try {
-        const token = getAccessToken();
-
-        if (!token) {
-          setState("unauthenticated");
-          return;
-        }
+        // With httpOnly cookies, we cannot read tokens directly.
+        // Always try /auth/me — the cookie will be sent automatically.
+        // If no valid session exists, the request will 401 and we'll
+        // set state to unauthenticated.
 
         const response = await api.get<SessionUser>(
           "/auth/me",
@@ -219,10 +216,9 @@ export function SessionProvider({
           return;
         }
 
-        console.error(
-          "Session bootstrap failed:",
-          error
-        );
+        logger.error("session-bootstrap-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
 
         if (!mountedRef.current) return;
 
@@ -292,10 +288,9 @@ export function SessionProvider({
     try {
       await api.post("/auth/logout");
     } catch (error) {
-      console.error(
-        "Logout request failed:",
-        error
-      );
+      logger.error("logout-request-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       clearSession();
 
