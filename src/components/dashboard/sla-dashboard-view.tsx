@@ -2,7 +2,7 @@
 /** ApexChain Network Operations Intelligence Platform */
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -51,6 +51,15 @@ export default function SLADashboardView() {
     queryKey: ["dashboard-metrics", filters],
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
+    structuralSharing: (oldData, newData) => {
+      if (!oldData || !newData) return newData;
+      if (oldData.sla_compliance_percentage === newData.sla_compliance_percentage &&
+          oldData.penalties.total === newData.penalties.total &&
+          oldData.rewards.total === newData.rewards.total) {
+        return oldData;
+      }
+      return newData;
+    },
   });
 
   const secondary = useQuery<DashboardMetrics>({
@@ -60,27 +69,27 @@ export default function SLADashboardView() {
     enabled: compareMode,
   });
 
-  function onTrendClick(point: TrendPoint) {
+  const onTrendClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
     if (filters.severity) params.set("severity", filters.severity);
     if (filters.site) params.set("site", filters.site);
     router.push(`/outages?${params.toString()}`);
-  }
+  }, [router, filters.severity, filters.site]);
 
-  function onPenaltyClick(point: TrendPoint) {
+  const onPenaltyClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
     params.set("type", "penalty");
     router.push(`/payments?${params.toString()}`);
-  }
+  }, [router]);
 
-  function onRewardClick(point: TrendPoint) {
+  const onRewardClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();
     if (point.period) params.set("date_from", point.period);
     params.set("type", "reward");
     router.push(`/payments?${params.toString()}`);
-  }
+  }, [router]);
 
   if (primary.isLoading) {
     return (
@@ -103,7 +112,7 @@ export default function SLADashboardView() {
   }
 
   const metrics = primary.data;
-  const netBalance = metrics.rewards.total - metrics.penalties.total;
+  const netBalance = useMemo(() => metrics.rewards.total - metrics.penalties.total, [metrics.rewards.total, metrics.penalties.total]);
   const lastUpdated = primary.dataUpdatedAt
     ? new Date(primary.dataUpdatedAt).toLocaleString()
     : "Not synced yet";

@@ -1,0 +1,23 @@
+name: Contract Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  contract-tests:
+    name: Contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm install --save-dev @stoplight/prism-cli
+      - name: Run contract tests
+        run: |
+          npx prism mock openapi.json --port 4010 &
+          sleep 5
+          npm run test:contract

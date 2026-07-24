@@ -3,6 +3,7 @@
 
 import { useEffect } from "react";
 import { RouteErrorState } from "@/components/ui/route-state";
+import { logger } from "@/lib/logger";
 
 export default function GlobalError({
   error,
@@ -12,16 +13,11 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error and stack trace to the console for debugging
-    console.group("🚨 Frontend Error Boundary Caught an Exception");
-    console.error("Message:", error.message);
-    if (error.stack) {
-      console.error("Stack Trace:", error.stack);
-    }
-    if (error.digest) {
-      console.error("Digest:", error.digest);
-    }
-    console.groupEnd();
+    logger.error("error-boundary", {
+      message: error.message,
+      stack: error.stack,
+      digest: error.digest,
+    });
   }, [error]);
 
   return (

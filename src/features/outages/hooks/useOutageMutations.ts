@@ -12,8 +12,10 @@ export function useOutage(id: string) {
     queryKey: outageKeys.detail(id),
     queryFn: () => getOutage(id),
     enabled: !!id,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     refetchInterval: (query) =>
-      query.state.data?.status === "resolved" ? false : 15_000,
+      query.state.data?.status === "resolved" ? false : 30_000,
   });
 }
 

@@ -1,5 +1,5 @@
 /** ApexChain - Network Operations Intelligence Platform */
-import { buildApiUrl } from "@/lib/url";
+import { buildApiUrl } from "@/lib/api/url";
 import { normalizeApiError } from "@/lib/errors";
 
 export async function apiClient(
