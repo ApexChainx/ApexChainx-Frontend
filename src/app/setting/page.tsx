@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "next/navigation";
@@ -90,7 +91,7 @@ export default function SettingsPage() {
     setSessionActionFeedback(null);
     setSessionActionError(null);
     try {
-      await api.post("/auth/logout-all");
+      await api.post(ENDPOINTS.auth.logoutAll);
       await logout();
       router.replace("/login");
     } catch (err) {
@@ -167,7 +168,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.post<AuthUser>("/auth/register", registerForm);
+      const response = await api.post<AuthUser>(ENDPOINTS.auth.register, registerForm);
       setCurrentUser(response.data);
       setWalletForm((current) => ({
         ...current,
@@ -187,7 +188,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.post<AuthSessionResponse>("/auth/login", loginForm);
+      const response = await api.post<AuthSessionResponse>(ENDPOINTS.auth.login, loginForm);
       setSession(response.data);
       setCurrentUser(response.data.user);
       setWalletForm((current) => ({
@@ -213,7 +214,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.get<AuthUser>("/auth/me", {
+      const response = await api.get<AuthUser>(ENDPOINTS.auth.me, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -241,7 +242,7 @@ export default function SettingsPage() {
 
     try {
       await api.post(
-        "/auth/logout",
+        ENDPOINTS.auth.logout,
         {},
         {
           headers: {
@@ -270,7 +271,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.post<Wallet>("/wallets/create", {
+      const response = await api.post<Wallet>(ENDPOINTS.wallets.create, {
         user_id: activeUserId,
       });
       setWallet(response.data);
@@ -300,7 +301,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.post<Wallet>("/wallets/link", {
+      const response = await api.post<Wallet>(ENDPOINTS.wallets.link, {
         user_id: walletForm.user_id.trim(),
         public_key: walletForm.public_key.trim(),
         funded: walletForm.funded,
@@ -327,8 +328,8 @@ export default function SettingsPage() {
 
     try {
       const [walletResponse, statusResponse] = await Promise.all([
-        api.get<Wallet>(`/wallets/${activeUserId}`),
-        api.get<WalletStatus>(`/wallets/${activeUserId}/status`),
+        api.get<Wallet>(ENDPOINTS.wallets.byId(activeUserId)),
+        api.get<WalletStatus>(ENDPOINTS.wallets.status(activeUserId)),
       ]);
       setWallet(walletResponse.data);
       setWalletStatus(statusResponse.data);
@@ -359,7 +360,7 @@ export default function SettingsPage() {
     setFeedback(null);
 
     try {
-      const response = await api.get<WalletBalance>(`/wallets/${address}/balance`);
+      const response = await api.get<WalletBalance>(ENDPOINTS.wallets.balance(address));
       setWalletBalance(response.data);
       setFeedback("Wallet balance loaded.");
     } catch (issue) {

@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
 function getFilenameFromDisposition(
@@ -26,7 +27,7 @@ export const exportOutages = async (
     }
   });
 
-  const response = await api.get<Blob>("/outages/export", {
+  const response = await api.get<Blob>(ENDPOINTS.outages.export, {
     params,
     responseType: "blob",
   });

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 export const dynamic = "force-static";
 
@@ -31,9 +32,9 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await api.post("/auth/register", { email, password });
+      await api.post(ENDPOINTS.auth.register, { email, password });
       // Auto-login after registration
-      await api.post("/auth/login", { email, password });
+      await api.post(ENDPOINTS.auth.login, { email, password });
       router.push("/");
       router.refresh();
     } catch (err) {

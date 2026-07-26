@@ -2,14 +2,15 @@
 import { AxiosProgressEvent, AxiosRequestConfig } from "axios";
 
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 import type {
   BulkImportRecord,
   BulkImportResult,
 } from "@/types/bulkImport";
 
-const BULK_IMPORT_ENDPOINT = "/outages/bulk";
-const BULK_IMPORT_HISTORY_ENDPOINT = "/outages/bulk/history";
+const BULK_IMPORT_ENDPOINT = ENDPOINTS.outages.bulk;
+const BULK_IMPORT_HISTORY_ENDPOINT = ENDPOINTS.outages.bulkHistory;
 
 const MAGIC_BYTES: Record<string, number[]> = {
   "text/csv": [0xEF, 0xBB, 0xBF], // UTF-8 BOM (optional for CSV)

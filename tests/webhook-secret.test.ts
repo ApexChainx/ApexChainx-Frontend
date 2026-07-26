@@ -18,7 +18,7 @@ describe("webhook-secret", () => {
   it("masks long secrets correctly", () => {
     const secret = "abcdefghijklmnop";
     const masked = maskSecret(secret);
-    expect(masked).toBe("abcdefgh••••ijkl");
+    expect(masked).toBe("abcdefgh••••mnop");
   });
 
   it("masks short secrets completely", () => {
