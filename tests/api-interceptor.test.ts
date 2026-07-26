@@ -11,10 +11,10 @@ describe("401 interceptor chain", () => {
   it("attaches access token to requests", async () => {
     setTokens("test-access-token", "test-refresh-token");
     
-    const requestInterceptor = api.interceptors.request.handlers[0];
+    const requestInterceptor = (api.interceptors.request as any).handlers[0];
     const config = { headers: {} as Record<string, string> };
     
-    const result = requestInterceptor.fulfilled(config);
+    const result = requestInterceptor.fulfilled(config) as any;
     
     expect(result.headers.Authorization).toBe("Bearer test-access-token");
   });

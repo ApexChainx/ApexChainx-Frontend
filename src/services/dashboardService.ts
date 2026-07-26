@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import { DashboardMetrics } from "../types/dashboard";
 
 interface DashboardKPIResponse {
@@ -28,8 +29,8 @@ export interface DashboardFilters {
 export const fetchDashboardMetrics = async (filters: DashboardFilters = {}): Promise<DashboardMetrics> => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
   const [kpiResponse, trendResponse] = await Promise.all([
-    api.get<DashboardKPIResponse>("/sla/analytics/dashboard", { params }),
-    api.get<DashboardTrendResponse[]>("/sla/analytics/trends", { params }),
+    api.get<DashboardKPIResponse>(ENDPOINTS.sla.dashboard, { params }),
+    api.get<DashboardTrendResponse[]>(ENDPOINTS.sla.trends, { params }),
   ]);
 
   const kpis = kpiResponse.data;

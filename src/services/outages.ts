@@ -2,6 +2,7 @@
 import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import type {
   Outage,
   OutageCreate,
@@ -26,7 +27,7 @@ interface ApiErrorResponse {
   errors?: Record<string, string[]>;
 }
 
-const OUTAGES_ENDPOINT = "/outages";
+const OUTAGES_ENDPOINT = ENDPOINTS.outages.base;
 
 function handleApiError(error: unknown, fallbackMessage: string): never {
   if (error instanceof AxiosError) {
@@ -94,7 +95,7 @@ export async function getOutage(
       throw new Error("Outage ID is required.");
     }
 
-    const res = await api.get<Outage>(`${OUTAGES_ENDPOINT}/${id}`, {
+    const res = await api.get<Outage>(ENDPOINTS.outages.byId(id), {
       signal: options?.signal,
     });
 
@@ -135,7 +136,7 @@ export async function updateOutage(
     }
 
     const res = await api.put<Outage>(
-      `${OUTAGES_ENDPOINT}/${id}`,
+      ENDPOINTS.outages.byId(id),
       payload,
     );
 
@@ -157,7 +158,7 @@ export async function deleteOutage(
     }
 
     const res = await api.delete<{ message: string }>(
-      `${OUTAGES_ENDPOINT}/${id}`,
+      ENDPOINTS.outages.byId(id),
     );
 
     return res.data;
@@ -179,7 +180,7 @@ export async function resolveOutage(
     }
 
     const res = await api.post<ResolveOutageResponse>(
-      `${OUTAGES_ENDPOINT}/${id}/resolve`,
+      ENDPOINTS.outages.resolve(id),
       payload,
     );
 

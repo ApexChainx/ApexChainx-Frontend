@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import { PaginatedPayments, Payment } from "../types/payment";
 
 export interface PaymentFilters {
@@ -15,7 +16,7 @@ export const fetchPayments = async (
   filters: PaymentFilters = {}
 ): Promise<PaginatedPayments> => {
   const { page = 1, page_size = 10, ...rest } = filters;
-  const response = await api.get<PaginatedPayments>("/payments", {
+  const response = await api.get<PaginatedPayments>(ENDPOINTS.payments.base, {
     params: { page, page_size, ...rest },
   });
   return response.data;
@@ -23,22 +24,22 @@ export const fetchPayments = async (
 
 export const fetchPayment = async (id: string, signal?: AbortSignal): Promise<Payment> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await api.get<Payment>(`/payments/${id}`, { signal } as any);
+  const response = await api.get<Payment>(ENDPOINTS.payments.byId(id), { signal } as any);
   return response.data;
 };
 
 export const retryPayment = async (id: string): Promise<Payment> => {
-  const response = await api.post<Payment>(`/payments/${id}/retry`);
+  const response = await api.post<Payment>(ENDPOINTS.payments.retry(id));
   return response.data;
 };
 
 export const reconcilePayment = async (id: string): Promise<Payment> => {
-  const response = await api.post<Payment>(`/payments/${id}/reconcile`);
+  const response = await api.post<Payment>(ENDPOINTS.payments.reconcile(id));
   return response.data;
 };
 
 export const exportPayments = async (filters: Omit<PaymentFilters, "page" | "page_size"> = {}): Promise<void> => {
-  const response = await api.get("/payments/export", {
+  const response = await api.get(ENDPOINTS.payments.export, {
     params: filters,
     responseType: "blob",
   });

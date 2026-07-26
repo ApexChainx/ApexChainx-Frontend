@@ -17,6 +17,7 @@ import {
   clearTokens,
   setTokens,
 } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
@@ -156,7 +157,7 @@ export function SessionProvider({
   const refreshSession = useCallback(async () => {
     try {
       const response = await api.get<SessionUser>(
-        "/auth/me"
+        ENDPOINTS.auth.me
       );
 
       if (!mountedRef.current) return;
@@ -199,7 +200,7 @@ export function SessionProvider({
         // set state to unauthenticated.
 
         const response = await api.get<SessionUser>(
-          "/auth/me",
+          ENDPOINTS.auth.me,
           {
             signal: controller.signal,
           } as Parameters<typeof api.get>[1]
@@ -286,7 +287,7 @@ export function SessionProvider({
     }
 
     try {
-      await api.post("/auth/logout");
+      await api.post(ENDPOINTS.auth.logout);
     } catch (error) {
       logger.error("logout-request-failed", {
         message: error instanceof Error ? error.message : String(error),

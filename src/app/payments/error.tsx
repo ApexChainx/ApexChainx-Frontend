@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { RouteErrorState } from "@/components/ui/route-state";
 import { logger } from "@/lib/logger";
 
-export default function GlobalError({
+export default function RouteError({
   error,
   reset,
 }: {
@@ -13,7 +13,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    logger.error("error-boundary", {
+    logger.error("route-error-boundary", {
       message: error.message,
       stack: error.stack,
       digest: error.digest,
@@ -21,9 +21,9 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <div className="space-y-6 bg-slate-50">
+    <div className="space-y-6 p-6">
       <RouteErrorState
-        title="Something went wrong"
+        title="Payments Error"
         description={
           error.message || "An unexpected error occurred while loading this page."
         }
@@ -36,12 +36,6 @@ export default function GlobalError({
           onClick: () => window.location.reload(),
         }}
       />
-      {process.env.NODE_ENV === "development" && error.digest ? (
-        <div className="mx-auto w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-sm">
-          <p className="mb-1 font-semibold text-slate-700">Error digest</p>
-          <code className="font-mono">{error.digest}</code>
-        </div>
-      ) : null}
     </div>
   );
 }

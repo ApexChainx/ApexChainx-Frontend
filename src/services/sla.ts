@@ -2,6 +2,7 @@
 import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 import type {
   DisputeListParams,
@@ -36,9 +37,9 @@ interface APIErrorResponse {
 /* -------------------------------------------------------------------------- */
 
 const SLA_ENDPOINTS = {
-  CALCULATE: "/sla/calculate",
-  PREVIEW: "/sla/preview",
-  DISPUTES: "/sla/disputes",
+  CALCULATE: ENDPOINTS.sla.calculate,
+  PREVIEW: ENDPOINTS.sla.preview,
+  DISPUTES: ENDPOINTS.sla.disputes,
 } as const;
 
 /* -------------------------------------------------------------------------- */

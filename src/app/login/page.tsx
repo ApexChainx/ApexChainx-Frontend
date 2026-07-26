@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 export const dynamic = "force-static";
 
@@ -20,7 +21,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await api.post("/auth/login", { email, password });
+      await api.post(ENDPOINTS.auth.login, { email, password });
       router.push("/");
       router.refresh();
     } catch (err) {

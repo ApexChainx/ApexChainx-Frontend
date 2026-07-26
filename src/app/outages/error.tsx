@@ -1,15 +1,39 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { ErrorState } from "@/components/shared/ErrorState";
+import { useEffect } from "react";
+import { RouteErrorState } from "@/components/ui/route-state";
+import { logger } from "@/lib/logger";
 
-export default function Error({ error }: { error: any }) {
+export default function RouteError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    logger.error("route-error-boundary", {
+      message: error.message,
+      stack: error.stack,
+      digest: error.digest,
+    });
+  }, [error]);
+
   return (
-    <div className="p-6">
-      <ErrorState
-        error={{
-          message: error?.message || "Unexpected error",
-          correlationId: error?.correlationId,
+    <div className="space-y-6 p-6">
+      <RouteErrorState
+        title="Outages Error"
+        description={
+          error.message || "An unexpected error occurred while loading this page."
+        }
+        primaryAction={{
+          label: "Try again",
+          onClick: reset,
+        }}
+        secondaryAction={{
+          label: "Reload page",
+          onClick: () => window.location.reload(),
         }}
       />
     </div>
