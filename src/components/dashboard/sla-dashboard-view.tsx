@@ -10,6 +10,7 @@ import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
@@ -154,28 +155,34 @@ export default function SLADashboardView() {
       {compareMode && secondary.isLoading ? (
         <p className="text-sm text-gray-400">Loading comparison window…</p>
       ) : null}
-      {compareMode && secondary.isLoading ? <p className="text-sm text-gray-400">Loading comparison window…</p> : null}
 
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
-        <label className="space-y-1 text-xs">
-          <span className="font-medium text-slate-600">From</span>
-          <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_from ?? ""} onChange={(e) => set("date_from", e.target.value)} />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="font-medium text-slate-600">To</span>
-          <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_to ?? ""} onChange={(e) => set("date_to", e.target.value)} />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="font-medium text-slate-600">Severity</span>
-          <select className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.severity ?? ""} onChange={(e) => set("severity", e.target.value)}>
-            {SEVERITIES.map((s) => <option key={s} value={s}>{s || "All"}</option>)}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs">
-          <span className="font-medium text-slate-600">Site</span>
-          <input type="text" placeholder="e.g. site-a" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.site ?? ""} onChange={(e) => set("site", e.target.value)} />
-        </label>
-      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-slate-600">From</span>
+              <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_from ?? ""} onChange={(e) => set("date_from", e.target.value)} />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-slate-600">To</span>
+              <input type="date" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.date_to ?? ""} onChange={(e) => set("date_to", e.target.value)} />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-slate-600">Severity</span>
+              <select className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.severity ?? ""} onChange={(e) => set("severity", e.target.value)}>
+                {SEVERITIES.map((s) => <option key={s} value={s}>{s || "All"}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-slate-600">Site</span>
+              <input type="text" placeholder="e.g. site-a" className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm" value={filters.site ?? ""} onChange={(e) => set("site", e.target.value)} />
+            </label>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard

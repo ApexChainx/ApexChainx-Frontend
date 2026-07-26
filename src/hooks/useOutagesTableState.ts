@@ -47,34 +47,24 @@ export function useFilterPresets() {
   return { presets, savePreset, deletePreset };
 }
 
-export type SortField = "detected_at" | "severity" | "status";
-export type SortOrder = "asc" | "desc";
-
-const VALID_SORT_FIELDS: SortField[] = ["detected_at", "severity", "status"];
-const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
-
-function parseSortField(v: string | null): SortField | undefined {
-  return VALID_SORT_FIELDS.includes(v as SortField) ? (v as SortField) : undefined;
-}
-
-function parseSortOrder(v: string | null): SortOrder {
-  return VALID_SORT_ORDERS.includes(v as SortOrder) ? (v as SortOrder) : "desc";
-}
+import { parseOutagesFilter, type SortField, type SortOrder } from "@/lib/urlState";
 
 // Existing state manager — extended with search + sort + full URL sync (FE-058, FE-059, FE-060)
 export function useOutagesTableState() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const page = Math.max(1, Number(params?.get("page") ?? 1));
-  const pageSize = Number(params?.get("page_size") ?? 10);
-  const severity = params?.get("severity") ?? undefined;
-  const status = params?.get("status") ?? undefined;
+  const filter = parseOutagesFilter(params || new URLSearchParams());
+  
+  const page = filter.page;
+  const pageSize = filter.page_size;
+  const severity = filter.severity;
+  const status = filter.status;
   // FE-058: search query
-  const search = params?.get("search") ?? undefined;
+  const search = filter.search;
   // FE-059: sort field + order
-  const sortField = parseSortField(params?.get("sort_field") ?? null);
-  const sortOrder = parseSortOrder(params?.get("sort_order") ?? null);
+  const sortField = filter.sort_field;
+  const sortOrder = filter.sort_order;
 
   function setParam(key: string, value?: string) {
     const next = new URLSearchParams(params?.toString() ?? "");
