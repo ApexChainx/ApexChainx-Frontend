@@ -114,6 +114,8 @@ export default function OutageDetailsPage() {
       affected_services: outage.affected_services,
       affected_subscribers: outage.affected_subscribers,
       assigned_to: outage.assigned_to,
+      root_cause: outage.root_cause,
+      resolution_notes: outage.resolution_notes,
     });
     setEditing(true);
   }
@@ -292,9 +294,39 @@ export default function OutageDetailsPage() {
               <textarea
                 className="w-full rounded-md border border-slate-200 px-3 py-2"
                 rows={3}
+                maxLength={2000}
                 value={editForm.description ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
+              <div className="text-right text-xs text-slate-500 mt-1">
+                {(editForm.description ?? "").length} / 2000
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block font-medium text-slate-700">Root Cause</label>
+              <textarea
+                className="w-full rounded-md border border-slate-200 px-3 py-2"
+                rows={3}
+                maxLength={2000}
+                value={editForm.root_cause ?? ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, root_cause: e.target.value }))}
+              />
+              <div className="text-right text-xs text-slate-500 mt-1">
+                {(editForm.root_cause ?? "").length} / 2000
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block font-medium text-slate-700">Resolution Notes</label>
+              <textarea
+                className="w-full rounded-md border border-slate-200 px-3 py-2"
+                rows={3}
+                maxLength={2000}
+                value={editForm.resolution_notes ?? ""}
+                onChange={(e) => setEditForm((f) => ({ ...f, resolution_notes: e.target.value }))}
+              />
+              <div className="text-right text-xs text-slate-500 mt-1">
+                {(editForm.resolution_notes ?? "").length} / 2000
+              </div>
             </div>
             <div>
               <label className="mb-1 block font-medium text-slate-700">Affected Services (comma-separated)</label>

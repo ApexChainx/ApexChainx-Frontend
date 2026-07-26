@@ -46,7 +46,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  poweredBy: false,
+  poweredByHeader: false,
   headers: async () => [
     {
       source: "/(.*)",

@@ -74,6 +74,8 @@ export interface OutageUpdate {
   affected_services?: string[];
   affected_subscribers?: number;
   assigned_to?: string;
+  root_cause?: string;
+  resolution_notes?: string;
 }
 
 export interface SlaPreviewPayload {
