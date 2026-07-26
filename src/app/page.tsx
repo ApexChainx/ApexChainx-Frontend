@@ -1,3 +1,4 @@
+"use client";
 /** ApexChain Network Operations Intelligence Platform */
 /** ApexChain Network Operations Intelligence Platform */
 import dynamic from "next/dynamic";

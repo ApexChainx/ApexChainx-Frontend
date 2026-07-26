@@ -153,11 +153,15 @@ export default function NewOutagePage() {
           <textarea
             className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
             rows={3}
+            maxLength={2000}
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             placeholder="Describe the outage…"
             required
           />
+          <div className="text-right text-xs text-slate-500 mt-1">
+            {form.description.length} / 2000
+          </div>
         </div>
 
         <div>

@@ -4,6 +4,18 @@ import { getCookie } from "@/lib/csrf";
 import { normalizeApiError } from "@/lib/errors";
 import { env } from "@/lib/config/env";
 
+const requestCache = new Map<string, Promise<any>>();
+
+export function dedupeByKey<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  if (requestCache.has(key)) {
+    return requestCache.get(key) as Promise<T>;
+  }
+  const promise = fetcher().finally(() => {
+    requestCache.delete(key);
+  });
+  requestCache.set(key, promise);
+  return promise;
+}
 export const TOKEN_KEY = "noc_access_token";
 export const REFRESH_KEY = "noc_refresh_token";
 
