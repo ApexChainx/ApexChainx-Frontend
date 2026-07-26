@@ -2,7 +2,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, dedupeByKey } from "@/lib/api";
 
 type Severity = "critical" | "high" | "medium" | "low";
 
@@ -29,7 +29,7 @@ export function useSlaConfig() {
   return useQuery({
     queryKey: SLA_CONFIG_KEY,
     queryFn: async () => {
-      const { data } = await api.get<SLAConfigMap>("/sla/config");
+      const { data } = await dedupeByKey("/sla/config", () => api.get<SLAConfigMap>("/sla/config"));
       return Object.entries(data)
         .map(([severity, config]) => ({ severity: severity as Severity, ...config }))
         .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
