@@ -155,7 +155,15 @@ export default function PaymentsView() {
   return (
     <div className="space-y-4 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
+          <Link
+            href="/payments/retry-queue"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            Retry Queue
+          </Link>
+        </div>
         <div className="flex items-center gap-3">
           {exportError && <span className="text-xs text-red-600">{exportError}</span>}
           <button

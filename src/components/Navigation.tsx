@@ -1,6 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
+import { useSession } from "@/hooks/useSession";
+import Link from "next/link";
 
 import { useHealth } from "@/hooks/useHealth";
 import { useSession } from "@/hooks/useSession";
@@ -43,6 +45,9 @@ const Navigation = () => {
           <Link href="/payments">{t('common.payments')}</Link>
           <span>|</span>
           <Link href="/setting">{t('common.settings')}</Link>
+          <Link href="/payments/retry-queue">Retry Queue</Link>
+          <span>|</span>
+          <Link href="/setting">Settings</Link>
           {isAdmin && (
             <>
               <span>|</span>
