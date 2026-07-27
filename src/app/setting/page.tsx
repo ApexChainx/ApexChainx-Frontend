@@ -576,15 +576,15 @@ export default function SettingsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Account Session</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{t('settings.accountSession')}</h2>
             <p className="text-sm text-slate-500">
-              Register, sign in, and validate the active backend session.
+              {t('settings.registerSignInValidate')}
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">Register</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.register')}</h3>
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 value={registerForm.full_name}
@@ -594,7 +594,7 @@ export default function SettingsPage() {
                     full_name: event.target.value,
                   }))
                 }
-                placeholder="Full name"
+                placeholder={t('settings.fullName')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -605,7 +605,7 @@ export default function SettingsPage() {
                     email: event.target.value,
                   }))
                 }
-                placeholder="Email"
+                placeholder={t('settings.email')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -617,19 +617,19 @@ export default function SettingsPage() {
                     password: event.target.value,
                   }))
                 }
-                placeholder="Password"
+                placeholder={t('settings.password')}
               />
               <button
                 onClick={handleRegister}
                 disabled={loadingAction === "register"}
                 className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                {loadingAction === "register" ? "Registering..." : "Register account"}
+                {loadingAction === "register" ? `${t('common.loading')}` : t('settings.registerAccount')}
               </button>
             </div>
 
             <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">Login</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.login')}</h3>
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 value={loginForm.email}
@@ -639,7 +639,7 @@ export default function SettingsPage() {
                     email: event.target.value,
                   }))
                 }
-                placeholder="Email"
+                placeholder={t('settings.email')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -651,14 +651,14 @@ export default function SettingsPage() {
                     password: event.target.value,
                   }))
                 }
-                placeholder="Password"
+                placeholder={t('settings.password')}
               />
               <button
                 onClick={handleLogin}
                 disabled={loadingAction === "login"}
                 className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {loadingAction === "login" ? "Signing in..." : "Sign in"}
+                {loadingAction === "login" ? `${t('common.loading')}` : t('settings.signIn')}
               </button>
               <div className="flex gap-2">
                 <button
@@ -666,47 +666,47 @@ export default function SettingsPage() {
                   disabled={loadingAction === "session"}
                   className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
-                  Refresh session
+                  {t('settings.refreshSession')}
                 </button>
                 <button
                   onClick={handleLogout}
                   disabled={loadingAction === "logout"}
                   className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
-                  Logout
+                  {t('settings.logout')}
                 </button>
               </div>
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <h3 className="font-medium text-slate-900">Current user</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.currentUser')}</h3>
             {currentUser ? (
               <dl className="mt-3 grid gap-2 text-slate-600">
                 <div className="flex justify-between gap-4">
-                  <dt>User ID</dt>
+                  <dt>{t('settings.userId')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.id}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt>Email</dt>
+                  <dt>{t('settings.email')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.email}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt>Role</dt>
+                  <dt>{t('settings.role')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.role}</dd>
                 </div>
               </dl>
             ) : (
-              <p className="mt-3 text-slate-500">No active user loaded yet.</p>
+              <p className="mt-3 text-slate-500">{t('settings.noActiveUser')}</p>
             )}
           </div>
         </section>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Wallet Status</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{t('settings.walletStatus')}</h2>
             <p className="text-sm text-slate-500">
-              Create, link, and inspect the operator wallet through the backend bridge.
+              {t('settings.walletBackendBridge')}
             </p>
           </div>
 
