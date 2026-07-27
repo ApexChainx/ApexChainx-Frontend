@@ -37,18 +37,17 @@ const SLATrendChart: React.FC<SLATrendChartProps> = ({ data, onPointClick }) => 
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-semibold text-gray-600 uppercase tracking-wide">
-          SLA Compliance Trend
-        </h3>
-        <p className="text-sm text-gray-500">No trend data available.</p>
-      </div>
-    );
-  }
+    <div className="rounded-xl bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <h3 className="mb-4 text-sm font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+        SLA Compliance Trend
+      </h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400">No trend data available.</p>
+    </div>
+  );
 
   return (
-    <div className="rounded-xl bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-sm font-semibold text-gray-600 uppercase tracking-wide">
+    <div className="rounded-xl bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <h3 className="mb-4 text-sm font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
         SLA Compliance Trend
       </h3>
       <svg viewBox={`0 0 400 ${CHART_HEIGHT}`} className="w-full">
@@ -67,14 +66,14 @@ const SLATrendChart: React.FC<SLATrendChartProps> = ({ data, onPointClick }) => 
               cy={point.y}
               r="4"
               fill="#3b82f6"
-              className={onPointClick ? "cursor-pointer hover:fill-blue-700" : ""}
+              className={onPointClick ? "cursor-pointer hover:fill-blue-700 dark:hover:fill-blue-400" : ""}
               onClick={() => onPointClick?.(point.data)}
             />
             <text
               x={point.x}
               y={CHART_HEIGHT - 5}
               textAnchor="middle"
-              className="text-[8px] fill-gray-500"
+              className="text-[8px] fill-gray-500 dark:fill-gray-400"
             >
               {point.data.period}
             </text>
@@ -82,7 +81,7 @@ const SLATrendChart: React.FC<SLATrendChartProps> = ({ data, onPointClick }) => 
               x={point.x}
               y={point.y - 8}
               textAnchor="middle"
-              className="text-[8px] fill-gray-600"
+              className="text-[8px] fill-gray-600 dark:fill-gray-300"
             >
               {clampPercentage(point.data.compliance_percentage).toFixed(0)}%
             </text>
