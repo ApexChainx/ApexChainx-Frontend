@@ -1,9 +1,9 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
@@ -12,7 +12,6 @@ import type { PaginatedPayments, Payment } from "@/types/payment";
 
 type SortKey = "created_at" | "amount" | "status";
 type SortDir = "asc" | "desc";
-type Density = "default" | "compact";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-green-100 text-green-700",
