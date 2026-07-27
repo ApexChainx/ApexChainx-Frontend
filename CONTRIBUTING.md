@@ -206,6 +206,57 @@ Then open a pull request on GitHub with:
 - **Extract reusable logic** into custom hooks
 - **PropTypes or TypeScript interfaces** for all components
 
+### Modifying Services
+
+The frontend's service layer (`src/services/`) acts as the **API boundary** between the frontend application and the backend API. All API communication must flow through these service modules - no direct API calls from components.
+
+**Key References**:
+- [docs/api-types.md](./docs/api-types.md) - Comprehensive type synchronization strategy and type safety rules
+- [docs/API.md](./docs/API.md) - Complete backend API documentation with request/response schemas
+
+#### Type Safety Rules for API Responses
+
+**❌ BANNED: Type assertions on raw API responses**
+Never use `as SomeType` casts to force TypeScript to accept raw API responses. This bypasses TypeScript's type checking and can lead to silent runtime failures when API shapes change.
+
+```typescript
+// ❌ NEVER DO THIS
+const data = await api.get('/outages') as Outage[];
+```
+
+**✅ DO: Use typed generics**
+Always use the API client's built-in generic support to let TypeScript enforce type safety at compile time:
+
+```typescript
+// ✅ Correct approach - TypeScript validates the response shape
+const data = await api.get<Outage[]>('/outages');
+```
+
+#### Type Source of Truth
+The backend (`apexchainx-backend`) owns the **canonical API contract**. Frontend types must mirror the backend's response shapes.
+
+1. **Generated types (preferred)**: When the backend's OpenAPI spec is available, run `npm run codegen` to automatically generate types in `src/types/api.generated.ts`
+2. **Manual sync (fallback)**: Until OpenAPI codegen is fully implemented, manually update types in `src/types/` when backend response shapes change
+3. **CI enforcement**: The codegen-check.yml workflow automatically detects type drift between frontend and backend
+
+#### Always Re-export Generated Types
+Manual type files in `src/types/` should re-export from the generated types module to maintain consistency:
+
+```typescript
+// src/types/outages.ts
+export type { components } from "./api.generated";
+export type Outage = components["schemas"]["Outage"];
+```
+
+#### Checklist for Service Modifications
+Before submitting any changes to service modules:
+- [ ] All API responses use typed generics, never `as` type assertions
+- [ ] Types match the current backend API schema (see [docs/API.md](./docs/API.md))
+- [ ] Optional fields are correctly marked with `?`
+- [ ] New fields are added to types before using them in components
+- [ ] `npm run build` and `npm run type-check` pass with no errors
+- [ ] `npm run codegen` has been run if backend schema changed
+
 **Example:**
 ```typescript
 import { useState } from 'react';
