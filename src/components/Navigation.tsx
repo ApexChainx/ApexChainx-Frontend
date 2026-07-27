@@ -1,11 +1,10 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useSession } from "@/hooks/useSession";
-import Link from "next/link";
-
 import { useHealth } from "@/hooks/useHealth";
 import { useSession } from "@/hooks/useSession";
+import { STELLAR_NETWORK } from "@/lib/explorer";
+import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
 
 // Routes only visible to admin users
@@ -36,6 +35,11 @@ const Navigation = () => {
             }`}
             title={`${t('navigation.systemHealth')}: ${status}`}
           />
+          {STELLAR_NETWORK === "mainnet" && (
+            <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-white animate-pulse">
+              MAINNET
+            </span>
+          )}
           <Link href="/">{t('common.dashboard')}</Link>
           <span>|</span>
           <Link href="/outages">{t('common.outages')}</Link>
@@ -45,9 +49,8 @@ const Navigation = () => {
           <Link href="/payments">{t('common.payments')}</Link>
           <span>|</span>
           <Link href="/setting">{t('common.settings')}</Link>
-          <Link href="/payments/retry-queue">Retry Queue</Link>
           <span>|</span>
-          <Link href="/setting">Settings</Link>
+          <Link href="/payments/retry-queue">Retry Queue</Link>
           {isAdmin && (
             <>
               <span>|</span>

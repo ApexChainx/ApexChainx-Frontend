@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
+import { explorerLink } from "@/lib/explorer";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 
 function getErrorMessage(err: unknown) {
@@ -435,9 +436,41 @@ export default function OutageDetailsPage() {
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">From</span>
+                  <span className="break-all text-right font-mono text-xs text-slate-900">
+                    {explorerLink("account", resolutionPayment.from_address) ? (
+                      <a href={explorerLink("account", resolutionPayment.from_address)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" title={resolutionPayment.from_address}>
+                        {resolutionPayment.from_address.slice(0, 8)}…{resolutionPayment.from_address.slice(-6)}
+                      </a>
+                    ) : (
+                      resolutionPayment.from_address
+                    )}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">To</span>
+                  <span className="break-all text-right font-mono text-xs text-slate-900">
+                    {explorerLink("account", resolutionPayment.to_address) ? (
+                      <a href={explorerLink("account", resolutionPayment.to_address)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" title={resolutionPayment.to_address}>
+                        {resolutionPayment.to_address.slice(0, 8)}…{resolutionPayment.to_address.slice(-6)}
+                      </a>
+                    ) : (
+                      resolutionPayment.to_address
+                    )}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Transaction</span>
                   <span className="break-all text-right font-mono text-xs text-slate-900">
-                    {resolutionPayment.transaction_hash}
+                    {explorerLink("tx", resolutionPayment.transaction_hash) ? (
+                      <a href={explorerLink("tx", resolutionPayment.transaction_hash)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" title={resolutionPayment.transaction_hash}>
+                        {resolutionPayment.transaction_hash.slice(0, 8)}…{resolutionPayment.transaction_hash.slice(-6)}
+                      </a>
+                    ) : (
+                      resolutionPayment.transaction_hash
+                    )}
                   </span>
                 </div>
               </>

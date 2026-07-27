@@ -16,6 +16,7 @@ import { api } from "@/lib/api";
 import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
+import { useUsdRates } from "@/hooks/useUsdRates";
 import { useRouter } from "next/navigation";
 
 type AuthUser = {
@@ -218,6 +219,16 @@ export default function SettingsPage() {
     return walletStatus.usable ? "text-emerald-600" : "text-amber-600";
   }, [walletStatus]);
   const walletAddress = wallet?.public_key ?? walletStatus?.public_key ?? walletForm.public_key;
+
+  // USD rates for balance conversion (mainnet only)
+  const { rates: usdRates, loading: usdRatesLoading } = useUsdRates();
+
+  function getUsdValue(assetCode: string, balance: string): string | null {
+    if (!usdRates || !usdRates[assetCode]) return null;
+    const numBalance = parseFloat(balance);
+    if (isNaN(numBalance)) return null;
+    return (numBalance * usdRates[assetCode]).toFixed(2);
+  }
 
   async function handleRegister() {
     setLoadingAction("register");
@@ -974,15 +985,23 @@ export default function SettingsPage() {
             <h3 className="font-medium text-slate-900">Balances</h3>
             {walletBalance ? (
               <div className="mt-3 grid gap-2">
-                {Object.entries(walletBalance.balances).map(([asset, balance]) => (
+                {Object.entries(walletBalance.balances).map(([asset, balance]) => {
+                  const usdValue = getUsdValue(asset, balance.balance);
+                  return (
                   <div
                     key={asset}
                     className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
                   >
-                    <span className="font-medium text-slate-900">{asset}</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-900">{asset}</span>
+                      {usdValue && (
+                        <span className="text-xs text-emerald-600">≈ ${usdValue} USD</span>
+                      )}
+                    </div>
                     <span className="text-slate-600">{balance.balance}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="mt-3 text-slate-500">No balance data loaded yet.</p>
