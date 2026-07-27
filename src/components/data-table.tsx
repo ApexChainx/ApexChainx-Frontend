@@ -305,6 +305,27 @@ export function DataTable<TData, TValue>({
   const visibleLeafColumns = leafColumns.filter((c) => c.getIsVisible());
   const colSpan = visibleLeafColumns.length || 1;
 
+  /* ─── Virtualizer ───────────────────────────────────────────────── */
+  const shouldVirtualize = !!(virtualized && rows.length > VIRTUALIZATION_THRESHOLD && !loading);
+
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? rows.length : 0,
+    getScrollElement: () => {
+      // Walk up from the table body to find the scrollable container.
+      // The container is the outermost div of the table wrapper.
+      return tableContainerRef.current;
+    },
+    estimateSize: () => ROW_ESTIMATED_HEIGHT[density] ?? 48,
+    overscan: OVERSCAN,
+    getItemKey: (index) => {
+      const row = rows[index];
+      return row?.id ?? String(index);
+    },
+  });
+
+  const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
+  const totalSize = shouldVirtualize ? rowVirtualizer.getTotalSize() : 0;
+
   return (
     <div className={`space-y-3 ${className ?? ""}`}>
       {/* Toolbar */}
@@ -322,63 +343,130 @@ export function DataTable<TData, TValue>({
       )}
 
       {/* Table */}
-      <div className="rounded-lg border border-slate-200 overflow-hidden">
+      <div 
+        ref={tableContainerRef}
+        className={`rounded-lg border border-slate-200 overflow-hidden ${
+          shouldVirtualize ? "overflow-auto" : ""
+        }`}
+        style={shouldVirtualize ? { maxHeight: '600px' } : undefined}
+      >
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              {headerGroups.map((hg) => (
-                <TableRow key={hg.id} className="bg-slate-50 hover:bg-slate-50">
-                  {hg.headers.map((h) => {
-                    const canSort = h.column.getCanSort();
-                    const sortDir = h.column.getIsSorted();
-                    
-                    return (
-                      <TableHead 
-                        key={h.id} 
-                        className={`${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap ${
-                          canSort ? "cursor-pointer select-none group" : ""
-                        }`}
-                        onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
-                        aria-sort={
-                          sortDir === "asc" ? "ascending" : 
-                          sortDir === "desc" ? "descending" : "none"
-                        }
-                      >
-                        <div className="flex items-center gap-1.5">
-                          {flexRender(h.column.columnDef.header, h.getContext())}
-                          {canSort && <SortIcon direction={sortDir} />}
-                        </div>
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableSkeleton columns={colSpan} density={density} />
-              ) : rows.length === 0 ? (
-                <EmptyState colSpan={colSpan} message={emptyMessage} />
-              ) : (
-                rows.map((row) => (
-                  <TableRow 
-                    key={row.id} 
-                    className={`transition-colors ${
-                      row.getIsSelected() ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-slate-50"
-                    } ${enableRowSelection ? "cursor-pointer" : ""}`}
-                    onClick={enableRowSelection ? row.getToggleSelectedHandler() : undefined}
-                    data-state={row.getIsSelected() ? "selected" : undefined}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className={`${config.padding} ${config.textSize}`}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
+          {shouldVirtualize ? (
+            /* ── Virtualized Table ── */
+            <table className="w-full caption-bottom text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50">
+                {headerGroups.map((hg) => (
+                  <tr key={hg.id} className="flex">
+                    {hg.headers.map((h) => {
+                      const canSort = h.column.getCanSort();
+                      const sortDir = h.column.getIsSorted();
+                      
+                      return (
+                        <th 
+                          key={h.id} 
+                          className={`flex-1 min-w-0 ${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap text-left ${
+                            canSort ? "cursor-pointer select-none group" : ""
+                          }`}
+                          onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
+                          aria-sort={
+                            sortDir === "asc" ? "ascending" : 
+                            sortDir === "desc" ? "descending" : "none"
+                          }
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {flexRender(h.column.columnDef.header, h.getContext())}
+                            {canSort && <SortIcon direction={sortDir} />}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+              <tbody style={{ display: 'block', height: `${totalSize}px`, position: 'relative' }}>
+                {virtualRows.map((virtualRow) => {
+                  const row = rows[virtualRow.index];
+                  return (
+                    <tr 
+                      key={row.id}
+                      className={`flex transition-colors absolute left-0 right-0 ${
+                        row.getIsSelected() ? "bg-blue-50" : "hover:bg-slate-50"
+                      } ${enableRowSelection ? "cursor-pointer" : ""}`}
+                      style={{
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                      onClick={enableRowSelection ? row.getToggleSelectedHandler() : undefined}
+                      data-state={row.getIsSelected() ? "selected" : undefined}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className={`flex-1 min-w-0 ${config.padding} ${config.textSize}`}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            /* ── Normal Table ── */
+            <Table>
+              <TableHeader>
+                {headerGroups.map((hg) => (
+                  <TableRow key={hg.id} className="bg-slate-50 hover:bg-slate-50">
+                    {hg.headers.map((h) => {
+                      const canSort = h.column.getCanSort();
+                      const sortDir = h.column.getIsSorted();
+                      
+                      return (
+                        <TableHead 
+                          key={h.id} 
+                          className={`${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap ${
+                            canSort ? "cursor-pointer select-none group" : ""
+                          }`}
+                          onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
+                          aria-sort={
+                            sortDir === "asc" ? "ascending" : 
+                            sortDir === "desc" ? "descending" : "none"
+                          }
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {flexRender(h.column.columnDef.header, h.getContext())}
+                            {canSort && <SortIcon direction={sortDir} />}
+                          </div>
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableSkeleton columns={colSpan} density={density} />
+                ) : rows.length === 0 ? (
+                  <EmptyState colSpan={colSpan} message={emptyMessage} />
+                ) : (
+                  rows.map((row) => (
+                    <TableRow 
+                      key={row.id} 
+                      className={`transition-colors ${
+                        row.getIsSelected() ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-slate-50"
+                      } ${enableRowSelection ? "cursor-pointer" : ""}`}
+                      onClick={enableRowSelection ? row.getToggleSelectedHandler() : undefined}
+                      data-state={row.getIsSelected() ? "selected" : undefined}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className={`${config.padding} ${config.textSize}`}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </div>
       </div>
 
