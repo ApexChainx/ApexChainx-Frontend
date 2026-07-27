@@ -1,7 +1,7 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   DropdownMenu,
@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
+import { useStellarHealth } from "@/hooks/useStellarHealth";
 import { api } from "@/lib/api";
+import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { useRouter } from "next/navigation";
@@ -80,6 +82,10 @@ export default function SettingsPage() {
   const [sessionActionFeedback, setSessionActionFeedback] = useState<string | null>(null);
   const [sessionActionError, setSessionActionError] = useState<string | null>(null);
   const [theme, setTheme] = useState<string>("system");
+
+  // Issue #128 — Stellar Horizon reachability + latency
+  const stellarHealth = useStellarHealth();
+  const isHorizonUnreachable = stellarHealth.status === "unreachable";
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -663,6 +669,20 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* ------------------------------------------------------------------ */}
+      {/* Issue #128 / #129 — Stellar Network Status + SLA Contract ID      */}
+      {/* ------------------------------------------------------------------ */}
+      <StellarHealthCard
+        horizonStatus={stellarHealth.status}
+        latencyMs={stellarHealth.latencyMs}
+        network={env.STELLAR_NETWORK}
+      />
+
+      <SLAContractIdCard
+        contractId={env.SLA_CONTRACT_ID}
+        network={env.STELLAR_NETWORK}
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
@@ -856,29 +876,33 @@ export default function SettingsPage() {
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               onClick={handleCreateWallet}
-              disabled={loadingAction === "create-wallet"}
+              disabled={loadingAction === "create-wallet" || isHorizonUnreachable}
               className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Create wallet"}
             >
               {loadingAction === "create-wallet" ? "Creating..." : "Create wallet"}
             </button>
             <button
               onClick={handleLinkWallet}
-              disabled={loadingAction === "link-wallet"}
+              disabled={loadingAction === "link-wallet" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Link wallet"}
             >
               {loadingAction === "link-wallet" ? "Linking..." : "Link wallet"}
             </button>
             <button
               onClick={handleLoadWalletDetails}
-              disabled={loadingAction === "wallet-details"}
+              disabled={loadingAction === "wallet-details" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load wallet details"}
             >
               {loadingAction === "wallet-details" ? "Loading..." : "Load wallet details"}
             </button>
             <button
               onClick={handleLoadBalance}
-              disabled={loadingAction === "wallet-balance"}
+              disabled={loadingAction === "wallet-balance" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load balance"}
             >
               {loadingAction === "wallet-balance" ? "Loading..." : "Load balance"}
             </button>
@@ -1005,5 +1029,192 @@ export default function SettingsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Issue #128 — Stellar Network Health Card                                   */
+/* -------------------------------------------------------------------------- */
+
+function StellarHealthCard({
+  horizonStatus,
+  latencyMs,
+  network,
+}: {
+  horizonStatus: string;
+  latencyMs: number | null;
+  network: string;
+}) {
+  const isReachable = horizonStatus === "reachable";
+  const isChecking = horizonStatus === "checking";
+
+  const statusIcon = isChecking ? (
+    <div className="h-3 w-3 animate-pulse rounded-full bg-amber-400" />
+  ) : isReachable ? (
+    <div className="h-3 w-3 rounded-full bg-emerald-500" />
+  ) : (
+    <div className="h-3 w-3 rounded-full bg-red-500" />
+  );
+
+  const statusLabel = isChecking
+    ? "Checking..."
+    : isReachable
+    ? "Reachable"
+    : "Unreachable";
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">
+            Stellar Network Status
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Horizon endpoint health check for the {network} network
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+          {statusIcon}
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Latency
+          </p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">
+            {isChecking
+              ? "—"
+              : latencyMs !== null
+              ? `${latencyMs} ms`
+              : "N/A"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Network
+          </p>
+          <p className="mt-1 text-lg font-semibold text-slate-900 capitalize">
+            {network}
+          </p>
+        </div>
+      </div>
+
+      {!isReachable && !isChecking && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="font-medium">Horizon is unreachable</p>
+          <p className="mt-1 text-red-600">
+            Stellar network actions (wallet creation, payments) are currently
+            unavailable. Please check your network connection or the Horizon
+            endpoint configuration.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Issue #129 — SLA Contract ID Card                                         */
+/* -------------------------------------------------------------------------- */
+
+/** Canonical SLA contract IDs published for each network */
+const CANONICAL_SLA_CONTRACT_IDS: Record<string, string> = {
+  testnet: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+  // TODO: replace the placeholder below with the actual published mainnet
+  //       contract ID from the DOCS.md once it is confirmed.
+  mainnet: "PLACEHOLDER_MAINNET_CONTRACT_ID_CHANGE_ME",
+};
+
+function SLAContractIdCard({
+  contractId,
+  network,
+}: {
+  contractId: string;
+  network: string;
+}) {
+  const canonicalId = CANONICAL_SLA_CONTRACT_IDS[network];
+  const isMismatch = canonicalId && contractId !== canonicalId;
+
+  const truncatedId =
+    contractId && contractId.length > 10
+      ? `${contractId.slice(0, 6)}...${contractId.slice(-4)}`
+      : contractId;
+
+  const canonicalTruncated =
+    canonicalId && canonicalId.length > 10
+      ? `${canonicalId.slice(0, 6)}...${canonicalId.slice(-4)}`
+      : canonicalId;
+
+  return (
+    <section
+      className={`rounded-2xl border p-6 shadow-sm ${
+        isMismatch
+          ? "border-red-200 bg-red-50"
+          : "border-slate-200 bg-white"
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">
+            SLA Contract ID
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Resolved smart contract identifier used for SLA calculation calls
+          </p>
+        </div>
+        {canonicalId && !isMismatch && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Verified
+          </span>
+        )}
+        {isMismatch && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Mismatch
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Resolved Contract ID
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
+            {truncatedId || "Not configured"}
+          </p>
+        </div>
+        {canonicalId && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Expected ({network})
+            </p>
+            <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
+              {canonicalTruncated}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {isMismatch && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="font-medium">Contract ID Mismatch</p>
+          <p className="mt-1 text-red-600">
+            The configured SLA contract ID does not match the canonical published
+            contract ID for the {network} network. Double-check your
+            NEXT_PUBLIC_SLA_CONTRACT_ID environment variable to ensure it points
+            to the correct contract.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }

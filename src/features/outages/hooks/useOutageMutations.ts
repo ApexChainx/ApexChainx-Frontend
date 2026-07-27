@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { deleteOutage, getOutage, resolveOutage } from "@/services/outages";
+import { slaEventKeys } from "@/lib/query-keys";
+import { useInvalidateOnResolve } from "./useInvalidateOnResolve";
 
-export const outageKeys = {
-  all: ["outages"] as const,
-  detail: (id: string) => ["outages", id] as const,
-};
+/**
+ * Re-export slaEventKeys.outages as outageKeys so existing imports continue
+ * to work without changes. All consumers get the full SLA_EVENTS key family.
+ */
+export const outageKeys = slaEventKeys.outages;
 
 export function useOutage(id: string) {
   return useQuery({
-    queryKey: outageKeys.detail(id),
+    queryKey: slaEventKeys.outages.detail(id),
     queryFn: () => getOutage(id),
     enabled: !!id,
     refetchOnWindowFocus: true,
@@ -21,12 +24,15 @@ export function useOutage(id: string) {
 
 export function useResolveOutage(id: string) {
   const qc = useQueryClient();
+  const invalidateAll = useInvalidateOnResolve();
+
   return useMutation({
     mutationFn: (mttrMinutes: number) =>
       resolveOutage(id, { mttr_minutes: mttrMinutes }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: outageKeys.detail(id) });
-      void qc.invalidateQueries({ queryKey: outageKeys.all });
+      // Bust the entire SLA_EVENTS family so every dashboard, payment
+      // list and dispute panel reflects the new state immediately.
+      void invalidateAll();
     },
   });
 }
@@ -36,7 +42,8 @@ export function useDeleteOutage() {
   return useMutation({
     mutationFn: (id: string) => deleteOutage(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: outageKeys.all });
+      void qc.invalidateQueries({ queryKey: slaEventKeys.outages.all });
     },
   });
 }
+
