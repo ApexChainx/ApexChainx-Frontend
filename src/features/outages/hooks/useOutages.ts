@@ -1,6 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 
 import { fetchOutages } from "@/lib/outages";
+import { persistedCache } from "@/lib/persisted-cache";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
 
 export interface UseOutagesParams {
@@ -14,22 +17,72 @@ export interface UseOutagesParams {
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
+const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
+
+function cacheKey(params: UseOutagesParams): string {
+  return `outages:${JSON.stringify(params)}`;
+}
 
 export function useOutages(params: UseOutagesParams = {}) {
-  const normalizedParams: UseOutagesParams = {
-    page: params.page ?? DEFAULT_PAGE,
-    page_size: params.page_size ?? DEFAULT_PAGE_SIZE,
-    severity: params.severity?.trim() || undefined,
-    status: params.status?.trim() || undefined,
-    search: params.search?.trim() || undefined,
-    sort: params.sort?.trim() || undefined,
-  };
+  const queryClient = useQueryClient();
+  const hydratedRef = useRef(false);
 
-  return useQuery<PaginatedOutages, Error>({
-    queryKey: ["outages", normalizedParams],
+  const normalizedParams = useMemo<UseOutagesParams>(
+    () => ({
+      page: params.page ?? DEFAULT_PAGE,
+      page_size: params.page_size ?? DEFAULT_PAGE_SIZE,
+      severity: params.severity?.trim() || undefined,
+      status: params.status?.trim() || undefined,
+      search: params.search?.trim() || undefined,
+      sort: params.sort?.trim() || undefined,
+    }),
+    [params.page, params.page_size, params.severity, params.status, params.search, params.sort],
+  );
 
-    queryFn: ({ signal }) =>
-      fetchOutages(normalizedParams, { signal }),
+  const queryKey = useMemo(
+    () => slaEventKeys.outages.list(normalizedParams),
+    [normalizedParams],
+  );
+  const cacheKeyStr = useMemo(() => cacheKey(normalizedParams), [normalizedParams]);
+
+  // Hydrate from IndexedDB on first mount (offline-first)
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    let mounted = true;
+
+    persistedCache.get<PaginatedOutages>(cacheKeyStr).then((cached) => {
+      if (!mounted) return;
+      if (cached && cached.items.length > 0) {
+        // Only set query data if there's no existing data yet
+        const existing = queryClient.getQueryData<PaginatedOutages>(queryKey);
+        if (!existing || existing.items.length === 0) {
+          queryClient.setQueryData(queryKey, cached);
+        }
+      }
+    }).catch(() => {
+      // Silently ignore — fall back to network fetch
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [queryClient, queryKey, cacheKeyStr]);
+
+  const query = useQuery<PaginatedOutages, Error>({
+    queryKey,
+
+    queryFn: async ({ signal }) => {
+      const data = await fetchOutages(normalizedParams, { signal });
+
+      // Persist successful fetches to IndexedDB
+      if (data && data.items.length > 0) {
+        void persistedCache.set(cacheKeyStr, data, CACHE_TTL_MS);
+      }
+
+      return data;
+    },
 
     placeholderData: keepPreviousData,
 
@@ -48,4 +101,6 @@ export function useOutages(params: UseOutagesParams = {}) {
       items: data.items ?? [],
     }),
   });
+
+  return query;
 }
