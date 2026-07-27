@@ -3,7 +3,14 @@
 
 import { useMemo, useState } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useSession } from "@/hooks/useSession";
+import { useI18n } from "@/i18n/i18n";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
@@ -375,10 +382,10 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Settings and Wallet Control
+          {t('settings.walletControl')}
         </h1>
         <p className="text-sm text-slate-500">
-          Manage operator session state, register or sign in, and check wallet readiness from the live backend.
+          {t('settings.manageSessionWallet')}
         </p>
       </div>
 
