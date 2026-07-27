@@ -80,12 +80,14 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <ReactQueryProvider>
           <SessionProvider>
             <ToastProvider>
-              <RouteGuard>
-                <Navigation />
-                <main id="main-content" role="main">
-                  {children}
-                </main>
-              </RouteGuard>
+              <I18nProvider>
+                <RouteGuard>
+                  <Navigation />
+                  <main id="main-content" role="main">
+                    {children}
+                  </main>
+                </RouteGuard>
+              </I18nProvider>
             </ToastProvider>
           </SessionProvider>
         </ReactQueryProvider>
