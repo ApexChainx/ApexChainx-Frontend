@@ -6,8 +6,14 @@ import { useRef, useState, useCallback, useId } from "react";
 
 import { bulkImportOutages } from "@/services/bulkImportService";
 import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
+import { STELLAR_NETWORK } from "@/lib/explorer";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+const ALLOW_BULK = process.env.NEXT_PUBLIC_ALLOW_BULK === "1";
+const IS_MAINNET = STELLAR_NETWORK === "mainnet";
+// On mainnet, bulk operations require explicit ALLOW_BULK=1 opt-in
+const BULK_DISABLED = IS_MAINNET && !ALLOW_BULK;
 const ACCEPTED_TYPES = ["text/csv", "application/json"] as const;
 const ACCEPTED_EXTENSIONS = [".csv", ".json"] as const;
 const MAX_PREVIEW_ROWS = 5;
@@ -446,6 +452,28 @@ export default function BulkImportView() {
 
   const hasBlockingErrors = (preview?.errors.length ?? 0) > 0;
   const isProcessing = status === "uploading" || status === "validating";
+
+  // Mainnet bulk safety gate — early return with disabled message
+  if (BULK_DISABLED) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-gray-800">Bulk Outage Import</h1>
+        </div>
+        <div className="rounded-xl border-2 border-red-200 bg-red-50 p-6 text-center">
+          <svg className="mx-auto mb-3 h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m9.364-6.364a9 9 0 11-12.728 0 9 9 0 0112.728 0zM12 9v2m0 4h.01" />
+          </svg>
+          <h2 className="text-lg font-semibold text-red-700">Bulk Operations Disabled</h2>
+          <p className="mt-2 text-sm text-red-600">
+            Bulk import is not available on <strong>mainnet</strong> for safety reasons.
+            Set <code className="rounded bg-red-100 px-1 py-0.5 font-mono text-xs">NEXT_PUBLIC_ALLOW_BULK=1</code>{" "}
+            in your environment to enable this feature.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">

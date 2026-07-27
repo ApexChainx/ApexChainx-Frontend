@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { explorerLink } from "@/lib/explorer";
 import { fetchPayment, retryPayment, reconcilePayment } from "@/services/paymentService";
 import type { Payment } from "@/types/payment";
+import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
@@ -23,6 +24,9 @@ const PAYMENT_TYPE_STYLES = {
   reward: "bg-blue-100 text-blue-700 border-blue-200",
   standard: "bg-slate-100 text-slate-700 border-slate-200",
 } as const;
+
+const HIGH_VALUE_THRESHOLD = 10_000; // $10,000
+const CONFIRM_PHRASE = "CONFIRM";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ActionType = "retry" | "reconcile";
@@ -138,6 +142,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionState, setActionState] = useState<ActionState | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ActionType | null>(null);
   
   const toast = useToast();
   const abortRef = useRef<AbortController | null>(null);
@@ -181,7 +186,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
   }, [paymentId, loadPayment]);
 
   // ─── Actions ───────────────────────────────────────────────────────────────
-  const handleAction = useCallback(async (type: ActionType) => {
+  const executeAction = useCallback(async (type: ActionType) => {
     if (!payment) return;
     
     setActionState({ type, status: "loading" });
@@ -202,6 +207,25 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
       toast(message, "error");
     }
   }, [payment, toast]);
+
+  const handleAction = useCallback((type: ActionType) => {
+    if (!payment) return;
+    
+    // Require typed confirmation for high-value transactions (>= $10,000)
+    if (payment.amount >= HIGH_VALUE_THRESHOLD) {
+      setConfirmDialog(type);
+      return;
+    }
+    
+    void executeAction(type);
+  }, [payment, executeAction]);
+
+  const handleConfirmAction = useCallback(() => {
+    if (confirmDialog) {
+      setConfirmDialog(null);
+      void executeAction(confirmDialog);
+    }
+  }, [confirmDialog, executeAction]);
 
   const handleRetryLoad = useCallback(() => {
     if (!paymentId) return;
@@ -404,6 +428,19 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
           )}
         </div>
       </aside>
+
+      {/* High-value typed confirmation dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog !== null}
+        title="Confirm High-Value Action"
+        message={`This payment of $${payment?.amount.toLocaleString() ?? "0"} exceeds the $${HIGH_VALUE_THRESHOLD.toLocaleString()} threshold. Please type "${CONFIRM_PHRASE}" to proceed with the ${confirmDialog === "retry" ? "retry" : "reconciliation"}.`}
+        confirmPhrase={CONFIRM_PHRASE}
+        confirmLabel={confirmDialog === "retry" ? "Confirm Retry" : "Confirm Reconcile"}
+        loading={actionState?.status === "loading"}
+        variant={confirmDialog === "retry" ? "primary" : "primary"}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </>
   );
 }
