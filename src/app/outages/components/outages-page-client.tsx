@@ -335,6 +335,29 @@ export default function OutagesPageClient({ data }: Props) {
   // -----------------------------
   return (
     <div className="space-y-6">
+      {/* Bulk action notification */}
+      {selectedIds.length > 0 && (
+        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 flex items-center justify-between">
+          <p className="text-sm text-blue-800 dark:text-blue-300">
+            <span className="font-semibold">{selectedIds.length}</span> outage{selectedIds.length !== 1 ? 's' : ''} selected
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setBulkAssignOpen(true)}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Bulk Assign
+            </button>
+            <button
+              onClick={() => setBulkResolveOpen(true)}
+              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              Bulk Resolve
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <input
@@ -342,7 +365,7 @@ export default function OutagesPageClient({ data }: Props) {
           placeholder="Search outages..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border rounded-md px-3 py-2 w-full sm:max-w-sm"
+          className="border rounded-md px-3 py-2 w-full sm:max-w-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white"
         />
 
         <div className="flex gap-2">
@@ -351,7 +374,7 @@ export default function OutagesPageClient({ data }: Props) {
             onChange={(e) =>
               setSortBy(e.target.value as "date" | "title")
             }
-            className="border rounded-md px-3 py-2"
+            className="border rounded-md px-3 py-2 dark:bg-slate-800 dark:border-slate-600 dark:text-white"
           >
             <option value="date">Newest</option>
             <option value="title">Title</option>
@@ -359,7 +382,7 @@ export default function OutagesPageClient({ data }: Props) {
 
           <button
             onClick={handleExport}
-            className="px-4 py-2 border rounded-md"
+            className="px-4 py-2 border rounded-md dark:border-slate-600 dark:text-white"
           >
             Export
           </button>
@@ -374,28 +397,78 @@ export default function OutagesPageClient({ data }: Props) {
         </div>
       </div>
 
+      {/* List header with select all */}
+      {filteredData.length > 0 && (
+        <div className="flex items-center gap-3 px-1">
+          <input
+            type="checkbox"
+            checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+            onChange={toggleSelectAll}
+            className="h-4 w-4"
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-400">
+            Select all ({filteredData.length})
+          </span>
+        </div>
+      )}
+
       {/* List */}
       <div className="grid gap-4">
         {filteredData.map((item) => (
           <div
             key={item.id}
-            className="border rounded-lg p-4 flex items-center justify-between"
+            className="border rounded-lg p-4 flex items-center justify-between dark:bg-slate-900 dark:border-slate-700"
           >
             <div>
-              <h3 className="font-medium">{item.title}</h3>
-              <p className="text-sm text-muted-foreground">
-                {new Date(item.createdAt).toLocaleString()}
-              </p>
+              <h3 className="font-medium text-slate-900 dark:text-white">{item.title}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {new Date(item.createdAt).toLocaleString()}
+                </p>
+                {item.assigned_to && (
+                  <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">
+                    Assigned: {item.assigned_to}
+                  </span>
+                )}
+              </div>
             </div>
 
             <input
               type="checkbox"
               checked={selectedIds.includes(item.id)}
               onChange={() => toggleSelect(item.id)}
+              className="h-4 w-4"
             />
           </div>
         ))}
       </div>
+
+      {/* Bulk modals */}
+      <BulkResolveModal
+        isOpen={bulkResolveOpen}
+        selectedIds={selectedIds}
+        selectedOutages={selectedOutages}
+        isResolving={isProcessing}
+        error={error}
+        onClose={() => {
+          setBulkResolveOpen(false);
+          setError(null);
+        }}
+        onConfirmResolve={handleBulkResolve}
+      />
+
+      <BulkAssignModal
+        isOpen={bulkAssignOpen}
+        selectedIds={selectedIds}
+        selectedOutages={selectedOutages}
+        isAssigning={isProcessing}
+        error={error}
+        onClose={() => {
+          setBulkAssignOpen(false);
+          setError(null);
+        }}
+        onConfirmAssign={handleBulkAssign}
+      />
     </div>
   );
 }
