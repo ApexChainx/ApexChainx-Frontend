@@ -3,10 +3,10 @@
 
 import { useMemo, useState } from "react";
 
+import { useSession } from "@/hooks/useSession";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
-import { useSession } from "@/hooks/useSession";
 import { useRouter } from "next/navigation";
 
 type AuthUser = {

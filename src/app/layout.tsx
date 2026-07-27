@@ -1,12 +1,12 @@
 import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
-import "./globals.css";
-import "@/lib/register-sw";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+import { ToastProvider } from "@/components/ui/toast";
+import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
 import { SessionProvider } from "@/providers/session";
-import { ToastProvider } from "@/components/ui/toast";
+import "./globals.css";
 
 export const metadata = {
   title: {
@@ -68,6 +68,25 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <meta
           httpEquiv="Content-Security-Policy"
           content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                function getTheme() {
+                  const stored = localStorage.getItem('theme');
+                  if (stored) return stored;
+                  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                const theme = getTheme();
+                if (theme === 'dark') {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              })();
+            `
+          }}
         />
       </head>
       <body>
