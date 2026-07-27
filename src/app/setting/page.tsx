@@ -397,13 +397,13 @@ export default function SettingsPage() {
 
       {/* FE-056: Account profile section */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Account Profile</h2>
-        <p className="mt-1 text-sm text-slate-500">Current session identity and metadata.</p>
+        <h2 className="text-xl font-semibold text-slate-900">{t('settings.accountProfile')}</h2>
+        <p className="mt-1 text-sm text-slate-500">{t('settings.currentSessionIdentity')}</p>
         {sessionState === "loading" && (
-          <p className="mt-4 text-sm text-slate-400">Loading session…</p>
+          <p className="mt-4 text-sm text-slate-400">{t('settings.loadingSession')}</p>
         )}
         {sessionState === "unauthenticated" && (
-          <p className="mt-4 text-sm text-slate-500">Not signed in.</p>
+          <p className="mt-4 text-sm text-slate-500">{t('settings.notSignedIn')}</p>
         )}
         {sessionState === "authenticated" && sessionUser && (
           <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
