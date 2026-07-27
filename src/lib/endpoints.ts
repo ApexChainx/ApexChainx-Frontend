@@ -48,4 +48,7 @@ export const ENDPOINTS = {
     status: (userId: string) => `/wallets/${userId}/status`,
     balance: (address: string) => `/wallets/${address}/balance`,
   },
+  preferences: {
+    base: "/user/preferences",
+  },
 } as const;

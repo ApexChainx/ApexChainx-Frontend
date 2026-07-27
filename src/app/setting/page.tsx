@@ -3,6 +3,13 @@
 
 import { useMemo, useState } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
@@ -68,6 +75,7 @@ function getErrorMessage(error: unknown) {
 export default function SettingsPage() {
   const { state: sessionState, user: sessionUser, logout } = useSession();
   const router = useRouter();
+  const { t, locale, setLocale, locales, localeNames } = useI18n();
   const [sessionActionLoading, setSessionActionLoading] = useState<string | null>(null);
   const [sessionActionFeedback, setSessionActionFeedback] = useState<string | null>(null);
   const [sessionActionError, setSessionActionError] = useState<string | null>(null);
@@ -184,19 +192,19 @@ export default function SettingsPage() {
   );
   const walletReadinessLabel = useMemo(() => {
     if (!walletStatus) {
-      return "Not loaded";
+      return t('settings.notLoaded');
     }
     if (!walletStatus.active) {
-      return "Inactive";
+      return t('settings.inactive');
     }
     if (!walletStatus.funded) {
-      return "Funding required";
+      return t('settings.fundingRequired');
     }
     if (!walletStatus.trustline_ready) {
-      return "Trustline missing";
+      return t('settings.trustlineMissing');
     }
-    return walletStatus.usable ? "Ready" : "Review required";
-  }, [walletStatus]);
+    return walletStatus.usable ? t('settings.ready') : t('settings.reviewRequired');
+  }, [walletStatus, t]);
   const walletReadinessTone = useMemo(() => {
     if (!walletStatus) {
       return "text-slate-900";
@@ -417,10 +425,10 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Settings and Wallet Control
+          {t('settings.walletControl')}
         </h1>
         <p className="text-sm text-slate-500">
-          Manage operator session state, register or sign in, and check wallet readiness from the live backend.
+          {t('settings.manageSessionWallet')}
         </p>
       </div>
 
@@ -482,7 +490,7 @@ export default function SettingsPage() {
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Account Profile</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current session identity and metadata.</p>
         {sessionState === "loading" && (
-          <p className="mt-4 text-sm text-slate-400">Loading session…</p>
+          <p className="mt-4 text-sm text-slate-400">{t('settings.loadingSession')}</p>
         )}
         {sessionState === "unauthenticated" && (
           <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Not signed in.</p>
@@ -519,9 +527,9 @@ export default function SettingsPage() {
 
       {/* FE-008: Session management */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Session Management</h2>
+        <h2 className="text-xl font-semibold text-slate-900">{t('settings.sessionManagement')}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Control your active session and understand token refresh behaviour.
+          {t('settings.controlActiveSession')}
         </p>
 
         {sessionActionFeedback && (
@@ -537,90 +545,120 @@ export default function SettingsPage() {
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">Sign out of this session</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.signOutOfThisSession')}</h3>
             <p className="text-slate-500">
-              Ends your current session and clears stored tokens from this browser. You will be
-              redirected to the sign-in page.
+              {t('settings.endsCurrentSession')}
             </p>
             <button
               onClick={() => void handleSignOut()}
               disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
-              {sessionActionLoading === "signout" ? "Signing out…" : "Sign out"}
+              {sessionActionLoading === "signout" ? `${t('common.loading')}` : t('common.signOut')}
             </button>
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">Revoke all sessions</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.revokeAllSessions')}</h3>
             <p className="text-slate-500">
-              Invalidates all active refresh tokens for your account across every device. Use this
-              if you suspect unauthorised access.
+              {t('settings.invalidateAllTokens')}
             </p>
             <button
               onClick={() => void handleLogoutAll()}
               disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
               className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              {sessionActionLoading === "logout-all" ? "Revoking…" : "Revoke all sessions"}
+              {sessionActionLoading === "logout-all" ? `${t('common.loading')}` : t('settings.revokeAllSessions')}
             </button>
           </div>
         </div>
 
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1">
-          <p className="font-medium">How session refresh works</p>
+          <p className="font-medium">{t('settings.howSessionRefreshWorks')}</p>
           <p>
-            Your access token is short-lived. When it expires the app automatically exchanges your
-            refresh token for a new pair — you stay signed in without any action required.
+            {t('settings.sessionRefreshExplanation')}
           </p>
           <p>
-            If the refresh fails (token revoked, network error, or server restart) you will see a
-            &ldquo;Session expired&rdquo; message and be redirected to sign in again. No data is
-            lost; simply sign back in to continue.
+            {t('settings.sessionExpiredMessage')}
           </p>
+        </div>
+      </section>
+
+      {/* Language Settings */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-900">{t('settings.languageSettings')}</h2>
+        <p className="mt-1 text-sm text-slate-500">{t('settings.selectLanguage')}</p>
+        
+        <div className="mt-6 max-w-md">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex w-full items-center justify-between rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              {localeNames[locale]}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-full min-w-[200px]">
+              {locales.map((loc) => (
+                <DropdownMenuItem
+                  key={loc}
+                  onClick={() => setLocale(loc)}
+                  className={`flex cursor-pointer items-center justify-between px-4 py-2 text-sm ${
+                    locale === loc ? "bg-slate-100 font-medium" : ""
+                  }`}
+                >
+                  {localeNames[loc]}
+                  {locale === loc && (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Session</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
-            {currentUser ? "Authenticated" : "Not signed in"}
+            {currentUser ? t('settings.authenticated') : t('settings.notSignedIn')}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {currentUser?.email ?? "Load or create an operator account"}
+            {currentUser?.email ?? t('settings.loadCreateAccount')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Wallet</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.wallet')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
-            {walletAddress ? "Connected" : "Not linked"}
+            {walletAddress ? t('settings.connected') : t('settings.notLinked')}
           </p>
           <p className="mt-1 truncate text-sm text-slate-500">
-            {walletAddress || "Create or link a wallet to continue"}
+            {walletAddress || t('settings.createLinkWallet')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Readiness</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.readiness')}</p>
           <p className={`mt-2 text-xl font-semibold ${walletReadinessTone}`}>
             {walletReadinessLabel}
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {walletStatus
-              ? `${walletStatus.funded ? "Funded" : "Unfunded"} • ${
-                  walletStatus.trustline_ready ? "Trustline ready" : "Trustline missing"
+              ? `${walletStatus.funded ? t('settings.funded') : t('settings.unfunded')} • ${
+                  walletStatus.trustline_ready ? t('settings.trustlineReady') : t('settings.trustlineMissing')
                 }`
-              : "Load wallet details to inspect readiness"}
+              : t('settings.loadWalletDetails')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Balances</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.balances')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{walletAssetCount}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {walletAssetCount > 0 ? "Tracked assets loaded" : "No balance data loaded yet"}
+            {walletAssetCount > 0 ? t('settings.trackedAssetsLoaded') : t('settings.noBalanceData')}
           </p>
         </div>
       </div>
@@ -628,15 +666,15 @@ export default function SettingsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Account Session</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{t('settings.accountSession')}</h2>
             <p className="text-sm text-slate-500">
-              Register, sign in, and validate the active backend session.
+              {t('settings.registerSignInValidate')}
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">Register</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.register')}</h3>
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 value={registerForm.full_name}
@@ -646,7 +684,7 @@ export default function SettingsPage() {
                     full_name: event.target.value,
                   }))
                 }
-                placeholder="Full name"
+                placeholder={t('settings.fullName')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -657,7 +695,7 @@ export default function SettingsPage() {
                     email: event.target.value,
                   }))
                 }
-                placeholder="Email"
+                placeholder={t('settings.email')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -669,19 +707,19 @@ export default function SettingsPage() {
                     password: event.target.value,
                   }))
                 }
-                placeholder="Password"
+                placeholder={t('settings.password')}
               />
               <button
                 onClick={handleRegister}
                 disabled={loadingAction === "register"}
                 className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                {loadingAction === "register" ? "Registering..." : "Register account"}
+                {loadingAction === "register" ? `${t('common.loading')}` : t('settings.registerAccount')}
               </button>
             </div>
 
             <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">Login</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.login')}</h3>
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 value={loginForm.email}
@@ -691,7 +729,7 @@ export default function SettingsPage() {
                     email: event.target.value,
                   }))
                 }
-                placeholder="Email"
+                placeholder={t('settings.email')}
               />
               <input
                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -703,14 +741,14 @@ export default function SettingsPage() {
                     password: event.target.value,
                   }))
                 }
-                placeholder="Password"
+                placeholder={t('settings.password')}
               />
               <button
                 onClick={handleLogin}
                 disabled={loadingAction === "login"}
                 className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {loadingAction === "login" ? "Signing in..." : "Sign in"}
+                {loadingAction === "login" ? `${t('common.loading')}` : t('settings.signIn')}
               </button>
               <div className="flex gap-2">
                 <button
@@ -718,47 +756,47 @@ export default function SettingsPage() {
                   disabled={loadingAction === "session"}
                   className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
-                  Refresh session
+                  {t('settings.refreshSession')}
                 </button>
                 <button
                   onClick={handleLogout}
                   disabled={loadingAction === "logout"}
                   className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
-                  Logout
+                  {t('settings.logout')}
                 </button>
               </div>
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <h3 className="font-medium text-slate-900">Current user</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.currentUser')}</h3>
             {currentUser ? (
               <dl className="mt-3 grid gap-2 text-slate-600">
                 <div className="flex justify-between gap-4">
-                  <dt>User ID</dt>
+                  <dt>{t('settings.userId')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.id}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt>Email</dt>
+                  <dt>{t('settings.email')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.email}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt>Role</dt>
+                  <dt>{t('settings.role')}</dt>
                   <dd className="font-medium text-slate-900">{currentUser.role}</dd>
                 </div>
               </dl>
             ) : (
-              <p className="mt-3 text-slate-500">No active user loaded yet.</p>
+              <p className="mt-3 text-slate-500">{t('settings.noActiveUser')}</p>
             )}
           </div>
         </section>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Wallet Status</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{t('settings.walletStatus')}</h2>
             <p className="text-sm text-slate-500">
-              Create, link, and inspect the operator wallet through the backend bridge.
+              {t('settings.walletBackendBridge')}
             </p>
           </div>
 

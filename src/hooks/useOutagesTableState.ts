@@ -1,9 +1,16 @@
 /** ApexChain Network Operations Intelligence Platform */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
+import {
+    getPreferences,
+    hydratePreferences,
+    subscribeToPreferences,
+    updatePreferences,
+    type FilterPreset
+} from "@/lib/preferences";
 import { getOutages } from "@/services/outages";
 import type { Outage } from "@/types/outages";
 
@@ -11,36 +18,44 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Failed to load outages";
 }
 
-const PRESETS_KEY = "outage_filter_presets";
-
-export interface FilterPreset {
-  name: string;
-  severity?: string;
-  status?: string;
-}
-
 export function useFilterPresets() {
   const [presets, setPresets] = useState<FilterPreset[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(PRESETS_KEY) ?? "[]") as FilterPreset[];
-    } catch {
-      return [];
-    }
+    const prefs = getPreferences();
+    return prefs.outageFilterPresets ?? [];
   });
 
+  // Hydrate from server and subscribe to changes
+  useEffect(() => {
+    // Hydrate preferences on mount
+    hydratePreferences().then((prefs) => {
+      setPresets(prefs.outageFilterPresets ?? []);
+    });
+
+    // Subscribe to preference changes
+    return subscribeToPreferences((prefs) => {
+      setPresets(prefs.outageFilterPresets ?? []);
+    });
+  }, []);
+
   function savePreset(preset: FilterPreset) {
-    setPresets((prev) => {
-      const next = [...prev.filter((p) => p.name !== preset.name), preset];
-      localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
-      return next;
+    const currentPrefs = getPreferences();
+    const existingPresets = currentPrefs.outageFilterPresets ?? [];
+    const next = [...existingPresets.filter((p) => p.name !== preset.name), preset];
+    
+    // Update preferences (automatically syncs local and remote)
+    updatePreferences({
+      outageFilterPresets: next,
     });
   }
 
   function deletePreset(name: string) {
-    setPresets((prev) => {
-      const next = prev.filter((p) => p.name !== name);
-      localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
-      return next;
+    const currentPrefs = getPreferences();
+    const existingPresets = currentPrefs.outageFilterPresets ?? [];
+    const next = existingPresets.filter((p) => p.name !== name);
+    
+    // Update preferences (automatically syncs local and remote)
+    updatePreferences({
+      outageFilterPresets: next,
     });
   }
 

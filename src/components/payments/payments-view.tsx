@@ -12,7 +12,6 @@ import type { PaginatedPayments, Payment } from "@/types/payment";
 
 type SortKey = "created_at" | "amount" | "status";
 type SortDir = "asc" | "desc";
-type Density = "default" | "compact";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-green-100 text-green-700",
@@ -59,7 +58,27 @@ export default function PaymentsView() {
   // FE-072: sort + density
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [density, setDensity] = useState<Density>("default");
+  const [density, setDensity] = useState<TableDensity>(() => {
+    const prefs = getPreferences();
+    return prefs.tableDensity || "default";
+  });
+
+  // Hydrate preferences from server and subscribe to changes
+  useEffect(() => {
+    hydratePreferences().then((prefs) => {
+      setDensity(prefs.tableDensity || "default");
+    });
+
+    return subscribeToPreferences((prefs) => {
+      setDensity(prefs.tableDensity || "default");
+    });
+  }, []);
+
+  // Update density in preferences when changed
+  const handleDensityChange = (newDensity: TableDensity) => {
+    setDensity(newDensity);
+    updatePreferences({ tableDensity: newDensity });
+  };
 
   const requestKey = useMemo(
     () => `${page}:${perPage}:${statusFilter}:${typeFilter}:${dateFrom}:${dateTo}`,
@@ -157,11 +176,11 @@ export default function PaymentsView() {
           {/* FE-072: density toggle */}
           <div className="flex items-center gap-1 text-xs text-slate-600">
             <span className="font-medium">Density:</span>
-            {(["default", "compact"] as Density[]).map((d) => (
+            {(["default", "compact"] as TableDensity[]).map((d) => (
               <button
                 key={d}
-                onClick={() => setDensity(d)}
-                className={`rounded px-2 py-0.5 capitalize border ${density === d ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 hover:bg-slate-100"}`}
+                  onClick={() => handleDensityChange(d as TableDensity)}
+                  className={`rounded px-2 py-0.5 capitalize border ${density === d ? "bg-slate-800 text-white border-slate-800" : "border-slate-200 hover:bg-slate-100"}`}
               >
                 {d}
               </button>

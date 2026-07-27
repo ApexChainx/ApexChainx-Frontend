@@ -5,12 +5,15 @@ import { useSession } from "@/hooks/useSession";
 import Link from "next/link";
 
 import { useHealth } from "@/hooks/useHealth";
+import { useSession } from "@/hooks/useSession";
+import Link from "next/link";
 
 // Routes only visible to admin users
 const ADMIN_ROUTES = ["/webhooks", "/config"];
 
 const Navigation = () => {
   const { state, user, logout } = useSession();
+  const { t } = useI18n();
   const isAdmin = user?.role === "admin";
   const { status, isOffline } = useHealth();
 
@@ -18,7 +21,7 @@ const Navigation = () => {
     <>
       {isOffline && (
         <div className="bg-red-500 text-white text-center py-2 text-sm font-semibold sticky top-0 z-50">
-          You are currently offline. Some features may be unavailable.
+          {t('errors.offline')}
         </div>
       )}
       <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }} className="flex items-center justify-between">
@@ -31,32 +34,33 @@ const Navigation = () => {
                 ? "bg-yellow-500"
                 : "bg-red-500"
             }`}
-            title={`System Health: ${status}`}
+            title={`${t('navigation.systemHealth')}: ${status}`}
           />
-          <Link href="/">Dashboard</Link>
+          <Link href="/">{t('common.dashboard')}</Link>
           <span>|</span>
-          <Link href="/outages">Outages</Link>
+          <Link href="/outages">{t('common.outages')}</Link>
           <span>|</span>
-          <Link href="/bulk-import">Bulk Import</Link>
+          <Link href="/bulk-import">{t('common.bulkImport')}</Link>
           <span>|</span>
-          <Link href="/payments">Payments</Link>
+          <Link href="/payments">{t('common.payments')}</Link>
           <span>|</span>
+          <Link href="/setting">{t('common.settings')}</Link>
           <Link href="/payments/retry-queue">Retry Queue</Link>
           <span>|</span>
           <Link href="/setting">Settings</Link>
           {isAdmin && (
             <>
               <span>|</span>
-              <Link href="/config">SLA Config</Link>
+              <Link href="/config">{t('common.config')}</Link>
               <span>|</span>
-              <Link href="/webhooks">Webhooks</Link>
+              <Link href="/webhooks">{t('common.webhooks')}</Link>
             </>
           )}
         </div>
 
         <div className="text-sm text-slate-600">
           {state === "loading" && (
-            <span className="text-slate-400">Checking session…</span>
+            <span className="text-slate-400">{t('settings.loadingSession')}</span>
           )}
           {state === "authenticated" && user && (
             <span className="flex items-center gap-3">
@@ -70,7 +74,7 @@ const Navigation = () => {
                 onClick={() => void logout()}
                 className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
               >
-                Sign out
+                {t('common.signOut')}
               </button>
             </span>
           )}
@@ -79,7 +83,7 @@ const Navigation = () => {
               href="/login"
               className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
             >
-              Sign in
+              {t('auth.signIn')}
             </Link>
           )}
         </div>

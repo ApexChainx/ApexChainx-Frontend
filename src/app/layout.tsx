@@ -3,6 +3,7 @@ import { ReactNode } from "react";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import { ToastProvider } from "@/components/ui/toast";
+import { I18nProvider } from "@/i18n/i18n";
 import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
 import { SessionProvider } from "@/providers/session";
@@ -99,12 +100,14 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <ReactQueryProvider>
           <SessionProvider>
             <ToastProvider>
-              <RouteGuard>
-                <Navigation />
-                <main id="main-content" role="main">
-                  {children}
-                </main>
-              </RouteGuard>
+              <I18nProvider>
+                <RouteGuard>
+                  <Navigation />
+                  <main id="main-content" role="main">
+                    {children}
+                  </main>
+                </RouteGuard>
+              </I18nProvider>
             </ToastProvider>
           </SessionProvider>
         </ReactQueryProvider>
