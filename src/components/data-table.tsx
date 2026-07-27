@@ -13,6 +13,11 @@ import {
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
   Table,
   TableBody,
   TableCell,
@@ -348,15 +353,19 @@ export function DataTable<TData, TValue>({
         className={`rounded-lg border border-slate-200 overflow-hidden ${
           shouldVirtualize ? "overflow-auto" : ""
         }`}
-        style={shouldVirtualize ? { maxHeight: '600px' } : undefined}
+        style={shouldVirtualize ? { maxHeight: '65vh' } : undefined}
       >
         <div className="overflow-x-auto">
           {shouldVirtualize ? (
-            /* ── Virtualized Table ── */
-            <table className="w-full caption-bottom text-sm">
+            /* ── Virtualized Table ──
+             * Uses table-layout:fixed with equal percentage column widths to keep
+             * header and body columns perfectly aligned. Rows are absolutely
+             * positioned inside the relative tbody for windowed rendering.
+             */
+            <table className="w-full caption-bottom text-sm" style={{ tableLayout: 'fixed' }}>
               <thead className="sticky top-0 z-10 bg-slate-50">
                 {headerGroups.map((hg) => (
-                  <tr key={hg.id} className="flex">
+                  <tr key={hg.id}>
                     {hg.headers.map((h) => {
                       const canSort = h.column.getCanSort();
                       const sortDir = h.column.getIsSorted();
@@ -364,9 +373,10 @@ export function DataTable<TData, TValue>({
                       return (
                         <th 
                           key={h.id} 
-                          className={`flex-1 min-w-0 ${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap text-left ${
+                          className={`${config.padding} ${config.textSize} font-semibold text-slate-700 whitespace-nowrap text-left ${
                             canSort ? "cursor-pointer select-none group" : ""
                           }`}
+                          style={{ width: `${100 / colSpan}%` }}
                           onClick={canSort ? h.column.getToggleSortingHandler() : undefined}
                           aria-sort={
                             sortDir === "asc" ? "ascending" : 
@@ -389,7 +399,7 @@ export function DataTable<TData, TValue>({
                   return (
                     <tr 
                       key={row.id}
-                      className={`flex transition-colors absolute left-0 right-0 ${
+                      className={`absolute left-0 right-0 w-full border-b border-slate-200 transition-colors ${
                         row.getIsSelected() ? "bg-blue-50" : "hover:bg-slate-50"
                       } ${enableRowSelection ? "cursor-pointer" : ""}`}
                       style={{
@@ -400,7 +410,7 @@ export function DataTable<TData, TValue>({
                       data-state={row.getIsSelected() ? "selected" : undefined}
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className={`flex-1 min-w-0 ${config.padding} ${config.textSize}`}>
+                        <td key={cell.id} className={`${config.padding} ${config.textSize} align-middle`} style={{ width: `${100 / colSpan}%` }}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
