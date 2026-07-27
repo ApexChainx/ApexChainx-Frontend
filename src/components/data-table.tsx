@@ -11,6 +11,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Table,
   TableBody,
@@ -43,6 +44,10 @@ interface DataTableProps<TData, TValue> {
   rowSelection?: Record<string, boolean>;
   onRowSelectionChange?: (selection: Record<string, boolean>) => void;
   getRowId?: (row: TData, index: number) => string;
+
+  /** When true, uses @tanstack/react-virtual to render only visible rows.
+   *  Automatically activates when total rows exceed the threshold (100). */
+  virtualized?: boolean;
 }
 
 // ─── Density Configuration ───────────────────────────────────────────────────
@@ -217,6 +222,17 @@ function ColumnVisibilityControl<TData>({
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
+/* ─── Virtualization Constants ─────────────────────────────────────────── */
+const VIRTUALIZATION_THRESHOLD = 100;
+const OVERSCAN = 10;
+
+const ROW_ESTIMATED_HEIGHT: Record<TableDensity, number> = {
+  compact: 36,
+  default: 48,
+  comfortable: 60,
+};
+
+/* ─── Main Component ──────────────────────────────────────────────────── */
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -237,9 +253,12 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   getRowId,
+  virtualized = false,
 }: DataTableProps<TData, TValue>) {
   const config = DENSITY_CONFIG[density];
   const hasToolbar = onColumnVisibilityChange || onDensityChange;
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const table = useReactTable({
     data,
