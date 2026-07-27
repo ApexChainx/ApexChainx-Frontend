@@ -149,19 +149,19 @@ export default function SettingsPage() {
   );
   const walletReadinessLabel = useMemo(() => {
     if (!walletStatus) {
-      return "Not loaded";
+      return t('settings.notLoaded');
     }
     if (!walletStatus.active) {
-      return "Inactive";
+      return t('settings.inactive');
     }
     if (!walletStatus.funded) {
-      return "Funding required";
+      return t('settings.fundingRequired');
     }
     if (!walletStatus.trustline_ready) {
-      return "Trustline missing";
+      return t('settings.trustlineMissing');
     }
-    return walletStatus.usable ? "Ready" : "Review required";
-  }, [walletStatus]);
+    return walletStatus.usable ? t('settings.ready') : t('settings.reviewRequired');
+  }, [walletStatus, t]);
   const walletReadinessTone = useMemo(() => {
     if (!walletStatus) {
       return "text-slate-900";
@@ -437,9 +437,9 @@ export default function SettingsPage() {
 
       {/* FE-008: Session management */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Session Management</h2>
+        <h2 className="text-xl font-semibold text-slate-900">{t('settings.sessionManagement')}</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Control your active session and understand token refresh behaviour.
+          {t('settings.controlActiveSession')}
         </p>
 
         {sessionActionFeedback && (
@@ -455,46 +455,41 @@ export default function SettingsPage() {
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">Sign out of this session</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.signOutOfThisSession')}</h3>
             <p className="text-slate-500">
-              Ends your current session and clears stored tokens from this browser. You will be
-              redirected to the sign-in page.
+              {t('settings.endsCurrentSession')}
             </p>
             <button
               onClick={() => void handleSignOut()}
               disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
-              {sessionActionLoading === "signout" ? "Signing out…" : "Sign out"}
+              {sessionActionLoading === "signout" ? `${t('common.loading')}` : t('common.signOut')}
             </button>
           </div>
 
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">Revoke all sessions</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.revokeAllSessions')}</h3>
             <p className="text-slate-500">
-              Invalidates all active refresh tokens for your account across every device. Use this
-              if you suspect unauthorised access.
+              {t('settings.invalidateAllTokens')}
             </p>
             <button
               onClick={() => void handleLogoutAll()}
               disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
               className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              {sessionActionLoading === "logout-all" ? "Revoking…" : "Revoke all sessions"}
+              {sessionActionLoading === "logout-all" ? `${t('common.loading')}` : t('settings.revokeAllSessions')}
             </button>
           </div>
         </div>
 
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1">
-          <p className="font-medium">How session refresh works</p>
+          <p className="font-medium">{t('settings.howSessionRefreshWorks')}</p>
           <p>
-            Your access token is short-lived. When it expires the app automatically exchanges your
-            refresh token for a new pair — you stay signed in without any action required.
+            {t('settings.sessionRefreshExplanation')}
           </p>
           <p>
-            If the refresh fails (token revoked, network error, or server restart) you will see a
-            &ldquo;Session expired&rdquo; message and be redirected to sign in again. No data is
-            lost; simply sign back in to continue.
+            {t('settings.sessionExpiredMessage')}
           </p>
         </div>
       </section>
@@ -536,44 +531,44 @@ export default function SettingsPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Session</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
-            {currentUser ? "Authenticated" : "Not signed in"}
+            {currentUser ? t('settings.authenticated') : t('settings.notSignedIn')}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {currentUser?.email ?? "Load or create an operator account"}
+            {currentUser?.email ?? t('settings.loadCreateAccount')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Wallet</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.wallet')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
-            {walletAddress ? "Connected" : "Not linked"}
+            {walletAddress ? t('settings.connected') : t('settings.notLinked')}
           </p>
           <p className="mt-1 truncate text-sm text-slate-500">
-            {walletAddress || "Create or link a wallet to continue"}
+            {walletAddress || t('settings.createLinkWallet')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Readiness</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.readiness')}</p>
           <p className={`mt-2 text-xl font-semibold ${walletReadinessTone}`}>
             {walletReadinessLabel}
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {walletStatus
-              ? `${walletStatus.funded ? "Funded" : "Unfunded"} • ${
-                  walletStatus.trustline_ready ? "Trustline ready" : "Trustline missing"
+              ? `${walletStatus.funded ? t('settings.funded') : t('settings.unfunded')} • ${
+                  walletStatus.trustline_ready ? t('settings.trustlineReady') : t('settings.trustlineMissing')
                 }`
-              : "Load wallet details to inspect readiness"}
+              : t('settings.loadWalletDetails')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Balances</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.balances')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{walletAssetCount}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {walletAssetCount > 0 ? "Tracked assets loaded" : "No balance data loaded yet"}
+            {walletAssetCount > 0 ? t('settings.trackedAssetsLoaded') : t('settings.noBalanceData')}
           </p>
         </div>
       </div>
