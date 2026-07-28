@@ -2,6 +2,7 @@
 /** ApexChain Network Operations Intelligence Platform */
 
 import { outageKeys } from "@/features/outages/hooks/useOutageMutations";
+import { logger } from "@/lib/logger";
 import { resolveOutage, updateOutage } from "@/services/outages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -287,11 +288,11 @@ export default function OutagesPageClient({ data }: Props) {
   }
 
   function handleDelete() {
-    console.log("Delete outages:", selectedIds);
+    logger.info("Delete outages requested", { selectedIds });
   }
 
   function handleExport() {
-    console.log("Export outages:", filteredData);
+    logger.info("Export outages requested", { count: filteredData.length });
   }
 
   // Bulk resolve handler

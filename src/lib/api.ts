@@ -1,16 +1,18 @@
 /** ApexChain - Network Operations Intelligence Platform */
-import axios, { type InternalAxiosRequestConfig, AxiosError } from "axios";
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosRequestHeaders, type InternalAxiosRequestConfig } from "axios";
 import { getCookie } from "@/lib/csrf";
 import { normalizeApiError } from "@/lib/errors";
 import { env } from "@/lib/config/env";
 import { shouldRetry, getBackoffDelay, parseRetryAfter } from "@/lib/hermes";
 
-const requestCache = new Map<string, Promise<any>>();
+const requestCache = new Map<string, Promise<unknown>>();
 
 export function dedupeByKey<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  if (requestCache.has(key)) {
-    return requestCache.get(key) as Promise<T>;
+  const cachedPromise = requestCache.get(key);
+  if (cachedPromise) {
+    return cachedPromise as Promise<T>;
   }
+
   const promise = fetcher().finally(() => {
     requestCache.delete(key);
   });
@@ -155,7 +157,7 @@ api.interceptors.response.use(
   (res) => res,
   async (err: unknown) => {
     const axiosErr = err as AxiosError;
-    const config = axiosErr?.config;
+    const config = axiosErr?.config as InternalAxiosRequestConfig | undefined;
 
     if (!config) {
       return Promise.reject(normalizeApiError(err));
@@ -184,10 +186,11 @@ api.interceptors.response.use(
         }
         const newToken = await refreshPromise;
         if (newToken) {
-          (config as any).headers = {
-            ...((config as any).headers ?? {}),
+          const headers: AxiosRequestHeaders = {
+            ...(config.headers ?? {}),
             Authorization: `Bearer ${newToken}`,
           };
+          config.headers = headers;
           return api.request(config);
         }
         clearTokens();
@@ -200,8 +203,8 @@ api.interceptors.response.use(
 
     // 2. Handle Exponential Backoff for Idempotent Reads (GET)
     if (shouldRetry(axiosErr)) {
-      const attempt = (config as any)._retryCount || 0;
-      (config as any)._retryCount = attempt + 1;
+      const attempt = config._retryCount ?? 0;
+      config._retryCount = attempt + 1;
 
       let delay = getBackoffDelay(attempt);
 

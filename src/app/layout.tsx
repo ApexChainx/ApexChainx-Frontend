@@ -4,6 +4,7 @@ import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
+import { env } from "@/lib/config/env";
 import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
 import { SessionProvider } from "@/providers/session";
@@ -28,12 +29,12 @@ export const metadata = {
   authors: [{ name: "ApexChain" }],
   creator: "ApexChain",
   publisher: "ApexChain",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(env.APP_URL),
   openGraph: {
     title: "ApexChain — Network Operations Intelligence",
     description:
       "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, and automated blockchain payments.",
-    url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    url: env.APP_URL,
     siteName: "ApexChain",
     locale: "en_US",
     type: "website",

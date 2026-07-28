@@ -1,4 +1,5 @@
 /** ApexChain Network Operations Intelligence Platform */
+import type { AxiosRequestConfig } from "axios";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { PaginatedPayments, Payment } from "../types/payment";
@@ -23,8 +24,8 @@ export const fetchPayments = async (
 };
 
 export const fetchPayment = async (id: string, signal?: AbortSignal): Promise<Payment> => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await api.get<Payment>(ENDPOINTS.payments.byId(id), { signal } as any);
+  const requestConfig: AxiosRequestConfig = { signal };
+  const response = await api.get<Payment>(ENDPOINTS.payments.byId(id), requestConfig);
   return response.data;
 };
 
