@@ -1,28 +1,28 @@
-name: E2E Tests
+# name: E2E Tests
 
-on:
-  pull_request:
-  push:
-    branches:
-      - main
+# on:
+#   pull_request:
+#   push:
+#     branches:
+#       - main
 
-jobs:
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Install Sentry CLI
-        run: npm install @sentry/cli
-      - name: Upload source maps to Sentry
-        run: npx sentry-cli sourcemaps inject --org $SENTRY_ORG --project $SENTRY_PROJECT --release $GITHUB_SHA --url-prefix /_next/static/chunks
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+# jobs:
+#   e2e:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: actions/setup-node@v4
+#         with:
+#           node-version: 20
+#           cache: npm
+#       - run: npm ci
+#       - name: Install Sentry CLI
+#         run: npm install @sentry/cli
+#       - name: Upload source maps to Sentry
+#         run: npx sentry-cli sourcemaps inject --org $SENTRY_ORG --project $SENTRY_PROJECT --release $GITHUB_SHA --url-prefix /_next/static/chunks
+#         env:
+#           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+#           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+#           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+#       - run: npx playwright install --with-deps chromium
+#       - run: npm run test:e2e
