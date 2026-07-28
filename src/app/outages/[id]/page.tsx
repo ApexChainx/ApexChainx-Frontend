@@ -86,6 +86,19 @@ export default function OutageDetailsPage() {
 
   // Poll for updates while outage is open
   useEffect(() => {
+    const handlePaletteResolve = () => {
+      if (!isResolved && !resolving) {
+        setIsResolveModalOpen(true);
+      }
+    };
+
+    window.addEventListener("command-palette:resolve-outage", handlePaletteResolve);
+    return () => {
+      window.removeEventListener("command-palette:resolve-outage", handlePaletteResolve);
+    };
+  }, [isResolved, resolving]);
+
+  useEffect(() => {
     if (!id || !outage || outage.status === "resolved") return;
 
     const controller = new AbortController();
