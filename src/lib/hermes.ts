@@ -2,6 +2,10 @@
 
 import type { AxiosError, AxiosRequestConfig } from "axios";
 
+interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
+  _retryCount?: number;
+}
+
 export interface RetryConfig {
   maxRetries?: number;
   initialDelayMs?: number;
@@ -55,7 +59,7 @@ export function shouldRetry(
   error: AxiosError,
   maxRetries = 3
 ): boolean {
-  const config = error.config;
+  const config = error.config as RetryableAxiosRequestConfig | undefined;
   if (!config) return false;
 
   // Only retry GET requests (idempotent reads)
@@ -63,7 +67,7 @@ export function shouldRetry(
   if (method !== "GET") return false;
 
   // Check current retry count
-  const attempt = (config as any)._retryCount || 0;
+  const attempt = config._retryCount ?? 0;
   if (attempt >= maxRetries) return false;
 
   const status = error.response?.status;

@@ -1,14 +1,16 @@
 /** ApexChain Network Operations Intelligence Platform */
 
+import { logger } from "@/lib/logger";
+
 if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
-        console.log("SW registered:", registration.scope);
+        logger.info("SW registered", { scope: registration.scope });
       })
       .catch((error) => {
-        console.log("SW registration failed:", error);
+        logger.error("SW registration failed", { message: error instanceof Error ? error.message : String(error) });
       });
   });
 }
