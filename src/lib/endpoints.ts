@@ -48,6 +48,9 @@ export const ENDPOINTS = {
     status: (userId: string) => `/wallets/${userId}/status`,
     balance: (address: string) => `/wallets/${address}/balance`,
   },
+  /** Server-Sent Events stream for real-time session invalidation */
+  sessionEvents: "/auth/events",
+
   preferences: {
     base: "/user/preferences",
   },
