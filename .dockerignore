@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Environment files
+.env*.local
+.env
+
+# Git
+.git
+.github
+.gitignore
+
+# IDE and development files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tests and coverage
+tests
+coverage
+.coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+
+# Documentation
+docs
+*.md
+README.md
+
+# Other configuration files that aren't needed in production
+.eslint*
+tsconfig.json
+postcss.config.mjs
+tailwind.config.js
+components.json
+playwright.config.ts
+vitest.config.ts
+vitest.setup.ts
+stryker.config.json
+lighthouserc.json
+sentry*.config.ts
+sentry.properties
+
+# Scripts
+scripts
