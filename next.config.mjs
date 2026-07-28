@@ -7,7 +7,23 @@ import { withSentryConfig } from "@sentry/nextjs";
  * @type {import('next').NextConfig}
  **/
 const nextConfig = {
-  // Your existing configuration goes here
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: process.env.CORS_ALLOWLIST || "",
+          },
+          {
+            key: "Access-Control-Allow-Credentials",
+            value: "true",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default withSentryConfig(
