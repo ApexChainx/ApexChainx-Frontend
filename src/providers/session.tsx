@@ -23,19 +23,28 @@ import { checkRateLimit } from "@/lib/rate-limit";
 const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
 import { logger } from "@/lib/logger";
 
+import {
+  createSessionSync,
+  type SessionSync,
+  type SessionSyncMessage,
+} from "@/lib/session-sync";
+
+import {
+  connectSessionSse,
+  type SseConnection,
+} from "@/lib/session-sse";
+
+import {
+  startHeartbeat,
+  type HeartbeatHandle,
+} from "@/lib/session-heartbeat";
+
 export type SessionState =
   | "loading"
   | "authenticated"
   | "unauthenticated";
 
-export interface SessionUser {
-  id: string;
-  email: string;
-  role: string;
-  full_name?: string | null;
-  stellar_wallet?: string | null;
-  created_at?: string;
-}
+export type { SessionUser } from "@/types/session";
 
 interface SessionContextValue {
   state: SessionState;
@@ -56,22 +65,8 @@ interface SessionContextValue {
 const SessionContext =
   createContext<SessionContextValue | null>(null);
 
-const CHANNEL_NAME = "apexchain_session";
-
-type SessionMessage =
-  | { type: "logout" }
-  | { type: "authenticated"; user: SessionUser };
-
 function isBrowser() {
   return typeof window !== "undefined";
-}
-
-function createBroadcastChannel() {
-  if (!isBrowser() || !("BroadcastChannel" in window)) {
-    return null;
-  }
-
-  return new BroadcastChannel(CHANNEL_NAME);
 }
 
 export function SessionProvider({
@@ -85,10 +80,23 @@ export function SessionProvider({
   const [user, setUser] =
     useState<SessionUser | null>(null);
 
-  const channelRef =
-    useRef<BroadcastChannel | null>(null);
+  const syncRef =
+    useRef<SessionSync | null>(null);
+
+  const sseRef =
+    useRef<SseConnection | null>(null);
+
+  const heartbeatRef =
+    useRef<HeartbeatHandle | null>(null);
 
   const mountedRef = useRef(true);
+
+  /**
+   * wasAuthenticatedRef tracks whether the user was previously authenticated
+   * on this tab, so we only broadcast "logout" when we had an active session
+   * (e.g. not during the initial bootstrap when no session exists).
+   */
+  const wasAuthenticatedRef = useRef(false);
 
   /**
    * -------------------------
@@ -98,55 +106,121 @@ export function SessionProvider({
 
   const setAuthenticated = useCallback(
     (sessionUser: SessionUser) => {
+      wasAuthenticatedRef.current = true;
       setUser(sessionUser);
       setState("authenticated");
     },
     []
   );
 
+  /**
+   * Broadcast helpers — send messages to other tabs via SharedWorker/BroadcastChannel
+   */
+
+  function broadcastLogout() {
+    // Only broadcast if this tab was previously authenticated — otherwise
+    // the initial bootstrap failure (no session on first load) would
+    // incorrectly tell other tabs to clear their valid sessions.
+    if (!wasAuthenticatedRef.current) return;
+    syncRef.current?.postMessage({ type: "logout" });
+  }
+
+  function broadcastAuth(sessionUser: SessionUser) {
+    syncRef.current?.postMessage({
+      type: "authenticated",
+      user: sessionUser,
+    });
+  }
+
   const clearSession = useCallback(() => {
     clearTokens();
     setUser(null);
     setState("unauthenticated");
+    broadcastLogout();
   }, []);
 
   /**
    * -------------------------
-   * Cross-tab sync
+   * Cross-tab sync (SharedWorker / BroadcastChannel)
    * -------------------------
    */
 
   useEffect(() => {
-    const channel = createBroadcastChannel();
+    const sync = createSessionSync();
+    if (!sync) return;
 
-    if (!channel) return;
+    syncRef.current = sync;
 
-    channelRef.current = channel;
-
-    channel.onmessage = (
-      event: MessageEvent<SessionMessage>
-    ) => {
-      const message = event.data;
-
-      switch (message.type) {
+    sync.setHandler((msg: SessionSyncMessage) => {
+      switch (msg.type) {
         case "logout":
           clearSession();
           break;
 
         case "authenticated":
-          setAuthenticated(message.user);
+          setAuthenticated(msg.user);
           break;
 
         default:
           break;
       }
-    };
+    });
 
     return () => {
-      channel.close();
-      channelRef.current = null;
+      sync.close();
+      syncRef.current = null;
     };
   }, [clearSession, setAuthenticated]);
+
+  /**
+   * -------------------------
+   * SSE connection for cross-device session invalidation
+   * -------------------------
+   */
+
+  useEffect(() => {
+    // Only connect SSE when the user is authenticated
+    if (state !== "authenticated") return;
+
+    const sse = connectSessionSse((event) => {
+      logger.info("session-revoked-via-sse", {
+        reason: event.reason,
+      });
+      clearSession();
+    });
+
+    sseRef.current = sse;
+
+    return () => {
+      sse.close();
+      sseRef.current = null;
+    };
+  }, [state, clearSession]);
+
+  /**
+   * -------------------------
+   * Heartbeat polling for session freshness
+   * -------------------------
+   */
+
+  useEffect(() => {
+    // Only poll when the user is authenticated
+    if (state !== "authenticated") return;
+
+    const heartbeat = startHeartbeat((_status) => {
+      // The 401 interceptor in api.ts already calls clearTokens(),
+      // which dispatches auth:logout — so this is a safety net.
+      // If the heartbeat detects a revoked session the interceptor
+      // handles cleanup automatically.
+    });
+
+    heartbeatRef.current = heartbeat;
+
+    return () => {
+      heartbeat.stop();
+      heartbeatRef.current = null;
+    };
+  }, [state]);
 
   /**
    * -------------------------
@@ -163,11 +237,7 @@ export function SessionProvider({
       if (!mountedRef.current) return;
 
       setAuthenticated(response.data);
-
-      channelRef.current?.postMessage({
-        type: "authenticated",
-        user: response.data,
-      } satisfies SessionMessage);
+      broadcastAuth(response.data);
     } catch (error) {
       logger.error("session-refresh-failed", {
         message: error instanceof Error ? error.message : String(error),
@@ -265,11 +335,7 @@ export function SessionProvider({
       setTokens(accessToken, refreshToken);
 
       setAuthenticated(sessionUser);
-
-      channelRef.current?.postMessage({
-        type: "authenticated",
-        user: sessionUser,
-      } satisfies SessionMessage);
+      broadcastAuth(sessionUser);
     },
     [setAuthenticated]
   );
@@ -294,10 +360,7 @@ export function SessionProvider({
       });
     } finally {
       clearSession();
-
-      channelRef.current?.postMessage({
-        type: "logout",
-      } satisfies SessionMessage);
+      broadcastLogout();
     }
   }, [clearSession]);
 
