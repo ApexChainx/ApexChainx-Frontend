@@ -47,6 +47,7 @@ export const ENDPOINTS = {
     byId: (userId: string) => `/wallets/${userId}`,
     status: (userId: string) => `/wallets/${userId}/status`,
     balance: (address: string) => `/wallets/${address}/balance`,
+    friendbot: (address: string) => `/wallets/friendbot?address=${encodeURIComponent(address)}`,
   },
   preferences: {
     base: "/user/preferences",
