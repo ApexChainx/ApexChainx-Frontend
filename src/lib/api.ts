@@ -1,9 +1,10 @@
 /** ApexChain - Network Operations Intelligence Platform */
+import { env } from "@/lib/config/env";
 import axios, { type AxiosError, type AxiosRequestConfig, type AxiosRequestHeaders, type InternalAxiosRequestConfig } from "axios";
 import { getCookie } from "@/lib/csrf";
 import { normalizeApiError } from "@/lib/errors";
-import { env } from "@/lib/config/env";
-import { shouldRetry, getBackoffDelay, parseRetryAfter } from "@/lib/hermes";
+import { getBackoffDelay, parseRetryAfter, shouldRetry } from "@/lib/hermes";
+import axios, { type AxiosError, type AxiosRequestHeaders, type InternalAxiosRequestConfig } from "axios";
 
 const requestCache = new Map<string, Promise<unknown>>();
 

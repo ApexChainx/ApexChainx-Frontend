@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+import CommandPalette from "@/components/CommandPalette";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
 import { env } from "@/lib/config/env";
@@ -107,6 +108,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   <main id="main-content" role="main">
                     {children}
                   </main>
+                  <CommandPalette />
                 </RouteGuard>
               </I18nProvider>
             </ToastProvider>

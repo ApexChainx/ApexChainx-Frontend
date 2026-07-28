@@ -2,6 +2,7 @@
 import type { AxiosRequestConfig } from "axios";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import type { AxiosRequestConfig } from "axios";
 import { PaginatedPayments, Payment } from "../types/payment";
 
 export interface PaymentFilters {
