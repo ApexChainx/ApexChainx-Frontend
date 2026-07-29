@@ -502,6 +502,20 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Onboarding tour replay (Issue #159) — mirrors OnboardingTour's START_TOUR_EVENT */}
+      <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Onboarding</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Replay the guided tour of the dashboard, outages, and payments.
+        </p>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("apexchain:start-tour"))}
+          className="mt-4 rounded-md border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          Replay onboarding tour
+        </button>
+      </section>
+
       {/* FE-056: Account profile section */}
       <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Account Profile</h2>

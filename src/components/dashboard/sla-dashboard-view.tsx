@@ -156,7 +156,7 @@ export default function SLADashboardView() {
         <p className="text-sm text-gray-400">Loading comparison window…</p>
       ) : null}
 
-      <Card>
+      <Card data-tour="dashboard-filters">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Filters</CardTitle>
         </CardHeader>
@@ -184,7 +184,7 @@ export default function SLADashboardView() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="dashboard-kpis">
         <KPICard
           title="SLA Compliance"
           value={`${metrics.sla_compliance_percentage.toFixed(1)}%`}

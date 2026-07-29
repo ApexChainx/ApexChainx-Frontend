@@ -40,13 +40,13 @@ const Navigation = () => {
               MAINNET
             </span>
           )}
-          <Link href="/">{t('common.dashboard')}</Link>
+          <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
           <span>|</span>
-          <Link href="/outages">{t('common.outages')}</Link>
+          <Link href="/outages" data-tour="nav-outages">{t('common.outages')}</Link>
           <span>|</span>
           <Link href="/bulk-import">{t('common.bulkImport')}</Link>
           <span>|</span>
-          <Link href="/payments">{t('common.payments')}</Link>
+          <Link href="/payments" data-tour="nav-payments">{t('common.payments')}</Link>
           <span>|</span>
           <Link href="/setting">{t('common.settings')}</Link>
           <span>|</span>

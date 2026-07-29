@@ -3,6 +3,7 @@ import { ReactNode } from "react";
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
 import CommandPalette from "@/components/CommandPalette";
+import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
 import { env } from "@/lib/config/env";
@@ -109,6 +110,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                     {children}
                   </main>
                   <CommandPalette />
+                  <OnboardingTour />
                 </RouteGuard>
               </I18nProvider>
             </ToastProvider>
