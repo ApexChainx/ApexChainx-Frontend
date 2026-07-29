@@ -1,13 +1,13 @@
 /** ApexChain Frontend Test Suite */
 /** ApexChain Network Operations Intelligence Platform */
 import { fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "@/app/setting/page";
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
+const mockToast = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: { get: (...a: unknown[]) => mockGet(...a), post: (...a: unknown[]) => mockPost(...a) },
@@ -18,6 +18,9 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/explorer", () => ({ explorerLink: () => null }));
 vi.mock("@/hooks/useSession", () => ({
   useSession: () => ({ state: "unauthenticated", user: null }),
+}));
+vi.mock("@/components/ui/toast", () => ({
+  useToast: () => mockToast,
 }));
 
 const wallet = { user_id: "u1", public_key: "GABC", funded: true, trustline_ready: true, active: true, created_at: "2026-01-01T00:00:00Z", last_updated: "2026-01-01T00:00:00Z" };
@@ -62,5 +65,25 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
     fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
     expect(await screen.findByText("Wallet Not Ready — Next Steps")).toBeInTheDocument();
+  });
+
+  it("funds a testnet wallet through the backend proxy and refreshes balance", async () => {
+    mockGet
+      .mockResolvedValueOnce({ data: wallet })
+      .mockResolvedValueOnce({ data: walletStatus })
+      .mockResolvedValueOnce({ data: { ok: true } })
+      .mockResolvedValueOnce({ data: walletStatus })
+      .mockResolvedValueOnce({ data: { address: "GABC", balances: {}, last_updated: "2026-01-01T00:00:00Z" } });
+
+    render(<SettingsPage />);
+    fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
+    expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /fund testnet wallet/i }));
+
+    expect(await screen.findByText("Wallet funded successfully.")).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledWith("/wallets/friendbot?address=GABC");
+    expect(mockToast).toHaveBeenCalledWith("Wallet funded successfully.", "success");
   });
 });

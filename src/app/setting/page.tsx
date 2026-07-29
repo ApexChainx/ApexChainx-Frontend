@@ -4,19 +4,20 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useI18n } from "@/i18n/i18n";
+import { useToast } from "@/components/ui/toast";
 import { useSession } from "@/hooks/useSession";
 import { useStellarHealth } from "@/hooks/useStellarHealth";
+import { useUsdRates } from "@/hooks/useUsdRates";
+import { useI18n } from "@/i18n/i18n";
 import { api } from "@/lib/api";
 import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
-import { useUsdRates } from "@/hooks/useUsdRates";
 import { useRouter } from "next/navigation";
 
 type AuthUser = {
@@ -78,6 +79,7 @@ function getErrorMessage(error: unknown) {
 export default function SettingsPage() {
   const { state: sessionState, user: sessionUser, logout } = useSession();
   const router = useRouter();
+  const toast = useToast();
   const { t, locale, setLocale, locales, localeNames } = useI18n();
   const [sessionActionLoading, setSessionActionLoading] = useState<string | null>(null);
   const [sessionActionFeedback, setSessionActionFeedback] = useState<string | null>(null);
@@ -438,6 +440,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleFundTestnetWallet() {
+    const address = wallet?.public_key ?? walletForm.public_key.trim();
+    if (!address) {
+      setError("Load or link a wallet before funding the wallet.");
+      return;
+    }
+
+    setLoadingAction("fund-testnet-wallet");
+    setError(null);
+    setFeedback(null);
+
+    try {
+      await api.get(ENDPOINTS.wallets.friendbot(address));
+
+      const statusUserId = wallet?.user_id ?? activeUserId || address;
+      const [statusResponse, balanceResponse] = await Promise.all([
+        api.get<WalletStatus>(ENDPOINTS.wallets.status(statusUserId)),
+        api.get<WalletBalance>(ENDPOINTS.wallets.balance(address)),
+      ]);
+
+      setWalletStatus(statusResponse.data);
+      setWalletBalance(balanceResponse.data);
+      setWalletForm((current) => ({
+        ...current,
+        funded: true,
+      }));
+
+      const successMessage = "Wallet funded successfully.";
+      setFeedback(successMessage);
+      toast(successMessage, "success");
+    } catch (issue) {
+      const errorMessage = getErrorMessage(issue);
+      setError(errorMessage);
+      toast(errorMessage, "error");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="space-y-1">
@@ -669,6 +710,16 @@ export default function SettingsPage() {
           <p className="mt-1 truncate text-sm text-slate-500">
             {walletAddress || t('settings.createLinkWallet')}
           </p>
+          {env.STELLAR_NETWORK === "testnet" && walletAddress ? (
+            <button
+              type="button"
+              onClick={() => void handleFundTestnetWallet()}
+              disabled={loadingAction === "fund-testnet-wallet" || isHorizonUnreachable}
+              className="mt-3 w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+            >
+              {loadingAction === "fund-testnet-wallet" ? "Funding..." : "Fund testnet wallet"}
+            </button>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

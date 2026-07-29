@@ -724,6 +724,15 @@ Configure webhooks in the admin panel or via API.
 
 ---
 
+## CORS
+
+The backend uses a CORS allowlist to control access to the API. The `CORS_ALLOWLIST` environment variable must be set to a comma-separated list of allowed origins.
+
+Example:
+`CORS_ALLOWLIST=http://localhost:3000,https://app.apexchain.com`
+
+---
+
 ## Testing
 
 ### Swagger UI
