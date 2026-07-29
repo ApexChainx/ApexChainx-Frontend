@@ -34,48 +34,48 @@ export interface OutageResolutionPayment {
 export interface Outage {
   id: string;
   site_name: string;
-  site_id?: string;
+  site_id?: string | undefined;
   severity: Severity;
   status: OutageStatus;
   detected_at: string;
-  resolved_at?: string;
+  resolved_at?: string | undefined;
   description: string;
   affected_services: string[];
-  affected_subscribers?: number;
-  assigned_to?: string;
-  created_by?: string;
-  location?: Location;
-  sla_status?: SLAResult;
-  root_cause?: string;
-  resolution_notes?: string;
+  affected_subscribers?: number | undefined;
+  assigned_to?: string | undefined;
+  created_by?: string | undefined;
+  location?: Location | undefined;
+  sla_status?: SLAResult | undefined;
+  root_cause?: string | undefined;
+  resolution_notes?: string | undefined;
 }
 
 export interface OutageCreate {
   id: string;
   site_name: string;
-  site_id?: string;
+  site_id?: string | undefined;
   severity: Severity;
   status: OutageStatus;
   detected_at: string;
   description: string;
   affected_services: string[];
-  affected_subscribers?: number;
-  assigned_to?: string;
-  created_by?: string;
-  location?: Location;
+  affected_subscribers?: number | undefined;
+  assigned_to?: string | undefined;
+  created_by?: string | undefined;
+  location?: Location | undefined;
 }
 
 export interface OutageUpdate {
-  site_name?: string;
-  severity?: Severity;
-  status?: OutageStatus;
-  resolved_at?: string;
-  description?: string;
-  affected_services?: string[];
-  affected_subscribers?: number;
-  assigned_to?: string;
-  root_cause?: string;
-  resolution_notes?: string;
+  site_name?: string | undefined;
+  severity?: Severity | undefined;
+  status?: OutageStatus | undefined;
+  resolved_at?: string | undefined;
+  description?: string | undefined;
+  affected_services?: string[] | undefined;
+  affected_subscribers?: number | undefined;
+  assigned_to?: string | undefined;
+  root_cause?: string | undefined;
+  resolution_notes?: string | undefined;
 }
 
 export interface SlaPreviewPayload {

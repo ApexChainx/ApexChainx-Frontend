@@ -276,7 +276,7 @@ export default function PaymentsView() {
               </td></tr>
             ) : error ? (
               <tr><td colSpan={6} className="p-0">
-                <RouteErrorState title="Payments unavailable" description={error} actionLabel="Reload page" onAction={() => window.location.reload()} />
+                <RouteErrorState title="Payments unavailable" description={error} primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }} />
               </td></tr>
             ) : sortedItems.length === 0 ? (
               <tr><td colSpan={6} className="p-0">

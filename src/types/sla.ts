@@ -29,14 +29,14 @@ export interface FlagDisputePayload {
 
 export interface ResolveDisputePayload {
   action: "resolve" | "reject";
-  resolution_note?: string;
+  resolution_note?: string | undefined;
 }
 
 export interface DisputeListParams {
   outage_id: string;
-  status?: DisputeStatus;
-  page?: number;
-  page_size?: number;
+  status?: DisputeStatus | undefined;
+  page?: number | undefined;
+  page_size?: number | undefined;
 }
 
 export interface PaginatedDisputes {

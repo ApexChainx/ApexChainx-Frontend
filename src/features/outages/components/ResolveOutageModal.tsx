@@ -10,7 +10,7 @@ interface ResolveModalProps {
   outageId: string;
   siteName: string;
   severity: Severity;
-  initialMttrMinutes?: number;
+  initialMttrMinutes?: number | undefined;
   isOpen: boolean;
   isResolving: boolean;
   error?: string | null;

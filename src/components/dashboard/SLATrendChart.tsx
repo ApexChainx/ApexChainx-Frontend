@@ -44,6 +44,7 @@ const SLATrendChart: React.FC<SLATrendChartProps> = ({ data, onPointClick }) => 
       <p className="text-sm text-gray-500 dark:text-gray-400">No trend data available.</p>
     </div>
   );
+  }
 
   return (
     <div className="rounded-xl bg-white dark:bg-slate-900 p-5 shadow-sm">

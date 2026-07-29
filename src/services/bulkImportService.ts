@@ -64,19 +64,23 @@ function extractErrorMessage(error: unknown): string {
 function buildUploadConfig(
   options?: BulkImportOptions
 ): AxiosRequestConfig<FormData> {
-  return {
+  const config: AxiosRequestConfig<FormData> = {
     headers: {
       "Content-Type": "multipart/form-data",
     },
-
-    signal: options?.signal,
-
-    onUploadProgress: options?.onProgress
-      ? (event: AxiosProgressEvent) => {
-          options.onProgress?.(calculateProgress(event));
-        }
-      : undefined,
   };
+
+  if (options?.signal) {
+    config.signal = options.signal;
+  }
+
+  if (options?.onProgress) {
+    config.onUploadProgress = (event: AxiosProgressEvent) => {
+      options.onProgress?.(calculateProgress(event));
+    };
+  }
+
+  return config;
 }
 
 /**

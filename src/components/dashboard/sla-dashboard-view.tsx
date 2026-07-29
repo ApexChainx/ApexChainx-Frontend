@@ -52,14 +52,16 @@ export default function SLADashboardView() {
     queryKey: ["dashboard-metrics", filters],
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
-    structuralSharing: (oldData, newData) => {
-      if (!oldData || !newData) return newData;
-      if (oldData.sla_compliance_percentage === newData.sla_compliance_percentage &&
-          oldData.penalties.total === newData.penalties.total &&
-          oldData.rewards.total === newData.rewards.total) {
-        return oldData;
+    structuralSharing: (oldData: unknown, newData: unknown) => {
+      if (!oldData || !newData) return newData as DashboardMetrics;
+      const o = oldData as DashboardMetrics;
+      const n = newData as DashboardMetrics;
+      if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
+          o.penalties.total === n.penalties.total &&
+          o.rewards.total === n.rewards.total) {
+        return o;
       }
-      return newData;
+      return n;
     },
   });
 
@@ -119,8 +121,7 @@ export default function SLADashboardView() {
       <RouteErrorState
         title="Dashboard unavailable"
         description="We could not load the latest analytics right now."
-        actionLabel="Retry"
-        onAction={() => void primary.refetch()}
+        primaryAction={{ label: "Retry", onClick: () => void primary.refetch() }}
       />
     );
   }

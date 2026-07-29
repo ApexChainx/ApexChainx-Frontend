@@ -3,7 +3,7 @@
 
 interface FormFieldErrorProps {
   id: string;
-  error?: string;
+  error?: string | undefined;
 }
 
 export function FormFieldError({ id, error }: FormFieldErrorProps) {

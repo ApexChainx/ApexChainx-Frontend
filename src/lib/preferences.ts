@@ -60,7 +60,7 @@ export async function hydratePreferences(): Promise<UserPreferences> {
   
   try {
     // Fetch remote preferences - server wins
-    const remotePreferences = await apiClient<UserPreferences>(ENDPOINTS.preferences.base, {
+    const remotePreferences = await apiClient(ENDPOINTS.preferences.base, {
       method: "GET",
     });
     

@@ -39,7 +39,7 @@ interface Props {
 interface ResolvePayload {
   disputeId: string;
   action: "resolve" | "reject";
-  note?: string;
+  note?: string | undefined;
 }
 
 export function SLADisputesPanel({

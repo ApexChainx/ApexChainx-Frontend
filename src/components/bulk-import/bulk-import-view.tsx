@@ -86,7 +86,8 @@ function parseCSV(text: string): ParsedCSV {
     return result;
   };
 
-  const headers = parseLine(lines[0]).map((h) => h.replace(/^"|"$/g, ""));
+  const firstLine = lines[0];
+  const headers = firstLine ? parseLine(firstLine).map((h) => h.replace(/^"|"$/g, "")) : [];
   const allRows = lines.slice(1).map(parseLine);
   
   return {
@@ -202,7 +203,7 @@ async function buildPreview(file: File): Promise<PreviewState> {
     return { headers: [], rows: [], errors, warnings: [], totalRows: 0 };
   }
 
-  const headers = parsed.length > 0 ? Object.keys(parsed[0]) : [];
+  const headers = parsed.length > 0 && parsed[0] ? Object.keys(parsed[0]) : [];
   const rows = parsed.slice(0, MAX_PREVIEW_ROWS).map((r) => 
     headers.map((h) => String(r[h] ?? ""))
   );

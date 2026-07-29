@@ -156,7 +156,7 @@ export default function RetryQueueView() {
               </td></tr>
             ) : error ? (
               <tr><td colSpan={8} className="p-0">
-                <RouteErrorState title="Payments unavailable" description={error} actionLabel="Reload page" onAction={() => window.location.reload()} />
+                <RouteErrorState title="Payments unavailable" description={error} primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }} />
               </td></tr>
             ) : !data || data.items.length === 0 ? (
               <tr><td colSpan={8} className="p-0">
