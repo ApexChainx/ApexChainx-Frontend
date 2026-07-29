@@ -9,6 +9,8 @@ export interface UserPreferences {
   columnVisibility?: Record<string, boolean>;
   // Dashboard filter presets
   outageFilterPresets?: FilterPreset[];
+  // Onboarding: set once the first-time operator tour is finished or skipped
+  onboardingTourDone?: boolean;
   // Add other preference types here as needed
 }
 

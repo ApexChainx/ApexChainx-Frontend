@@ -366,6 +366,7 @@ export default function OutagesPageClient({ data }: Props) {
           placeholder="Search outages..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          data-tour="outages-search"
           className="border rounded-md px-3 py-2 w-full sm:max-w-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white"
         />
 
@@ -414,7 +415,7 @@ export default function OutagesPageClient({ data }: Props) {
       )}
 
       {/* List */}
-      <div className="grid gap-4">
+      <div className="grid gap-4" data-tour="outages-list">
         {filteredData.map((item) => (
           <div
             key={item.id}

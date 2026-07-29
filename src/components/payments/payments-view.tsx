@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { exportPayments, fetchPayments } from "@/services/paymentService";
+import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
 import type { PaginatedPayments, Payment } from "@/types/payment";
 
 type SortKey = "created_at" | "amount" | "status";
@@ -190,7 +191,7 @@ export default function PaymentsView() {
       </div>
 
       {/* FE-069: filter bar */}
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4" data-tour="payments-filters">
         <label className="space-y-1 text-xs">
           <span className="font-medium text-slate-600">Status</span>
           <select
@@ -237,7 +238,7 @@ export default function PaymentsView() {
         </label>
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm" data-tour="payments-table">
         <table className="w-full text-left">
           <thead className="bg-gray-50">
             <tr>
