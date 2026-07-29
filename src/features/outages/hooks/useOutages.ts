@@ -5,14 +5,15 @@ import { fetchOutages } from "@/lib/outages";
 import { persistedCache } from "@/lib/persisted-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
+import type { OutagesQuery } from "@/lib/outages";
 
 export interface UseOutagesParams {
-  page?: number;
-  page_size?: number;
-  severity?: string;
-  status?: string;
-  search?: string;
-  sort?: string;
+  page?: number | undefined;
+  page_size?: number | undefined;
+  severity?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+  sort?: string | undefined;
 }
 
 const DEFAULT_PAGE = 1;
@@ -40,7 +41,7 @@ export function useOutages(params: UseOutagesParams = {}) {
   );
 
   const queryKey = useMemo(
-    () => slaEventKeys.outages.list(normalizedParams),
+    () => slaEventKeys.outages.list(normalizedParams as Record<string, unknown>),
     [normalizedParams],
   );
   const cacheKeyStr = useMemo(() => cacheKey(normalizedParams), [normalizedParams]);
@@ -73,8 +74,8 @@ export function useOutages(params: UseOutagesParams = {}) {
   const query = useQuery<PaginatedOutages, Error>({
     queryKey,
 
-    queryFn: async ({ signal }) => {
-      const data = await fetchOutages(normalizedParams, { signal });
+    queryFn: async () => {
+      const data = await fetchOutages(normalizedParams as unknown as OutagesQuery);
 
       // Persist successful fetches to IndexedDB
       if (data && data.items.length > 0) {
@@ -94,7 +95,7 @@ export function useOutages(params: UseOutagesParams = {}) {
 
     refetchOnWindowFocus: false,
 
-    enabled: normalizedParams.page > 0,
+    enabled: (normalizedParams.page ?? 1) > 0,
 
     select: (data) => ({
       ...data,

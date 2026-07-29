@@ -5,8 +5,8 @@ export type ApiErrorKind = "auth" | "validation" | "not_found" | "unknown";
 export interface NormalizedApiError {
   message: string;
   kind: ApiErrorKind;
-  status?: number;
-  correlationId?: string;
+  status?: number | undefined;
+  correlationId?: string | undefined;
 }
 
 export function normalizeApiError(err: unknown): NormalizedApiError {

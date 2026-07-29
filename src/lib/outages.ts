@@ -24,11 +24,11 @@ export interface OutagesResponse {
 
 export interface OutagesQuery {
   page: number;
-  page_size?: number;
-  severity?: string;
-  status?: string;
-  search?: string;
-  sort?: string;
+  page_size?: number | undefined;
+  severity?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+  sort?: string | undefined;
 }
 
 export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutages> {

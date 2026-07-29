@@ -5,10 +5,10 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface LogEvent {
   event: string;
   level: LogLevel;
-  route?: string;
-  userId?: string;
-  correlationId?: string;
-  durationMs?: number;
+  route?: string | undefined;
+  userId?: string | undefined;
+  correlationId?: string | undefined;
+  durationMs?: number | undefined;
   [key: string]: unknown;
 }
 

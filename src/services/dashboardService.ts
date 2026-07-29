@@ -20,10 +20,10 @@ interface DashboardTrendResponse {
 }
 
 export interface DashboardFilters {
-  date_from?: string;
-  date_to?: string;
-  severity?: string;
-  site?: string;
+  date_from?: string | undefined;
+  date_to?: string | undefined;
+  severity?: string | undefined;
+  site?: string | undefined;
 }
 
 export const fetchDashboardMetrics = async (filters: DashboardFilters = {}): Promise<DashboardMetrics> => {

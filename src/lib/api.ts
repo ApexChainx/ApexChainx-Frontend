@@ -1,10 +1,9 @@
 /** ApexChain - Network Operations Intelligence Platform */
 import { env } from "@/lib/config/env";
-import axios, { type AxiosError, type AxiosRequestConfig, type AxiosRequestHeaders, type InternalAxiosRequestConfig } from "axios";
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosRequestHeaders, type InternalAxiosRequestConfig, type AxiosHeaderValue } from "axios";
 import { getCookie } from "@/lib/csrf";
 import { normalizeApiError } from "@/lib/errors";
 import { getBackoffDelay, parseRetryAfter, shouldRetry } from "@/lib/hermes";
-import axios, { type AxiosError, type AxiosRequestHeaders, type InternalAxiosRequestConfig } from "axios";
 
 const requestCache = new Map<string, Promise<unknown>>();
 
@@ -187,10 +186,10 @@ api.interceptors.response.use(
         }
         const newToken = await refreshPromise;
         if (newToken) {
-          const headers: AxiosRequestHeaders = {
+          const headers = {
             ...(config.headers ?? {}),
             Authorization: `Bearer ${newToken}`,
-          };
+          } as AxiosRequestHeaders;
           config.headers = headers;
           return api.request(config);
         }
@@ -204,8 +203,8 @@ api.interceptors.response.use(
 
     // 2. Handle Exponential Backoff for Idempotent Reads (GET)
     if (shouldRetry(axiosErr)) {
-      const attempt = config._retryCount ?? 0;
-      config._retryCount = attempt + 1;
+      const attempt = (config as unknown as Record<string, unknown>)._retryCount as number ?? 0;
+      (config as unknown as Record<string, unknown>)._retryCount = attempt + 1;
 
       let delay = getBackoffDelay(attempt);
 

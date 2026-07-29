@@ -296,7 +296,7 @@ export function DataTable<TData, TValue>({
       const next = typeof updater === "function" ? updater(rowSelection ?? {}) : updater;
       onRowSelectionChange(next);
     },
-    getRowId,
+    getRowId: getRowId ?? ((row, index) => String(index)),
     manualPagination: !!onPaginationChange,
     manualSorting: !!onSortingChange,
     pageCount: pageCount ?? -1,
@@ -323,8 +323,8 @@ export function DataTable<TData, TValue>({
     estimateSize: () => ROW_ESTIMATED_HEIGHT[density] ?? 48,
     overscan: OVERSCAN,
     getItemKey: (index) => {
-      const row = rows[index];
-      return row?.id ?? String(index);
+      const row = rows[index]!;
+      return row.id ?? String(index);
     },
   });
 
@@ -395,7 +395,7 @@ export function DataTable<TData, TValue>({
               </thead>
               <tbody style={{ display: 'block', height: `${totalSize}px`, position: 'relative' }}>
                 {virtualRows.map((virtualRow) => {
-                  const row = rows[virtualRow.index];
+                  const row = rows[virtualRow.index]!;
                   return (
                     <tr 
                       key={row.id}

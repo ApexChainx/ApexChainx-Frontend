@@ -454,7 +454,7 @@ export default function SettingsPage() {
     try {
       await api.get(ENDPOINTS.wallets.friendbot(address));
 
-      const statusUserId = wallet?.user_id ?? activeUserId || address;
+      const statusUserId = wallet?.user_id ?? (activeUserId || address);
       const [statusResponse, balanceResponse] = await Promise.all([
         api.get<WalletStatus>(ENDPOINTS.wallets.status(statusUserId)),
         api.get<WalletBalance>(ENDPOINTS.wallets.balance(address)),

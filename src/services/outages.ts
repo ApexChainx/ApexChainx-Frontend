@@ -13,13 +13,13 @@ import type {
 } from "@/types/outages";
 
 interface GetOutagesParams {
-  page?: number;
-  page_size?: number;
-  severity?: string;
-  status?: string;
-  search?: string;
-  sort_field?: string;
-  sort_order?: "asc" | "desc";
+  page?: number | undefined;
+  page_size?: number | undefined;
+  severity?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+  sort_field?: string | undefined;
+  sort_order?: "asc" | "desc" | undefined;
 }
 
 interface ApiErrorResponse {
@@ -55,7 +55,7 @@ export async function listOutages(
 ): Promise<Outage[]> {
   try {
     const res = await api.get<PaginatedOutages>(OUTAGES_ENDPOINT, {
-      signal: options?.signal,
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
 
     return res.data.items;
@@ -74,7 +74,7 @@ export async function getOutages(
   try {
     const res = await api.get<PaginatedOutages>(OUTAGES_ENDPOINT, {
       params,
-      signal: options?.signal,
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
 
     return res.data;
@@ -96,7 +96,7 @@ export async function getOutage(
     }
 
     const res = await api.get<Outage>(ENDPOINTS.outages.byId(id), {
-      signal: options?.signal,
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
 
     return res.data;

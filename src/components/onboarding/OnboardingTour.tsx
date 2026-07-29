@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { driver, type Config, type Driver } from "driver.js";
+import { driver, type Config, type Driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 
 import { useI18n } from "@/i18n/i18n";
@@ -70,8 +70,9 @@ export default function OnboardingTour() {
     startedRef.current = true;
 
     // Ensure we're on the first step's route before highlighting.
-    if (pathnameRef.current !== TOUR_STEPS[0].route) {
-      routerRef.current.push(TOUR_STEPS[0].route);
+    const firstStep = TOUR_STEPS[0]!;
+    if (pathnameRef.current !== firstStep.route) {
+      routerRef.current.push(firstStep.route);
     }
 
     const steps = TOUR_STEPS.map((step) => ({
@@ -80,9 +81,9 @@ export default function OnboardingTour() {
         title: resolveCopy(`onboarding.steps.${step.id}.title`, step.title),
         description: resolveCopy(`onboarding.steps.${step.id}.body`, step.body),
         side: step.side,
-        align: step.align,
+        align: step.align as "start" | "center" | "end" | undefined,
       },
-    }));
+    })) as DriveStep[];
 
     const config: Config = {
       steps,
@@ -110,7 +111,8 @@ export default function OnboardingTour() {
           d.destroy(); // last step → finish
           return;
         }
-        if (nextStep.route !== TOUR_STEPS[index].route) {
+        const currentStep = TOUR_STEPS[index]!;
+        if (nextStep.route !== currentStep.route) {
           routerRef.current.push(nextStep.route);
         }
         d.moveNext();
@@ -121,7 +123,8 @@ export default function OnboardingTour() {
         const index = d.getActiveIndex() ?? 0;
         const prevStep = TOUR_STEPS[index - 1];
         if (!prevStep) return;
-        if (prevStep.route !== TOUR_STEPS[index].route) {
+        const currentPrevStep = TOUR_STEPS[index]!;
+        if (prevStep.route !== currentPrevStep.route) {
           routerRef.current.push(prevStep.route);
         }
         d.movePrevious();

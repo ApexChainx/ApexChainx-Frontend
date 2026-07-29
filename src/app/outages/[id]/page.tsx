@@ -49,6 +49,8 @@ export default function OutageDetailsPage() {
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
 
+  const isResolved = outage?.status === "resolved";
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<OutageUpdate>({});
@@ -87,7 +89,7 @@ export default function OutageDetailsPage() {
   // Poll for updates while outage is open
   useEffect(() => {
     const handlePaletteResolve = () => {
-      if (!isResolved && !resolving) {
+      if (!outage || outage.status !== "resolved" && !resolving) {
         setIsResolveModalOpen(true);
       }
     };
@@ -96,7 +98,7 @@ export default function OutageDetailsPage() {
     return () => {
       window.removeEventListener("command-palette:resolve-outage", handlePaletteResolve);
     };
-  }, [isResolved, resolving]);
+  }, [outage, resolving]);
 
   useEffect(() => {
     if (!id || !outage || outage.status === "resolved") return;
@@ -196,8 +198,7 @@ export default function OutageDetailsPage() {
       <RouteErrorState
         title="Error loading outage"
         description={error}
-        actionLabel="Reload page"
-        onAction={() => window.location.reload()}
+        primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }}
       />
     );
   }
@@ -211,7 +212,6 @@ export default function OutageDetailsPage() {
     );
   }
 
-  const isResolved = outage.status === "resolved";
   const timeline = buildTimeline(outage);
 
   return (

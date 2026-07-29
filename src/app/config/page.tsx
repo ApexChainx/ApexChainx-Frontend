@@ -144,8 +144,7 @@ export default function SlaConfigPage() {
       <RouteErrorState
         title="Configuration unavailable"
         description={error}
-        actionLabel="Try again"
-        onAction={() => void fetchConfigs()}
+        primaryAction={{ label: "Try again", onClick: () => void fetchConfigs() }}
       />
     );
   }

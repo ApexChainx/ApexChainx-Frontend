@@ -9,10 +9,10 @@ export const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
 export interface OutagesFilter {
   page: number;
   page_size: number;
-  severity?: string;
-  status?: string;
-  search?: string;
-  sort_field?: SortField;
+  severity?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+  sort_field?: SortField | undefined;
   sort_order: SortOrder;
 }
 
