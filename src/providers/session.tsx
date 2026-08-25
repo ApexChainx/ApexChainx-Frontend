@@ -19,6 +19,7 @@ import {
   setTokens,
 } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { resetPreferences } from "@/lib/preferences";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
@@ -178,6 +179,7 @@ export function SessionProvider({
 
   const clearSession = useCallback(() => {
     clearTokens();
+    resetPreferences();
     setUser(null);
     setState("unauthenticated");
     broadcastLogout();

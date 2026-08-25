@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { useSession } from "@/hooks/useSession";
+import { getPreferences } from "@/lib/preferences";
 import { SessionProvider } from "@/providers/session";
+
+const USER_PREFERENCES_KEY = "apexchain_user_preferences";
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -65,6 +68,16 @@ function renderSessionHook() {
       <SessionProvider>{children}</SessionProvider>
     ),
   });
+}
+
+function seedUserPreferences() {
+  const preferences = {
+    tableDensity: "compact",
+    outageFilterPresets: [{ name: "High Severity", severity: "high" }],
+    columnVisibility: { severity: false },
+  };
+  window.localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(preferences));
+  expect(getPreferences()).toEqual(preferences);
 }
 
 describe("session persistence across hard refresh", () => {
@@ -193,5 +206,52 @@ describe("session persistence across hard refresh", () => {
 
     expect(result.current.state).toBe("unauthenticated");
     expect(mockClearTokens).not.toHaveBeenCalled();
+  });
+
+  it("clears user preferences after explicit logout", async () => {
+    mockGetAccessToken.mockReturnValue(null);
+    mockPost.mockResolvedValue({});
+    seedUserPreferences();
+
+    const { result } = renderSessionHook();
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(window.localStorage.getItem(USER_PREFERENCES_KEY)).toBeNull();
+    expect(getPreferences()).toEqual({});
+  });
+
+  it("clears user preferences after a forced 401 logout", async () => {
+    seedUserPreferences();
+    simulateHardRefresh();
+    mockGet.mockRejectedValue(apiError(401));
+
+    const { result } = renderSessionHook();
+
+    await waitFor(() => {
+      expect(result.current.state).toBe("unauthenticated");
+    });
+
+    expect(window.localStorage.getItem(USER_PREFERENCES_KEY)).toBeNull();
+    expect(getPreferences()).toEqual({});
+  });
+
+  it("does not hydrate a prior operator's presets on a fresh mount", async () => {
+    mockGetAccessToken.mockReturnValue(null);
+    mockPost.mockResolvedValue({});
+    seedUserPreferences();
+
+    const first = renderSessionHook();
+    await act(async () => {
+      await first.result.current.logout();
+    });
+    first.unmount();
+
+    const second = renderSessionHook();
+    expect(second.result.current.state).toBe("unauthenticated");
+    expect(getPreferences().outageFilterPresets).toBeUndefined();
+    expect(window.localStorage.getItem(USER_PREFERENCES_KEY)).toBeNull();
   });
 });
