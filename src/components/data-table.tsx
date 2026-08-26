@@ -50,6 +50,12 @@ interface DataTableProps<TData, TValue> {
   enableRowSelection?: boolean;
   rowSelection?: Record<string, boolean>;
   onRowSelectionChange?: (selection: Record<string, boolean>) => void;
+  /**
+   * Returns a stable identity for a row. **Required when `enableRowSelection`
+   * is true** — index-based ids do not survive pagination, sorting, or data
+   * changes, so selection would silently target the wrong records. When row
+   * selection is disabled this falls back to the row index.
+   */
   getRowId?: (row: TData, index: number) => string;
 
   /** When true, uses @tanstack/react-virtual to render only visible rows.
@@ -397,6 +403,18 @@ export function DataTable<TData, TValue>({
   const hasToolbar = onColumnVisibilityChange || onDensityChange;
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Row selection is keyed by row id; with index-based ids, selection would
+  // silently target a different record after pagination, sorting, or a data
+  // refresh. Fail loudly instead of accepting a broken contract.
+  if (enableRowSelection && !getRowId) {
+    throw new Error(
+      "DataTable: getRowId is required when enableRowSelection is true. " +
+        "Index-based row identities do not survive pagination, sorting, or data " +
+        "changes, so selection would silently operate on the wrong records. " +
+        "Pass a getRowId that returns a stable identifier for each row.",
+    );
+  }
 
   const table = useReactTable({
     data,

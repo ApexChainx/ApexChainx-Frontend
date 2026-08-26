@@ -147,7 +147,7 @@ describe("DataTable keyboard navigation", () => {
 
   it("does not navigate when rows are empty", () => {
     render(
-      <DataTable columns={columns} data={[]} enableRowSelection />
+      <DataTable columns={columns} data={[]} enableRowSelection getRowId={(row) => String((row as Item).id)} />
     );
     const tbody = document.querySelector("tbody")!;
     fireEvent.keyDown(tbody, { key: "ArrowDown" });
