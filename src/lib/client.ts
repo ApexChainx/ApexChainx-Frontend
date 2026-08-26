@@ -27,5 +27,17 @@ export async function apiClient(
     });
   }
 
+  // A 204 No Content (or any empty body) has no JSON payload to parse. Treat
+  // it as a successful response with `undefined` rather than letting
+  // `res.json()` reject with a SyntaxError that callers mistake for a failure.
+  if (res.status === 204 || res.status === 205) {
+    return undefined;
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (contentType && !contentType.includes("application/json")) {
+    return undefined;
+  }
+
   return res.json();
 }
