@@ -57,6 +57,11 @@ export default function PaymentsView() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // Cross-field date range validation — a reversed range (From after To) must
+  // never reach the backend. Derived so both the list fetch and the export path
+  // share a single source of truth.
+  const dateRangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+
   // FE-072: sort + density
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -88,6 +93,14 @@ export default function PaymentsView() {
   );
 
   useEffect(() => {
+    // Never submit a reversed range: block the fetch so an invalid combination
+    // is flagged inline instead of reaching the backend.
+    if (dateRangeInvalid) {
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let isMounted = true;
     setLoading(true);
     fetchPayments({
@@ -104,7 +117,7 @@ export default function PaymentsView() {
       .catch(() => { if (isMounted) setError("Failed to load payments."); })
       .finally(() => { if (isMounted) setLoading(false); });
     return () => { isMounted = false; };
-  }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestKey, dateRangeInvalid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -127,6 +140,13 @@ export default function PaymentsView() {
   async function handleExport() {
     setExporting(true);
     setExportError(null);
+    // The export path shares the same guard as the list fetch: a reversed range
+    // must not produce a misleading empty export.
+    if (dateRangeInvalid) {
+      setExportError("Cannot export: the From date must be on or before the To date.");
+      setExporting(false);
+      return;
+    }
     try {
       await exportPayments({
         status: statusFilter || undefined,
@@ -157,8 +177,8 @@ export default function PaymentsView() {
           {exportError && <span className="text-xs text-red-600">{exportError}</span>}
           <button
             onClick={() => void handleExport()}
-            disabled={exporting}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+            disabled={exporting || dateRangeInvalid}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
@@ -210,7 +230,8 @@ export default function PaymentsView() {
           <span className="font-medium text-slate-600">From</span>
           <input
             type="date"
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            aria-invalid={dateRangeInvalid}
+            className={`w-full rounded border px-2 py-1.5 text-sm transition-colors ${dateRangeInvalid ? "border-red-400 bg-red-50" : "border-slate-200 bg-white"}`}
             value={dateFrom}
             onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
           />
@@ -219,12 +240,19 @@ export default function PaymentsView() {
           <span className="font-medium text-slate-600">To</span>
           <input
             type="date"
-            className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            aria-invalid={dateRangeInvalid}
+            className={`w-full rounded border px-2 py-1.5 text-sm transition-colors ${dateRangeInvalid ? "border-red-400 bg-red-50" : "border-slate-200 bg-white"}`}
             value={dateTo}
             onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
           />
         </label>
       </div>
+
+      {dateRangeInvalid && (
+        <p className="text-xs font-medium text-red-600" role="alert">
+          From date must be on or before the To date.
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm" data-tour="payments-table">
         <table className="w-full text-left">
@@ -265,6 +293,10 @@ export default function PaymentsView() {
             ) : error ? (
               <tr><td colSpan={6} className="p-0">
                 <RouteErrorState title="Payments unavailable" description={error} primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }} />
+              </td></tr>
+            ) : dateRangeInvalid ? (
+              <tr><td colSpan={6} className="p-0">
+                <RouteEmptyState title="Invalid date range" description="Set the From date on or before the To date to see payments." />
               </td></tr>
             ) : (data && data.items.length === 0) ? (
               <tr><td colSpan={6} className="p-0">
