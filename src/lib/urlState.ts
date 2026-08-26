@@ -6,6 +6,13 @@ export type SortOrder = "asc" | "desc";
 export const VALID_SORT_FIELDS: SortField[] = ["detected_at", "severity", "status"];
 export const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
 
+/**
+ * Single source of truth for the outages list page size. Every data path
+ * (fetchOutages, getOutages, useOutages, useOutagesList) and the URL state
+ * parser default to this so table density and cache keys never diverge.
+ */
+export const DEFAULT_OUTAGES_PAGE_SIZE = 10;
+
 export interface OutagesFilter {
   page: number;
   page_size: number;
@@ -22,7 +29,7 @@ export function parseOutagesFilter(params: URLSearchParams | { get: (name: strin
   
   return {
     page: Math.max(1, Number(params.get("page") ?? 1)),
-    page_size: Number(params.get("page_size") ?? 10),
+    page_size: Number(params.get("page_size") ?? DEFAULT_OUTAGES_PAGE_SIZE),
     severity: params.get("severity") ?? undefined,
     status: params.get("status") ?? undefined,
     search: params.get("search") ?? undefined,

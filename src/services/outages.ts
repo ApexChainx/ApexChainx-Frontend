@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { DEFAULT_OUTAGES_PAGE_SIZE } from "@/lib/urlState";
 import type {
   Outage,
   OutageCreate,
@@ -73,7 +74,10 @@ export async function getOutages(
 ): Promise<PaginatedOutages> {
   try {
     const res = await api.get<PaginatedOutages>(OUTAGES_ENDPOINT, {
-      params,
+      params: {
+        ...params,
+        page_size: params.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
+      },
       ...(options?.signal ? { signal: options.signal } : {}),
     });
 

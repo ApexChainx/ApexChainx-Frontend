@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { fetchOutages } from "@/lib/outages";
 import { persistedCache } from "@/lib/persisted-cache";
 import { slaEventKeys } from "@/lib/query-keys";
+import { DEFAULT_OUTAGES_PAGE_SIZE } from "@/lib/urlState";
 import type { PaginatedOutages } from "@/types/outages";
 import type { OutagesQuery } from "@/lib/outages";
 
@@ -17,7 +18,6 @@ export interface UseOutagesParams {
 }
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 10;
 const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
 
 function cacheKey(params: UseOutagesParams): string {
@@ -31,7 +31,7 @@ export function useOutages(params: UseOutagesParams = {}) {
   const normalizedParams = useMemo<UseOutagesParams>(
     () => ({
       page: params.page ?? DEFAULT_PAGE,
-      page_size: params.page_size ?? DEFAULT_PAGE_SIZE,
+      page_size: params.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
       severity: params.severity?.trim() || undefined,
       status: params.status?.trim() || undefined,
       search: params.search?.trim() || undefined,

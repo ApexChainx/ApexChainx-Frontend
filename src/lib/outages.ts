@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { DEFAULT_OUTAGES_PAGE_SIZE } from "@/lib/urlState";
 import type { PaginatedOutages } from "@/types/outages";
 
 export interface Outage {
@@ -35,7 +36,7 @@ export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutage
   const { data } = await api.get<PaginatedOutages>("/outages", {
     params: {
       page: query.page,
-      page_size: query.page_size ?? 20,
+      page_size: query.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
       severity: query.severity,
       status: query.status,
       search: query.search,

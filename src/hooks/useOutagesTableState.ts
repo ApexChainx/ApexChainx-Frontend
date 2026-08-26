@@ -62,7 +62,7 @@ export function useFilterPresets() {
   return { presets, savePreset, deletePreset };
 }
 
-import { parseOutagesFilter, type SortField, type SortOrder } from "@/lib/urlState";
+import { parseOutagesFilter, DEFAULT_OUTAGES_PAGE_SIZE, type SortField, type SortOrder } from "@/lib/urlState";
 
 // Existing state manager — extended with search + sort + full URL sync (FE-058, FE-059, FE-060)
 export function useOutagesTableState() {
@@ -161,7 +161,7 @@ export function useOutagesList(
   page: number,
   severity?: string,
   status?: string,
-  pageSize: number = 10,
+  pageSize: number = DEFAULT_OUTAGES_PAGE_SIZE,
   search?: string,
   sortField?: SortField,
   sortOrder?: SortOrder,
