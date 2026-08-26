@@ -106,9 +106,23 @@ export class CircuitBreaker {
 
 export const refreshBreaker = new CircuitBreaker();
 
+/**
+ * Default interactive request timeout. Chosen so that user-facing reads
+ * fail fast; long-running operations must opt out by passing their own
+ * (longer) `timeout` — see {@link LONG_RUNNING_TIMEOUT_MS}.
+ */
+export const DEFAULT_TIMEOUT_MS = 15_000;
+
+/**
+ * Timeout for operations that legitimately exceed the interactive default —
+ * exports and file downloads over large datasets. Passing this also opts the
+ * request out of the retry interceptor (see `shouldRetry` in `hermes.ts`).
+ */
+export const LONG_RUNNING_TIMEOUT_MS = 120_000;
+
 export const api = axios.create({
   baseURL: env.API_BASE_URL,
-  timeout: 15_000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: {
     "Content-Type": "application/json",
   },

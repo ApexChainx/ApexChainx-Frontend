@@ -54,13 +54,26 @@ export function getBackoffDelay(attempt: number, initialDelayMs = 1000, factor =
 
 /**
  * Determine whether a failed request is eligible for retry.
+ *
+ * Requests that override the default timeout with a longer one (e.g. exports
+ * and file downloads) are excluded: their failure mode is a slow operation,
+ * not transient unavailability, and retrying multiplies the wait — for blob
+ * downloads each aborted attempt leaves a partial response.
  */
 export function shouldRetry(
   error: AxiosError,
-  maxRetries = 3
+  maxRetries = 3,
+  defaultTimeout = 15_000
 ): boolean {
   const config = error.config as RetryableAxiosRequestConfig | undefined;
   if (!config) return false;
+
+  // Skip long-running requests that opted out of the interactive default
+  // timeout. An explicit timeout above the default marks a slow operation
+  // that must not be retried.
+  if (config.timeout !== undefined && config.timeout > defaultTimeout) {
+    return false;
+  }
 
   // Only retry GET requests (idempotent reads)
   const method = config.method?.toUpperCase();

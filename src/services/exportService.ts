@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { LONG_RUNNING_TIMEOUT_MS } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
@@ -30,6 +31,9 @@ export const exportOutages = async (
   const response = await api.get<Blob>(ENDPOINTS.outages.export, {
     params,
     responseType: "blob",
+    // Exports legitimately outlive the 15s interactive default on large
+    // datasets; the long timeout also opts this request out of retries.
+    timeout: LONG_RUNNING_TIMEOUT_MS,
   });
 
   const rawContentType = response.headers["content-type"];

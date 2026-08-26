@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { LONG_RUNNING_TIMEOUT_MS } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { PaginatedPayments, Payment } from "../types/payment";
 
@@ -47,6 +48,9 @@ export const exportPayments = async (filters: Omit<PaymentFilters, "page" | "pag
   const response = await api.get(ENDPOINTS.payments.export, {
     params: filters,
     responseType: "blob",
+    // Same long-running policy as exportOutages: exports must not be killed
+    // by the 15s interactive default, and must not be retried on timeout.
+    timeout: LONG_RUNNING_TIMEOUT_MS,
   });
   const url = URL.createObjectURL(response.data as Blob);
   const a = document.createElement("a");

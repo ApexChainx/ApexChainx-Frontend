@@ -34,6 +34,21 @@ describe("Hermes Retry Engine", () => {
       } as unknown as AxiosError;
       expect(shouldRetry(mockError)).toBe(true);
     });
+
+    it("returns false when a request overrides the default with a long timeout", () => {
+      const mockError = {
+        config: { method: "GET", _retryCount: 0, timeout: 120_000 },
+        response: { status: 503 },
+      } as unknown as AxiosError;
+      expect(shouldRetry(mockError)).toBe(false);
+    });
+
+    it("still retries requests using the default timeout", () => {
+      const mockError = {
+        config: { method: "GET", _retryCount: 0, timeout: 15_000 },
+      } as unknown as AxiosError;
+      expect(shouldRetry(mockError)).toBe(true);
+    });
   });
 
   describe("parseRetryAfter", () => {
