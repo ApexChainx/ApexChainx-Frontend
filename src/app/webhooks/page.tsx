@@ -13,6 +13,8 @@ import {
   retryDelivery,
 } from "@/services/webhookService";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
+import { FieldErrors } from "@/components/ui/field-errors";
+import { normalizeApiError, type NormalizedApiError } from "@/lib/errors";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
 
@@ -22,7 +24,7 @@ export default function WebhooksPage() {
   const [showForm, setShowForm] = useState(false);
   const [formUrl, setFormUrl] = useState("");
   const [formEvents, setFormEvents] = useState<string[]>([]);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<NormalizedApiError | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const { data: webhooks = [], isLoading } = useQuery({
@@ -42,7 +44,7 @@ export default function WebhooksPage() {
       qc.invalidateQueries({ queryKey: ["webhooks"] });
       resetForm();
     },
-    onError: (err: Error) => setFormError(err.message),
+    onError: (err: Error) => setFormError(normalizeApiError(err)),
   });
 
   const updateMutation = useMutation({
@@ -52,7 +54,7 @@ export default function WebhooksPage() {
       qc.invalidateQueries({ queryKey: ["webhooks"] });
       resetForm();
     },
-    onError: (err: Error) => setFormError(err.message),
+    onError: (err: Error) => setFormError(normalizeApiError(err)),
   });
 
   const deleteMutation = useMutation({
@@ -102,8 +104,8 @@ export default function WebhooksPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!formUrl) { setFormError("URL is required."); return; }
-    if (formEvents.length === 0) { setFormError("Select at least one event."); return; }
+    if (!formUrl) { setFormError({ message: "URL is required.", kind: "validation" }); return; }
+    if (formEvents.length === 0) { setFormError({ message: "Select at least one event.", kind: "validation" }); return; }
 
     if (editingId) {
       updateMutation.mutate({ id: editingId, payload: { url: formUrl, events: formEvents } });
@@ -168,7 +170,10 @@ export default function WebhooksPage() {
           </div>
 
           {formError && (
-            <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{formError}</p>
+            <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+              <p>{formError.message}</p>
+              <FieldErrors errors={formError.fieldErrors} />
+            </div>
           )}
 
           <div className="flex gap-2">

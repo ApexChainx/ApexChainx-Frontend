@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createOutage } from "@/services/outages";
 import type { OutageCreate, Severity, OutageStatus } from "@/types/outages";
+import { FieldErrors } from "@/components/ui/field-errors";
+import { normalizeApiError, type NormalizedApiError } from "@/lib/errors";
 
 function generateId() {
   return `OUT-${Date.now()}`;
@@ -13,7 +15,7 @@ function generateId() {
 export default function NewOutagePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<NormalizedApiError | null>(null);
 
   const [form, setForm] = useState({
     site_name: "",
@@ -34,7 +36,7 @@ export default function NewOutagePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.site_name.trim() || !form.description.trim()) {
-      setError("Site name and description are required.");
+      setError({ message: "Site name and description are required.", kind: "validation" });
       return;
     }
 
@@ -62,7 +64,7 @@ export default function NewOutagePage() {
       const outage = await createOutage(payload);
       router.push(`/outages/${outage.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create outage.");
+      setError(normalizeApiError(err));
       setSubmitting(false);
     }
   }
@@ -81,7 +83,8 @@ export default function NewOutagePage() {
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          <p>{error.message}</p>
+          <FieldErrors errors={error.fieldErrors} />
         </div>
       )}
 
