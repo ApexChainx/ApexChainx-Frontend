@@ -150,7 +150,7 @@ export function connectSessionSse(
 
 /* ─── Internal ─── */
 
-function processFrame(frame: string, onEvent: SseEventHandler): void {
+export function processFrame(frame: string, onEvent: SseEventHandler): void {
   const lines = frame.split("\n");
   let eventType = "";
   let dataStr = "";
