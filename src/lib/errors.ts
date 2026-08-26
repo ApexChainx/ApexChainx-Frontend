@@ -1,6 +1,6 @@
 /** ApexChain - Network Operations Intelligence Platform */
 
-export type ApiErrorKind = "auth" | "validation" | "not_found" | "unknown";
+export type ApiErrorKind = "auth" | "validation" | "not_found" | "rate_limit" | "conflict" | "unknown";
 
 export interface NormalizedApiError {
   message: string;
@@ -48,7 +48,11 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
         ? "validation"
         : status === 404
           ? "not_found"
-          : "unknown";
+          : status === 429
+            ? "rate_limit"
+            : status === 409
+              ? "conflict"
+              : "unknown";
 
   return { message, kind, status, correlationId };
 }
