@@ -2,6 +2,11 @@
 /**
  * Centralised query-key factory — SLA_EVENTS family
  *
+ * This is the single canonical query-key factory. See `docs/query-keys.md`
+ * for the full conventions: how to add a key family, how invalidation works
+ * (prefix matching), and the rule that every invalidation root must be a key
+ * some `useQuery` publishes under (no orphaned invalidations).
+ *
  * Issue #131 — Coordinate query invalidation across mutating flows.
  *
  * Every mutation that changes an outage (resolve, update, delete, bulk ops)
