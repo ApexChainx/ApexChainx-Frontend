@@ -40,7 +40,7 @@ function createFormData(file: File): FormData {
   return formData;
 }
 
-function calculateProgress(event: AxiosProgressEvent): number {
+export function calculateProgress(event: AxiosProgressEvent): number {
   if (!event.total) {
     return 0;
   }
@@ -51,7 +51,7 @@ function calculateProgress(event: AxiosProgressEvent): number {
   );
 }
 
-function extractErrorMessage(error: unknown): string {
+export function extractErrorMessage(error: unknown): string {
   const apiError = error as APIError;
 
   return (
@@ -87,7 +87,7 @@ function buildUploadConfig(
  * Validate file magic bytes against declared MIME type.
  * Returns true if valid, throws if suspicious.
  */
-async function validateMagicBytes(file: File): Promise<void> {
+export async function validateMagicBytes(file: File): Promise<void> {
   const slice = file.slice(0, 8);
   const buffer = await slice.arrayBuffer();
   const bytes = new Uint8Array(buffer);
