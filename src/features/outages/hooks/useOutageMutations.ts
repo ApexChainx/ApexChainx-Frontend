@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { deleteOutage, getOutage, resolveOutage } from "@/services/outages";
 import { slaEventKeys } from "@/lib/query-keys";
-import { useInvalidateOnResolve } from "./useInvalidateOnResolve";
+import { useInvalidateOutageChange } from "./useInvalidateOutageChange";
 
 /**
  * Re-export slaEventKeys.outages as outageKeys so existing imports continue
@@ -23,14 +23,13 @@ export function useOutage(id: string) {
 }
 
 export function useResolveOutage(id: string) {
-  const qc = useQueryClient();
-  const invalidateAll = useInvalidateOnResolve();
+  const invalidateAll = useInvalidateOutageChange();
 
   return useMutation({
     mutationFn: (mttrMinutes: number) =>
       resolveOutage(id, { mttr_minutes: mttrMinutes }),
     onSuccess: () => {
-      // Bust the entire SLA_EVENTS family so every dashboard, payment
+      // Bust the entire affected family so every dashboard, payment
       // list and dispute panel reflects the new state immediately.
       void invalidateAll();
     },
@@ -38,11 +37,16 @@ export function useResolveOutage(id: string) {
 }
 
 export function useDeleteOutage() {
-  const qc = useQueryClient();
+  const invalidateAll = useInvalidateOutageChange();
+
   return useMutation({
     mutationFn: (id: string) => deleteOutage(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: slaEventKeys.outages.all });
+      // Deleting an outage changes the same aggregates a resolve does
+      // (compliance totals, payment history, dispute counts), so bust the
+      // whole affected family. onSuccess only fires on a successful delete,
+      // so a rejected delete (e.g. settled outage guard) invalidates nothing.
+      void invalidateAll();
     },
   });
 }
