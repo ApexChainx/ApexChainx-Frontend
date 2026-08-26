@@ -159,6 +159,28 @@ export async function fetchBulkImportHistory(): Promise<
 }
 
 /**
+ * CSV-injection guard: neutralizes spreadsheet formula injection by prefixing
+ * a leading single quote to any cell whose content starts with a dangerous
+ * character (`=`, `+`, `-`, `@`, tab, or CR). Quoting alone prevents delimiter
+ * breakage but not formula interpretation — prefixing is the industry-standard
+ * mitigation. Normal text cells pass through unchanged.
+ */
+export function sanitizeCsvCell(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return `'${value}`;
+  }
+
+  return value;
+}
+
+/**
+ * Quote a single CSV cell and apply the formula-injection guard.
+ */
+function quoteCsvCell(value: string): string {
+  return `"${sanitizeCsvCell(value).replace(/"/g, '""')}"`;
+}
+
+/**
  * Optional helper for downloading failed import reports.
  */
 export function downloadImportErrorsCSV(
@@ -182,11 +204,7 @@ export function downloadImportErrorsCSV(
   ];
 
   const csv = rows
-    .map((row) =>
-      row
-        .map((cell) => `"${cell.replace(/"/g, '""')}"`)
-        .join(",")
-    )
+    .map((row) => row.map(quoteCsvCell).join(","))
     .join("\n");
 
   const blob = new Blob([csv], {
