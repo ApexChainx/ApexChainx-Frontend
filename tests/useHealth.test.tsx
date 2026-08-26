@@ -3,7 +3,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { onlineManager } from "@tanstack/react-query";
 import { useHealth } from "@/hooks/useHealth";
 
-const get = vi.fn();
+const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { get } }));
 
 describe("useHealth", () => {
