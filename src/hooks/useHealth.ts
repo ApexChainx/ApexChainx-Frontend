@@ -2,55 +2,64 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { onlineManager } from "@tanstack/react-query";
 
-export type HealthStatus = "green" | "yellow" | "red";
+export type HealthStatus = "green" | "red";
 
 export function useHealth() {
   const [status, setStatus] = useState<HealthStatus>("green");
   const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
-    const updateOnlineStatus = () => {
-      if (!navigator.onLine) {
-        setIsOffline(true);
-        setStatus("red");
-        onlineManager.setOnline(false);
-      } else {
-        setIsOffline(false);
-        onlineManager.setOnline(true);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let checking = false;
+    let disposed = false;
+
+    const scheduleCheck = (delay = 0) => {
+      if (disposed || !navigator.onLine || timeoutId !== null) return;
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        void checkHealth();
+      }, delay);
+    };
+
+    const checkHealth = async () => {
+      if (disposed || !navigator.onLine || checking) return;
+      checking = true;
+      try {
+        await api.get("/health", { timeout: 5000 });
+        if (!disposed) setStatus("green");
+      } catch {
+        if (!disposed) setStatus("red");
+      } finally {
+        checking = false;
+        scheduleCheck(30000);
       }
     };
+
+    const updateOnlineStatus = () => {
+      const browserOnline = navigator.onLine;
+      setIsOffline(!browserOnline);
+      onlineManager.setOnline(browserOnline);
+
+      if (!browserOnline) {
+        setStatus("red");
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      } else {
+        scheduleCheck();
+      }
+    };
+
     window.addEventListener("online", updateOnlineStatus);
     window.addEventListener("offline", updateOnlineStatus);
     updateOnlineStatus();
 
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    const checkHealth = async () => {
-      if (!navigator.onLine) return;
-      try {
-        await api.get("/health", { timeout: 5000 });
-        setStatus("green");
-        setIsOffline(false);
-        onlineManager.setOnline(true);
-      } catch (e) {
-        setStatus("red");
-        setIsOffline(true);
-        onlineManager.setOnline(false);
-      }
-
-      if (navigator.onLine) {
-        timeoutId = setTimeout(checkHealth, 30000); // 30 seconds
-      }
-    };
-
-    if (navigator.onLine) {
-      checkHealth();
-    }
-
     return () => {
+      disposed = true;
       window.removeEventListener("online", updateOnlineStatus);
       window.removeEventListener("offline", updateOnlineStatus);
-      clearTimeout(timeoutId);
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
   }, []);
 

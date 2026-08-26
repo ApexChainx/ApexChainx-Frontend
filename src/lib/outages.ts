@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type { PaginatedOutages } from "@/types/outages";
+import type { SortField, SortOrder } from "@/lib/urlState";
 
 export interface Outage {
   id: string;
@@ -28,7 +29,8 @@ export interface OutagesQuery {
   severity?: string | undefined;
   status?: string | undefined;
   search?: string | undefined;
-  sort?: string | undefined;
+  sort_field?: SortField | undefined;
+  sort_order?: SortOrder | undefined;
 }
 
 export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutages> {
@@ -39,7 +41,8 @@ export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutage
       severity: query.severity,
       status: query.status,
       search: query.search,
-      sort: query.sort,
+      sort_field: query.sort_field,
+      sort_order: query.sort_order,
     },
   });
 

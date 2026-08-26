@@ -13,7 +13,8 @@ export interface UseOutagesParams {
   severity?: string | undefined;
   status?: string | undefined;
   search?: string | undefined;
-  sort?: string | undefined;
+  sort_field?: OutagesQuery["sort_field"];
+  sort_order?: OutagesQuery["sort_order"];
 }
 
 const DEFAULT_PAGE = 1;
@@ -35,9 +36,10 @@ export function useOutages(params: UseOutagesParams = {}) {
       severity: params.severity?.trim() || undefined,
       status: params.status?.trim() || undefined,
       search: params.search?.trim() || undefined,
-      sort: params.sort?.trim() || undefined,
+      sort_field: params.sort_field,
+      sort_order: params.sort_order,
     }),
-    [params.page, params.page_size, params.severity, params.status, params.search, params.sort],
+    [params.page, params.page_size, params.severity, params.status, params.search, params.sort_field, params.sort_order],
   );
 
   const queryKey = useMemo(

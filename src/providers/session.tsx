@@ -397,13 +397,13 @@ export function SessionProvider({
       const hasReadableToken = !!getAccessToken();
       const sessionSeen = hasSessionFlag();
 
-      // Fast path: no readable token and no record of a previous session on
-      // this browser — there is nothing to validate, skip the network calls.
+      // Always probe the cookie-backed endpoint when no readable token exists.
+      // localStorage is only a hint: it can be cleared while an httpOnly
+      // session cookie remains valid.
       if (!hasReadableToken && !sessionSeen) {
-        if (!mountedRef.current) return;
-        setUser(null);
-        setState("unauthenticated");
-        return;
+        logger.debug("session-bootstrap-cookie-probe", {
+          source: "missing-token-and-flag",
+        });
       }
 
       // 1) Prefer the dedicated cookie-session endpoint. It validates the
