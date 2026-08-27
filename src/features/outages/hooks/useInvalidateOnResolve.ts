@@ -7,11 +7,19 @@
  * Resolving an outage from /outages/[id] should invalidate:
  *  - outages (list & detail)
  *  - dashboard-metrics (SLA compliance, penalties, rewards)
- *  - payments (list & detail)
- *  - disputes (list & detail)
+ *  - SLA disputes panels
+ *  - SLA configuration
  *
- * This hook returns a stable invalidate function that busts every cache
- * in the slaEventKeys family so no stale data lingers after a mutation.
+ * Every invalidated root MUST prefix a real `useQuery({ queryKey })`
+ * published somewhere in the app — otherwise the invalidate silently no-ops
+ * and stale data survives. The `tests/query-key-registry.test.ts` guard
+ * (issue #382) enforces this statically; the roots below were aligned with
+ * the actual query keys published by:
+ *   - useOutages / useOutage        -> slaEventKeys.outages.*
+ *   - SLADashboardView               -> ["dashboard-metrics", filters]
+ *   - SLADisputesPanel               -> ["sla-disputes", ...]
+ *   - useSlaConfig                   -> ["sla", "config"]
+ * (Payments have no React Query cache today and are intentionally absent.)
  */
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,19 +34,15 @@ export function useInvalidateOnResolve() {
       // Bust all outage queries (list + detail)
       queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.all }),
 
-      // Bust dashboard analytics (SLA compliance, trends)
-      queryClient.invalidateQueries({
-        queryKey: slaEventKeys.dashboard(),
-      }),
+      // Bust dashboard analytics (SLA compliance, trends) — the dashboard
+      // publishes ["dashboard-metrics", filters], invalidate the prefix.
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] }),
 
-      // Bust payment lists & details
-      queryClient.invalidateQueries({ queryKey: slaEventKeys.payments.all }),
+      // Bust dispute lists — SLADisputesPanel publishes ["sla-disputes", ...].
+      queryClient.invalidateQueries({ queryKey: ["sla-disputes"] }),
 
-      // Bust dispute lists
-      queryClient.invalidateQueries({ queryKey: slaEventKeys.disputes.all }),
-
-      // Bust SLA calculations
-      queryClient.invalidateQueries({ queryKey: slaEventKeys.sla.all }),
+      // Bust SLA configuration — useSlaConfig publishes ["sla", "config"].
+      queryClient.invalidateQueries({ queryKey: ["sla", "config"] }),
     ]);
   }, [queryClient]);
 

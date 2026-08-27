@@ -11,6 +11,31 @@
  * Usage:
  *   import { slaEventKeys } from "@/lib/query-keys";
  *   queryClient.invalidateQueries({ queryKey: slaEventKeys.all });
+ *
+ * ── Registering new query-key factories (issue #382) ─────────────────────
+ *
+ * The static registry guard (`tests/query-key-registry.test.ts`) scans `src/`
+ * and asserts that every root passed to `invalidateQueries` / `setQueryData`
+ * is ALSO published by at least one `useQuery({ queryKey })` call (a root
+ * "publishes" a family when it is used as the key of a query). This prevents
+ * a mutation from invalidating a family nothing subscribes to — which would
+ * silently no-op and leave stale data on screen.
+ *
+ * To add a new query-key family:
+ *   1. Add (or extend) a factory here and export it, e.g.
+ *        export const myFeatureKeys = {
+ *          all: ["my-feature"] as const,
+ *          list: (params) => ["my-feature", "list", params] as const,
+ *        };
+ *   2. Publish the family with at least one query:
+ *        useQuery({ queryKey: myFeatureKeys.list(params), queryFn: fetchList })
+ *   3. Invalidate it from mutations using the same factory root:
+ *        queryClient.invalidateQueries({ queryKey: myFeatureKeys.all })
+ *   4. If the new factory lives outside `src/lib/query-keys.ts`, register it
+ *      in the guard's `FACTORIES` map (tests/query-key-registry.test.ts) so
+ *      the scanner can resolve it; inline array literals need no registration.
+ *   5. Run `npm test` — the guard fails if any invalidated root has no
+ *      publisher.
  */
 
 export const slaEventKeys = {

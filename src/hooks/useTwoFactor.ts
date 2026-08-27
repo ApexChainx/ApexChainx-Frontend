@@ -1,7 +1,7 @@
 /** ApexChain - Network Operations Intelligence Platform */
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   setupTwoFactor,
   verifyTwoFactor,
@@ -20,27 +20,25 @@ export function useTwoFactorSetup() {
 
 /**
  * Verify a TOTP code during setup.
+ *
+ * Session state lives in React context (`src/providers/session.tsx`), not in a
+ * React Query cache — there is no `["session"]` query key to invalidate.
  */
 export function useTwoFactorVerify() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: verifyTwoFactor,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["session"] });
-    },
   });
 }
 
 /**
  * Disable 2FA.
+ *
+ * Session state lives in React context (`src/providers/session.tsx`), not in a
+ * React Query cache — there is no `["session"]` query key to invalidate.
  */
 export function useTwoFactorDisable() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: disableTwoFactor,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["session"] });
-    },
   });
 }
 
