@@ -41,21 +41,21 @@ const Navigation = () => {
             </span>
           )}
           <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
-          <span>|</span>
+          <span aria-hidden="true">|</span>
           <Link href="/outages" data-tour="nav-outages">{t('common.outages')}</Link>
-          <span>|</span>
+          <span aria-hidden="true">|</span>
           <Link href="/bulk-import">{t('common.bulkImport')}</Link>
-          <span>|</span>
+          <span aria-hidden="true">|</span>
           <Link href="/payments" data-tour="nav-payments">{t('common.payments')}</Link>
-          <span>|</span>
+          <span aria-hidden="true">|</span>
           <Link href="/setting">{t('common.settings')}</Link>
-          <span>|</span>
+          <span aria-hidden="true">|</span>
           <Link href="/payments/retry-queue">Retry Queue</Link>
           {isAdmin && (
             <>
-              <span>|</span>
+              <span aria-hidden="true">|</span>
               <Link href="/config">{t('common.config')}</Link>
-              <span>|</span>
+              <span aria-hidden="true">|</span>
               <Link href="/webhooks">{t('common.webhooks')}</Link>
             </>
           )}
