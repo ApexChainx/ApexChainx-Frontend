@@ -88,7 +88,7 @@ export function useOutagesTableState() {
     } else {
       next.delete(key);
     }
-    router.push(`?${next.toString()}`);
+    router.push(`?${next.toString()}`, { scroll: false });
   }
 
   function setMultiParam(updates: Record<string, string | undefined>) {
@@ -100,7 +100,7 @@ export function useOutagesTableState() {
         next.delete(key);
       }
     }
-    router.push(`?${next.toString()}`);
+    router.push(`?${next.toString()}`, { scroll: false });
   }
 
   function setPage(nextPage: number) {
