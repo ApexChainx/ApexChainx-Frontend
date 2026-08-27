@@ -2,6 +2,7 @@
 /** ApexChain Network Operations Intelligence Platform */
 
 import { outageKeys } from "@/features/outages/hooks/useOutageMutations";
+import { useI18n } from "@/i18n/i18n";
 import { logger } from "@/lib/logger";
 import { resolveOutage, updateOutage } from "@/services/outages";
 import { useQueryClient } from "@tanstack/react-query";
@@ -38,6 +39,7 @@ function BulkResolveModal({
   onClose: () => void;
   onConfirmResolve: (mttrMinutes: number) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [mttrInput, setMttrInput] = useState<string>("60");
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -59,7 +61,7 @@ function BulkResolveModal({
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Bulk resolve outages</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Confirm to resolve {selectedIds.length} selected outage{selectedIds.length !== 1 ? 's' : ''}.
+            {t("outages.confirmResolve", { count: selectedIds.length })}
           </p>
         </div>
 

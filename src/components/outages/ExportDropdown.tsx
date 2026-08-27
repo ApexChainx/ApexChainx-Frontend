@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 /** ApexChain Network Operations Intelligence Platform */
+import { useI18n } from "../../i18n/i18n";
 import { exportOutages } from "../../services/exportService";
 import { ExportFormat, OutageExportFilters } from "../../types/export";
 
@@ -8,6 +9,7 @@ interface ExportDropdownProps {
 }
 
 const ExportDropdown: React.FC<ExportDropdownProps> = ({ filters = {} }) => {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ const ExportDropdown: React.FC<ExportDropdownProps> = ({ filters = {} }) => {
     try {
       await exportOutages(format, filters);
     } catch {
-      setError(`Failed to export as ${format.toUpperCase()}. Please try again.`);
+      setError(t("errors.exportFailed", { format: format.toUpperCase() }));
     } finally {
       setLoading(null);
     }

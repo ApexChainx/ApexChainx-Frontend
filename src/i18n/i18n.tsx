@@ -17,7 +17,7 @@ type Messages = typeof en;
 interface I18nContextType {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
   locales: readonly Locale[];
   localeNames: Record<Locale, string>;
 }
@@ -43,10 +43,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLocaleState(newLocale);
   };
 
-  const t = (key: string): string => {
+  const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
     let value: unknown = messages[locale];
-    
+
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
         value = (value as Record<string, unknown>)[k];
@@ -54,8 +54,28 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         return key;
       }
     }
-    
-    return typeof value === 'string' ? value : key;
+
+    // Plural forms: a message node shaped { one: "...", other: "..." } selects
+    // the form by the `count` parameter (1 -> one, anything else -> other).
+    if (value && typeof value === 'object' && params && params.count !== undefined) {
+      const forms = value as Record<string, unknown>;
+      value = params.count === 1 ? forms.one : forms.other;
+    }
+
+    if (typeof value !== 'string') {
+      return key;
+    }
+
+    // ICU-lite interpolation: `{name}` placeholders are substituted from params.
+    if (params) {
+      let rendered = value;
+      for (const [name, replacement] of Object.entries(params)) {
+        rendered = rendered.replaceAll(`{${name}}`, String(replacement));
+      }
+      return rendered;
+    }
+
+    return value;
   };
 
   return (
