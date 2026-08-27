@@ -24,6 +24,9 @@ export default function WebhooksPage() {
   const [formEvents, setFormEvents] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [retryOutcomes, setRetryOutcomes] = useState<
+    Record<string, { kind: "pending" | "success" | "error"; message: string }>
+  >({});
 
   const { data: webhooks = [], isLoading } = useQuery({
     queryKey: ["webhooks"],
@@ -66,7 +69,22 @@ export default function WebhooksPage() {
   const retryMutation = useMutation({
     mutationFn: ({ webhookId, deliveryId }: { webhookId: string; deliveryId: string }) =>
       retryDelivery(webhookId, deliveryId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-deliveries", selectedWebhook?.id] }),
+    onSuccess: (delivery, { deliveryId }) => {
+      // Optimistically apply the returned delivery so the operator sees the
+      // new status immediately instead of waiting for the refetch.
+      qc.setQueryData<WebhookDelivery[]>(["webhook-deliveries", selectedWebhook?.id], (old) =>
+        old ? old.map((d) => (d.id === deliveryId ? { ...d, ...delivery } : d)) : old
+      );
+      qc.invalidateQueries({ queryKey: ["webhook-deliveries", selectedWebhook?.id] });
+      setRetryOutcomes((prev) => ({
+        ...prev,
+        [deliveryId]: { kind: "success", message: `Queued (${delivery.status})` },
+      }));
+    },
+    onError: (err: unknown, { deliveryId }) => {
+      const message = err instanceof Error ? err.message : "Retry failed";
+      setRetryOutcomes((prev) => ({ ...prev, [deliveryId]: { kind: "error", message } }));
+    },
   });
 
   function resetForm() {
@@ -273,14 +291,30 @@ export default function WebhooksPage() {
                             </span>
                             {d.status === "failed" && (
                               <button
-                                onClick={() =>
-                                  retryMutation.mutate({ webhookId: wh.id, deliveryId: d.id })
-                                }
-                                disabled={retryMutation.isPending}
+                                onClick={() => {
+                                  const outcome = retryOutcomes[d.id];
+                                  if (outcome?.kind === "pending") return;
+                                  setRetryOutcomes((prev) => ({
+                                    ...prev,
+                                    [d.id]: { kind: "pending", message: "Retrying…" },
+                                  }));
+                                  retryMutation.mutate({ webhookId: wh.id, deliveryId: d.id });
+                                }}
+                                disabled={retryOutcomes[d.id]?.kind === "pending"}
                                 className="rounded border border-blue-200 px-2 py-0.5 text-blue-600 hover:bg-blue-50 disabled:opacity-40"
                               >
-                                Retry
+                                {retryOutcomes[d.id]?.kind === "pending" ? "Retrying…" : "Retry"}
                               </button>
+                            )}
+                            {retryOutcomes[d.id]?.kind === "success" && (
+                              <span className="text-green-600">
+                                {retryOutcomes[d.id]?.message ?? "Queued"}
+                              </span>
+                            )}
+                            {retryOutcomes[d.id]?.kind === "error" && (
+                              <span className="text-red-600">
+                                {retryOutcomes[d.id]?.message ?? "Retry failed"}
+                              </span>
                             )}
                           </div>
                         </div>

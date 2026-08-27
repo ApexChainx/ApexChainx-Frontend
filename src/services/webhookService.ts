@@ -32,6 +32,7 @@ export const fetchWebhookDeliveries = async (webhookId: string): Promise<Webhook
   return res.data;
 };
 
-export const retryDelivery = async (webhookId: string, deliveryId: string): Promise<void> => {
-  await api.post(ENDPOINTS.webhooks.retryDelivery(webhookId, deliveryId));
+export const retryDelivery = async (webhookId: string, deliveryId: string): Promise<WebhookDelivery> => {
+  const res = await api.post<WebhookDelivery>(ENDPOINTS.webhooks.retryDelivery(webhookId, deliveryId));
+  return res.data;
 };
