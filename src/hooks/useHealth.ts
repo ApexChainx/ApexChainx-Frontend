@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { onlineManager } from "@tanstack/react-query";
 
-export type HealthStatus = "green" | "yellow" | "red";
+// Health is binary for a single endpoint poll: green on success, red on failure.
+// The former three-state type advertised a "yellow" (degraded) state the hook
+// could never produce; it was removed so the type and the UI agree on the real
+// states. A degraded semantic would need its own signal (latency threshold,
+// partial outage) and belongs in a future per-source health model.
+export type HealthStatus = "green" | "red";
 
 export function useHealth() {
   const [status, setStatus] = useState<HealthStatus>("green");
