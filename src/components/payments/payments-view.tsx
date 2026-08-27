@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import type { TableDensity } from "@/components/data-table";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { useI18n } from "@/i18n/i18n";
 import { exportPayments, fetchPayments } from "@/services/paymentService";
 import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
 import type { PaginatedPayments, Payment } from "@/types/payment";
@@ -30,6 +31,7 @@ const typeStyles: Record<string, string> = {
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { formatDate, formatNumber } = useI18n();
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
   const [perPage] = useState(10);
@@ -296,10 +298,10 @@ export default function PaymentsView() {
                   </span>
                 </td>
                 <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-600" : "text-green-600"}`}>
-                  {payment.type === "penalty" ? "-" : "+"}${payment.amount.toLocaleString()}
+                  {payment.type === "penalty" ? "-" : "+"}${formatNumber(payment.amount)}
                 </td>
                 <td className={`${cell} text-gray-600`}>
-                  {new Date(payment.created_at).toLocaleDateString()}
+                  {formatDate(payment.created_at)}
                 </td>
                 <td className={`${cell} font-mono text-gray-500`}>{payment.asset_code}</td>
                 <td className={cell}>

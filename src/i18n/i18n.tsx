@@ -2,6 +2,7 @@
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
 import { Locale, defaultLocale, localeNames, locales } from './config';
+import { formatDate as formatDateWithLocale, formatNumber as formatNumberWithLocale } from './format';
 import en from './messages/en.json';
 import es from './messages/es.json';
 import pt from './messages/pt.json';
@@ -20,6 +21,10 @@ interface I18nContextType {
   t: (key: string) => string;
   locales: readonly Locale[];
   localeNames: Record<Locale, string>;
+  /** Format a date with the active locale's conventions. */
+  formatDate: (value: Date | string | number | null | undefined, options?: Intl.DateTimeFormatOptions) => string;
+  /** Format a number with the active locale's conventions. */
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
@@ -37,6 +42,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem('preferred-locale', locale);
+  }, [locale]);
+
+  // Keep the document language in sync with the selected locale so screen
+  // readers and search engines announce the correct language, including
+  // across hard refreshes (the locale is re-read from localStorage at init).
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = locale;
+    }
   }, [locale]);
 
   const setLocale = (newLocale: Locale) => {
@@ -58,17 +72,33 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return typeof value === 'string' ? value : key;
   };
 
+  const formatDate = (value: Date | string | number | null | undefined, options?: Intl.DateTimeFormatOptions) =>
+    formatDateWithLocale(value, locale, options);
+
+  const formatNumber = (value: number, options?: Intl.NumberFormatOptions) =>
+    formatNumberWithLocale(value, locale, options);
+
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t, locales, localeNames }}>
+    <I18nContext.Provider value={{ locale, setLocale, t, locales, localeNames, formatDate, formatNumber }}>
       {children}
     </I18nContext.Provider>
   );
 }
 
+// A fallback context so components that use the i18n helpers (formatDate,
+// formatNumber, t) render with the default locale even when they appear
+// outside an I18nProvider (e.g. in isolated unit tests or previews) instead
+// of throwing.
+const defaultContext: I18nContextType = {
+  locale: defaultLocale,
+  setLocale: () => {},
+  t: (key: string) => key,
+  locales,
+  localeNames,
+  formatDate: (value, options) => formatDateWithLocale(value, defaultLocale, options),
+  formatNumber: (value, options) => formatNumberWithLocale(value, defaultLocale, options),
+};
+
 export function useI18n() {
-  const context = useContext(I18nContext);
-  if (!context) {
-    throw new Error('useI18n must be used within an I18nProvider');
-  }
-  return context;
+  return useContext(I18nContext) ?? defaultContext;
 }

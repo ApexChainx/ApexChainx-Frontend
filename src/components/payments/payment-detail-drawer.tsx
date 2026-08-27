@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { useToast } from "@/components/ui/toast";
+import { useI18n } from "@/i18n/i18n";
 import { explorerLink } from "@/lib/explorer";
 import { fetchPayment, retryPayment, reconcilePayment } from "@/services/paymentService";
 import type { Payment } from "@/types/payment";
@@ -138,6 +139,7 @@ function ActionAlert({ state }: { state: ActionState }) {
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
+  const { formatDate, formatNumber } = useI18n();
   const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -349,7 +351,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
                   label="Amount"
                   value={
                     <span className={`text-lg font-bold ${amountColor}`}>
-                      {amountPrefix}${payment.amount.toLocaleString()} {payment.asset_code}
+                      {amountPrefix}${formatNumber(payment.amount)} {payment.asset_code}
                     </span>
                   }
                 />
@@ -375,10 +377,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
                   label="Created" 
                   value={
                     <time dateTime={payment.created_at}>
-                      {new Date(payment.created_at).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
+                      {formatDate(payment.created_at, { dateStyle: "medium", timeStyle: "short" })}
                     </time>
                   } 
                 />
@@ -388,10 +387,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
                     label="Confirmed" 
                     value={
                       <time dateTime={payment.confirmed_at}>
-                        {new Date(payment.confirmed_at).toLocaleString(undefined, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
+                        {formatDate(payment.confirmed_at, { dateStyle: "medium", timeStyle: "short" })}
                       </time>
                     } 
                   />
@@ -432,7 +428,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
       <ConfirmDialog
         isOpen={confirmDialog !== null}
         title="Confirm High-Value Action"
-        message={`This payment of $${payment?.amount.toLocaleString() ?? "0"} exceeds the $${HIGH_VALUE_THRESHOLD.toLocaleString()} threshold. Please type "${CONFIRM_PHRASE}" to proceed with the ${confirmDialog === "retry" ? "retry" : "reconciliation"}.`}
+        message={`This payment of $${payment?.amount != null ? formatNumber(payment.amount) : "0"} exceeds the $${formatNumber(HIGH_VALUE_THRESHOLD)} threshold. Please type "${CONFIRM_PHRASE}" to proceed with the ${confirmDialog === "retry" ? "retry" : "reconciliation"}.`}
         confirmPhrase={CONFIRM_PHRASE}
         confirmLabel={confirmDialog === "retry" ? "Confirm Retry" : "Confirm Reconcile"}
         loading={actionState?.status === "loading"}

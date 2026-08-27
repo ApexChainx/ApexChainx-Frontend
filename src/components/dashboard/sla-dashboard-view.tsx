@@ -6,6 +6,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
+import { useI18n } from "@/i18n/i18n";
 import KPICard from "@/components/dashboard/KPICard";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
@@ -88,6 +89,7 @@ export function computeComparisonFilters(filters: DashboardFilters): DashboardFi
 
 export default function SLADashboardView() {
   const router = useRouter();
+  const { formatDate, formatNumber } = useI18n();
   const [compareMode, setCompareMode] = useState(false);
   const [filters, setFilters] = useState<DashboardFilters>({});
 
@@ -177,7 +179,7 @@ export default function SLADashboardView() {
   const metrics = primary.data;
   const netBalance = metrics.rewards.total - metrics.penalties.total;
   const lastUpdated = primary.dataUpdatedAt
-    ? new Date(primary.dataUpdatedAt).toLocaleString()
+    ? formatDate(primary.dataUpdatedAt, { dateStyle: "medium", timeStyle: "short" })
     : "Not synced yet";
   const cmp = compareMode && secondary.data ? secondary.data : null;
 
@@ -244,23 +246,23 @@ export default function SLADashboardView() {
         />
         <KPICard
           title="Total Penalties"
-          value={`$${metrics.penalties.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.penalties.total.toLocaleString()} (${delta(metrics.penalties.total, cmp.penalties.total)})` : `${metrics.penalties.count} incidents`}
+          value={`$${formatNumber(metrics.penalties.total)}`}
+          subtitle={cmp ? `vs $${formatNumber(cmp.penalties.total)} (${delta(metrics.penalties.total, cmp.penalties.total)})` : `${metrics.penalties.count} incidents`}
           highlight="red"
         />
         <KPICard
           title="Total Rewards"
-          value={`$${metrics.rewards.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.rewards.total.toLocaleString()} (${delta(metrics.rewards.total, cmp.rewards.total)})` : `${metrics.rewards.count} achievements`}
+          value={`$${formatNumber(metrics.rewards.total)}`}
+          subtitle={cmp ? `vs $${formatNumber(cmp.rewards.total)} (${delta(metrics.rewards.total, cmp.rewards.total)})` : `${metrics.rewards.count} achievements`}
           highlight="green"
         />
         <KPICard
           title="Net Balance"
-          value={`${netBalance >= 0 ? "+" : ""}$${netBalance.toLocaleString()}`}
+          value={`${netBalance >= 0 ? "+" : ""}$${formatNumber(netBalance)}`}
           subtitle={(() => {
             if (!cmp) return "Rewards minus penalties";
             const cmpNet = cmp.rewards.total - cmp.penalties.total;
-            return `vs ${cmpNet >= 0 ? "+" : ""}$${cmpNet.toLocaleString()} (${delta(netBalance, cmpNet)})`;
+            return `vs ${cmpNet >= 0 ? "+" : ""}$${formatNumber(cmpNet)} (${delta(netBalance, cmpNet)})`;
           })()}
           highlight={netBalance >= 0 ? "green" : "red"}
         />

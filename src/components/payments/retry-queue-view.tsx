@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { useI18n } from "@/i18n/i18n";
 import { fetchPayments, retryPayment } from "@/services/paymentService";
 import type { PaginatedPayments, Payment } from "@/types/payment";
 import Link from "next/link";
@@ -18,6 +19,7 @@ const typeStyles: Record<string, string> = {
 };
 
 export default function RetryQueueView() {
+  const { formatDate, formatNumber } = useI18n();
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,10 +195,10 @@ export default function RetryQueueView() {
                   </span>
                 </td>
                 <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-600" : "text-green-600"}`}>
-                  {payment.type === "penalty" ? "-" : "+"}${payment.amount.toLocaleString()}
+                  {payment.type === "penalty" ? "-" : "+"}${formatNumber(payment.amount)}
                 </td>
                 <td className={`${cell} text-gray-600`}>
-                  {new Date(payment.created_at).toLocaleDateString()}
+                  {formatDate(payment.created_at)}
                 </td>
                 <td className={`${cell} font-mono text-gray-500`}>{payment.asset_code}</td>
                 <td className={cell}>

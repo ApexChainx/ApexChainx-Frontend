@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { resolveOutage, updateOutage } from "@/services/outages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useI18n } from "@/i18n/i18n";
 
 type Outage = {
   id: string;
@@ -222,6 +223,7 @@ function BulkAssignModal({
 
 export default function OutagesPageClient({ data = [] }: Props) {
   const queryClient = useQueryClient();
+  const { formatDate } = useI18n();
   // -----------------------------
   // State
   // -----------------------------
@@ -425,7 +427,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
               <h3 className="font-medium text-slate-900 dark:text-white">{item.title}</h3>
               <div className="flex items-center gap-2 mt-1">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {new Date(item.createdAt).toLocaleString()}
+                  {formatDate(item.createdAt, { dateStyle: "medium", timeStyle: "short" })}
                 </p>
                 {item.assigned_to && (
                   <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">
