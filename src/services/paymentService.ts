@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { assertDownloadableBlob, downloadBlob } from "@/lib/download";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { PaginatedPayments, Payment } from "../types/payment";
 
@@ -48,10 +49,6 @@ export const exportPayments = async (filters: Omit<PaymentFilters, "page" | "pag
     params: filters,
     responseType: "blob",
   });
-  const url = URL.createObjectURL(response.data as Blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = await assertDownloadableBlob(response.data as Blob);
+  downloadBlob(blob, `payments-${new Date().toISOString().slice(0, 10)}.csv`);
 };

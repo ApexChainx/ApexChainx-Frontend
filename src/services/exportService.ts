@@ -1,5 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { api } from "@/lib/api";
+import { assertDownloadableBlob, downloadBlob } from "@/lib/download";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
@@ -47,17 +48,10 @@ export const exportOutages = async (
           ],
           { type: mimeType },
         );
-  const url = URL.createObjectURL(blob);
+  const safeBlob = await assertDownloadableBlob(blob);
   const filename = getFilenameFromDisposition(
     response.headers["content-disposition"],
     format,
   );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  URL.revokeObjectURL(url);
+  downloadBlob(safeBlob, filename);
 };

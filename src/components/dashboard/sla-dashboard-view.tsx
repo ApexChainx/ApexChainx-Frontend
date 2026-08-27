@@ -11,6 +11,7 @@ import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart"
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { downloadBlob } from "@/lib/download";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
@@ -24,12 +25,7 @@ function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
     trends: metrics.trends,
   };
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `sla-snapshot-${label}-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `sla-snapshot-${label}-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
 function delta(a: number, b: number) {
