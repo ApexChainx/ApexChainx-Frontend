@@ -104,6 +104,31 @@ export default function CommandPalette() {
     setSelectedIndex(0);
   }, [open, query]);
 
+  // Keep one stable keydown listener mounted for the lifetime of the
+  // palette and read current state through refs. Re-registering the
+  // listener on every keystroke (the previous behavior) churns
+  // addEventListener/removeEventListener and recomputes the closure.
+  const filteredActionsRef = useRef(filteredActions);
+  const selectedIndexRef = useRef(selectedIndex);
+  const queryRef = useRef(query);
+  const openRef = useRef(open);
+
+  useEffect(() => {
+    filteredActionsRef.current = filteredActions;
+  }, [filteredActions]);
+
+  useEffect(() => {
+    selectedIndexRef.current = selectedIndex;
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -112,7 +137,9 @@ export default function CommandPalette() {
         return;
       }
 
-      if (!open) return;
+      if (!openRef.current) return;
+      const currentActions = filteredActionsRef.current;
+      const currentIndex = selectedIndexRef.current;
 
       if (event.key === "Escape") {
         event.preventDefault();
@@ -123,21 +150,21 @@ export default function CommandPalette() {
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelectedIndex((current) => (current + 1) % Math.max(filteredActions.length, 1));
+        setSelectedIndex((current) => (current + 1) % Math.max(currentActions.length, 1));
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
         setSelectedIndex((current) =>
-          current === 0 ? Math.max(filteredActions.length - 1, 0) : current - 1,
+          current === 0 ? Math.max(currentActions.length - 1, 0) : current - 1,
         );
         return;
       }
 
-      if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey && !event.altKey && query.trim() === "") {
+      if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey && !event.altKey && queryRef.current.trim() === "") {
         // Ctrl+K → R: run the resolve action directly while the query is empty.
-        const resolveAction = filteredActions.find((action) => action.id === "resolve-current");
+        const resolveAction = currentActions.find((action) => action.id === "resolve-current");
         if (resolveAction) {
           event.preventDefault();
           setOpen(false);
@@ -149,7 +176,7 @@ export default function CommandPalette() {
 
       if (event.key === "Enter") {
         event.preventDefault();
-        const action = filteredActions[selectedIndex];
+        const action = currentActions[currentIndex];
         if (action) {
           setOpen(false);
           setQuery("");
@@ -160,7 +187,7 @@ export default function CommandPalette() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredActions, open, selectedIndex]);
+  }, []);
 
   const handleSelect = (action: CommandAction) => {
     setOpen(false);

@@ -90,4 +90,41 @@ describe("CommandPalette", () => {
 
     expect(screen.queryByText(/resolve current outage/i)).not.toBeInTheDocument();
   });
+
+  it("keeps the keydown listener mounted while typing (no per-keystroke re-subscribe)", () => {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+
+    render(<CommandPalette />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    const input = screen.getByPlaceholderText(/type a command or search/i);
+    fireEvent.change(input, { target: { value: "pa" } });
+    fireEvent.change(input, { target: { value: "pay" } });
+    fireEvent.change(input, { target: { value: "payments" } });
+
+    // One mount + one unmount subscription; typing must not add/remove the listener.
+    const keydownRemoves = removeSpy.mock.calls.filter(
+      (call) => call[0] === "keydown",
+    ).length;
+    expect(keydownRemoves).toBe(0);
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it("executes the action highlighted by arrow navigation with a filtered query", () => {
+    render(<CommandPalette />);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    // Only "Open payments" matches the query, so Enter after ArrowDown still runs it.
+    fireEvent.change(screen.getByPlaceholderText(/type a command or search/i), {
+      target: { value: "payments" },
+    });
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(mockPush).toHaveBeenCalledWith("/payments");
+  });
 });
