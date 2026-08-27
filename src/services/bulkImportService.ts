@@ -12,11 +12,15 @@ import type {
 const BULK_IMPORT_ENDPOINT = ENDPOINTS.outages.bulk;
 const BULK_IMPORT_HISTORY_ENDPOINT = ENDPOINTS.outages.bulkHistory;
 
-const MAGIC_BYTES: Record<string, number[]> = {
-  "text/csv": [0xEF, 0xBB, 0xBF], // UTF-8 BOM (optional for CSV)
-  "application/json": [0x7B], // {
-  "text/plain": [], // No magic bytes requirement
-};
+// Disallowed byte-order marks for CSV: UTF-16/UTF-32 BOMs mean the file is not
+// plain UTF-8 text (the backend parses UTF-8). The optional UTF-8 BOM (EF BB BF)
+// is intentionally absent so valid UTF-8 CSVs keep passing.
+const DISALLOWED_CSV_BOMS = [
+  [0xff, 0xfe, 0x00, 0x00], // UTF-32 LE
+  [0x00, 0x00, 0xfe, 0xff], // UTF-32 BE
+  [0xff, 0xfe], // UTF-16 LE
+  [0xfe, 0xff], // UTF-16 BE
+] as const;
 
 interface BulkImportOptions {
   signal?: AbortSignal;
@@ -83,28 +87,79 @@ function buildUploadConfig(
   return config;
 }
 
+function isWhitespace(byte: number): boolean {
+  return byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d;
+}
+
+function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {
+  if (bytes.length < prefix.length) {
+    return false;
+  }
+  return prefix.every((value, index) => bytes[index] === value);
+}
+
+function hasDisallowedBom(bytes: Uint8Array): boolean {
+  return DISALLOWED_CSV_BOMS.some((bom) => startsWith(bytes, bom));
+}
+
 /**
- * Validate file magic bytes against declared MIME type.
+ * Infer the intended upload format from the file name extension and the
+ * browser-declared MIME type. `file.type` alone is browser/OS controlled and
+ * often wrong (a CSV can be reported as `text/plain`), so we fall back to the
+ * extension whenever the declared type is not explicit.
+ */
+function inferFormat(file: File): "json" | "csv" | "unknown" {
+  if (file.type === "application/json" || file.name.toLowerCase().endsWith(".json")) {
+    return "json";
+  }
+  if (file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")) {
+    return "csv";
+  }
+  return "unknown";
+}
+
+/**
+ * Validate file magic bytes against the inferred format.
  * Returns true if valid, throws if suspicious.
  */
-async function validateMagicBytes(file: File): Promise<void> {
+export async function validateMagicBytes(file: File): Promise<void> {
+  const format = inferFormat(file);
+
+  if (format === "unknown") {
+    // Nothing to validate against; leave enforcement to the server.
+    return;
+  }
+
   const slice = file.slice(0, 8);
   const buffer = await slice.arrayBuffer();
   const bytes = new Uint8Array(buffer);
 
-  if (file.type === "application/json") {
+  if (format === "json") {
     // JSON must start with { or [
-    const firstNonWhitespace = Array.from(bytes).find((b) => b !== 0x20 && b !== 0x09 && b !== 0x0A && b !== 0x0D);
-    if (firstNonWhitespace !== undefined && firstNonWhitespace !== 0x7B && firstNonWhitespace !== 0x5B) {
-      throw new Error("File content does not match JSON format. Please upload a valid JSON file.");
+    const firstNonWhitespace = Array.from(bytes).find(
+      (b) => !isWhitespace(b)
+    );
+    if (
+      firstNonWhitespace !== undefined &&
+      firstNonWhitespace !== 0x7b &&
+      firstNonWhitespace !== 0x5b
+    ) {
+      throw new Error(
+        "File content does not match JSON format. Please upload a valid JSON file."
+      );
     }
-  }
-
-  if (file.type === "text/csv" || file.name.endsWith(".csv")) {
-    // CSV shouldn't start with binary null bytes
+  } else {
+    // CSV: reject UTF-16/UTF-32 encodings and binary null bytes.
+    if (hasDisallowedBom(bytes)) {
+      throw new Error(
+        "File appears to use a non-UTF-8 encoding. Please upload a UTF-8 encoded CSV file."
+      );
+    }
     const hasNullBytes = Array.from(bytes).some((b) => b === 0x00);
     if (hasNullBytes) {
-      throw new Error("File appears to contain binary data. Please upload a valid CSV file.");
+      throw new Error(
+        "File appears to contain binary data. Please upload a valid CSV file."
+      );
     }
   }
 }
