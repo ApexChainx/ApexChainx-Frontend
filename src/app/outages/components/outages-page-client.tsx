@@ -3,6 +3,7 @@
 
 import { outageKeys } from "@/features/outages/hooks/useOutageMutations";
 import { logger } from "@/lib/logger";
+import { MTTR_VALIDATION_ERROR, parseMttrInput } from "@/lib/mttr";
 import { resolveOutage, updateOutage } from "@/services/outages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -44,9 +45,9 @@ function BulkResolveModal({
   if (!isOpen) return null;
 
   async function handleResolve() {
-    const parsed = Number(mttrInput);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      setValidationError("MTTR must be a non-negative number.");
+    const parsed = parseMttrInput(mttrInput);
+    if (parsed === null) {
+      setValidationError(MTTR_VALIDATION_ERROR);
       return;
     }
     setValidationError(null);

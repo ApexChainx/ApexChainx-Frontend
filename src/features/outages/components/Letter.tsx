@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { previewSLA } from "@/services/sla";
+import { MTTR_VALIDATION_ERROR, parseMttrInput } from "@/lib/mttr";
 import type { Severity } from "@/types/outages";
 import type { SLAResult } from "@/types/sla";
 
@@ -40,9 +41,9 @@ export function ResolveOutageModal({
   }
 
   async function handleResolve() {
-    const parsed = Number(mttrInput);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      setValidationError("MTTR must be a non-negative number.");
+    const parsed = parseMttrInput(mttrInput);
+    if (parsed === null) {
+      setValidationError(MTTR_VALIDATION_ERROR);
       return;
     }
 
@@ -51,9 +52,9 @@ export function ResolveOutageModal({
   }
 
   async function handlePreview() {
-    const parsed = Number(mttrInput);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      setValidationError("MTTR must be a non-negative number.");
+    const parsed = parseMttrInput(mttrInput);
+    if (parsed === null) {
+      setValidationError(MTTR_VALIDATION_ERROR);
       return;
     }
 
