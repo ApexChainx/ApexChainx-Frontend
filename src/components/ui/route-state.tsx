@@ -27,6 +27,12 @@ type BaseRouteStateProps = {
   className?: string;
 };
 
+/** ARIA live-region wiring for the shared state card. */
+type LiveRegionProps = {
+  role?: string;
+  ariaLive?: "polite" | "assertive";
+};
+
 type RouteEmptyStateProps = BaseRouteStateProps & {
   action?: ActionButtonProps;
 };
@@ -46,10 +52,15 @@ function RouteStateContainer({
   icon,
   children,
   className = "",
-}: BaseRouteStateProps) {
+  role,
+  ariaLive,
+}: BaseRouteStateProps & LiveRegionProps) {
   return (
     <div className="flex min-h-[40vh] items-center justify-center px-4 py-10">
       <div
+        role={role}
+        aria-live={ariaLive}
+        aria-atomic={ariaLive ? "true" : undefined}
         className={`w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm ${className}`}
       >
         {icon ? (
@@ -114,6 +125,8 @@ export function RouteLoadingState({
       title={title}
       description={description}
       className="border-slate-200"
+      role="status"
+      ariaLive="polite"
       icon={
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
       }
@@ -143,6 +156,8 @@ export function RouteEmptyState({
       description={description}
       icon={icon}
       className="border-dashed border-slate-200 bg-slate-50"
+      role="status"
+      ariaLive="polite"
     >
       {action ? (
         <ActionButton
@@ -171,6 +186,8 @@ export function RouteErrorState({
       title={title}
       description={description}
       className="border-red-200"
+      role="alert"
+      ariaLive="assertive"
       icon={
         <AlertTriangleIcon className="h-7 w-7 text-red-600" />
       }
