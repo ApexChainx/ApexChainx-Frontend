@@ -33,6 +33,25 @@ interface RegisteredUser {
 /** Users created via POST /auth/register; login accepts them too. */
 const registeredUsers: RegisteredUser[] = [];
 
+interface BulkImportErrorRecord {
+  row?: number;
+  field?: string;
+  message: string;
+}
+
+interface BulkImportHistoryRecord {
+  id: string;
+  filename: string;
+  imported: number;
+  skipped: number;
+  error_count: number;
+  errors: BulkImportErrorRecord[];
+  created_at: string;
+}
+
+/** Records created via POST /outages/bulk; read back by the history page. */
+const bulkImportHistory: BulkImportHistoryRecord[] = [];
+
 interface SlaRecord {
   status: "met" | "violated";
   mttr_minutes: number;
@@ -99,13 +118,50 @@ const payments = [
   },
 ];
 
+/**
+ * Seed fixture for a failed payment awaiting retry (Issue #412 — the
+ * payment retry-queue e2e journey). Callers of `mockApi` opt into seeding
+ * one or more of these via the `failedPayments` option; the default is an
+ * empty list so existing specs are unaffected.
+ */
+export interface FailedPaymentSeed {
+  id: string;
+  outage_id?: string;
+  amount: number;
+  asset_code: string;
+  type: "reward" | "penalty";
+  created_at: string;
+}
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CSRF-Token",
 };
 
-export async function mockApi(page: Page): Promise<void> {
+export interface MockApiOptions {
+  /**
+   * Failed payments to seed the retry queue with. Scoped to this call's
+   * route handler closure (not module state) so tests never bleed into one
+   * another regardless of execution order. Defaults to none.
+   */
+  failedPayments?: FailedPaymentSeed[];
+}
+
+export async function mockApi(
+  page: Page,
+  options: MockApiOptions = {},
+): Promise<void> {
+  // Mutable per-call fixture list — retrying a payment splices it out, so
+  // subsequent GETs (e.g. after the retry-queue view refetches) reflect it.
+  const failedPayments = (options.failedPayments ?? []).map((seed) => ({
+    ...seed,
+    status: "failed" as const,
+    transaction_hash: "",
+    from_address: FROM_ADDRESS,
+    to_address: TO_ADDRESS,
+  }));
+
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -232,6 +288,53 @@ export async function mockApi(page: Page): Promise<void> {
       return json(201, created);
     }
 
+    /* ------------------------- Bulk import ---------------------------- */
+    // Must be handled before the generic /outages/:id matcher below, since
+    // "/outages/bulk" would otherwise be treated as a single-outage lookup.
+    if (method === "POST" && path === "/api/v1/outages/bulk") {
+      const raw = request.postData() ?? "";
+      const filenameMatch = raw.match(/filename="([^"]+)"/);
+      const filename = filenameMatch?.[1] ?? "upload.csv";
+
+      // Fixtures named with "invalid" trigger a mocked server-side
+      // validation failure (e.g. a business-rule check the client can't
+      // perform), so the negative-case journey can be exercised without a
+      // real backend.
+      const isInvalidFixture = filename.toLowerCase().includes("invalid");
+
+      const errors: BulkImportErrorRecord[] = isInvalidFixture
+        ? [
+            {
+              row: 2,
+              field: "start_time",
+              message: "start_time must be before end_time.",
+            },
+          ]
+        : [];
+
+      const result = {
+        imported: isInvalidFixture ? 1 : 2,
+        skipped: isInvalidFixture ? 1 : 0,
+        errors,
+      };
+
+      bulkImportHistory.unshift({
+        id: `BULK-${bulkImportHistory.length + 1}`,
+        filename,
+        imported: result.imported,
+        skipped: result.skipped,
+        error_count: errors.length,
+        errors,
+        created_at: new Date().toISOString(),
+      });
+
+      return json(200, result);
+    }
+
+    if (method === "GET" && path === "/api/v1/outages/bulk/history") {
+      return json(200, bulkImportHistory);
+    }
+
     const resolveMatch = path.match(/^\/api\/v1\/outages\/([^/]+)\/resolve$/);
     if (resolveMatch && method === "POST") {
       const outage = outages.find((item) => item.id === resolveMatch[1]);
@@ -298,7 +401,14 @@ export async function mockApi(page: Page): Promise<void> {
     if (method === "GET" && path === "/api/v1/payments") {
       const sortBy = url.searchParams.get("sort_by") || "created_at";
       const sortDir = url.searchParams.get("sort_dir") || "desc";
-      const sorted = [...payments].sort((a, b) => {
+      const statusFilter = url.searchParams.get("status");
+
+      let combined = [...payments, ...failedPayments];
+      if (statusFilter) {
+        combined = combined.filter((p) => p.status === statusFilter);
+      }
+
+      const sorted = combined.sort((a, b) => {
         let cmp = 0;
         if (sortBy === "created_at") {
           cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -309,7 +419,20 @@ export async function mockApi(page: Page): Promise<void> {
         }
         return sortDir === "asc" ? cmp : -cmp;
       });
-      return json(200, { items: sorted, total: sorted.length, page: 1, page_size: 10 });
+      return json(200, { items: sorted, total: sorted.length, page: 1, page_size: 100 });
+    }
+
+    // Payment retry — used by the retry-queue view (Issue #412), both for
+    // the per-item "Retry" button and the bulk-retry confirmation dialog.
+    const retryMatch = path.match(/^\/api\/v1\/payments\/([^/]+)\/retry$/);
+    if (retryMatch && method === "POST") {
+      const id = retryMatch[1];
+      const index = failedPayments.findIndex((p) => p.id === id);
+      if (index === -1) return json(404, { message: "Not found" });
+
+      const [retried] = failedPayments.splice(index, 1);
+      const completed = { ...retried, status: "completed" };
+      return json(200, completed);
     }
 
     /* ------------------------------ SLA ------------------------------ */

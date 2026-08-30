@@ -19,6 +19,7 @@ import {
   setTokens,
 } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { resetPreferences } from "@/lib/preferences";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
@@ -182,6 +183,24 @@ export function SessionProvider({
     setState("unauthenticated");
     broadcastLogout();
     clearSessionFlag();
+
+    // Issue #413 — resetPreferences previously had zero callers, so a
+    // signed-out user's in-memory preferences, the
+    // `apexchain_user_preferences` localStorage entry, and the hydration
+    // flag all survived logout. On a shared/kiosk browser the next operator
+    // to sign in would inherit the previous user's table density, column
+    // visibility, and filter presets — a cross-user information leak.
+    // clearSession is the single choke point for every logout path (user-
+    // initiated logout, a definitive 401/403 during bootstrap or refresh,
+    // the `auth:logout` window event, and cross-tab/session-revoked
+    // broadcasts), so resetting preferences here covers all of them
+    // uniformly. resetPreferences() clears the whole store; the codebase
+    // does not currently declare any preference as device-level (the
+    // "theme" setting on the settings page is stored under its own
+    // `theme` localStorage key, entirely outside UserPreferences/
+    // apexchain_user_preferences, so it is already excluded and is
+    // untouched by this reset).
+    resetPreferences();
   }, []);
 
   /**
@@ -397,14 +416,11 @@ export function SessionProvider({
       const hasReadableToken = !!getAccessToken();
       const sessionSeen = hasSessionFlag();
 
-      // Fast path: no readable token and no record of a previous session on
-      // this browser — there is nothing to validate, skip the network calls.
-      if (!hasReadableToken && !sessionSeen) {
-        if (!mountedRef.current) return;
-        setUser(null);
-        setState("unauthenticated");
-        return;
-      }
+      // A missing local flag is not proof that no cookie session exists:
+      // privacy tools and clear-site-data can remove it while httpOnly
+      // cookies remain valid. Probe the cookie-only endpoint on this path.
+      void hasReadableToken;
+      void sessionSeen;
 
       // 1) Prefer the dedicated cookie-session endpoint. It validates the
       //    httpOnly session cookies directly — without an Authorization

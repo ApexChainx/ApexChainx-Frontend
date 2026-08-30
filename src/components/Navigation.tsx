@@ -29,8 +29,6 @@ const Navigation = () => {
             className={`w-3 h-3 rounded-full mr-2 ${
               status === "green"
                 ? "bg-green-500"
-                : status === "yellow"
-                ? "bg-yellow-500"
                 : "bg-red-500"
             }`}
             title={`${t('navigation.systemHealth')}: ${status}`}
@@ -69,7 +67,7 @@ const Navigation = () => {
             <span className="flex items-center gap-3">
               <span>{user.email}</span>
               {isAdmin && (
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
                   admin
                 </span>
               )}

@@ -7,13 +7,22 @@ import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
 import type { OutagesQuery } from "@/lib/outages";
 
+/**
+ * See docs/offline-cache.md for the full picture of what's cached where
+ * (IndexedDB via `persistedCache`, this React Query cache, and the service
+ * worker), TTL/staleTime/gcTime values, the hydration rules applied below,
+ * and — importantly — the current purge/eviction gaps (e.g. neither this
+ * cache nor `persistedCache` is cleared on logout today).
+ */
+
 export interface UseOutagesParams {
   page?: number | undefined;
   page_size?: number | undefined;
   severity?: string | undefined;
   status?: string | undefined;
   search?: string | undefined;
-  sort?: string | undefined;
+  sort_field?: string | undefined;
+  sort_order?: "asc" | "desc" | undefined;
 }
 
 const DEFAULT_PAGE = 1;
@@ -35,9 +44,10 @@ export function useOutages(params: UseOutagesParams = {}) {
       severity: params.severity?.trim() || undefined,
       status: params.status?.trim() || undefined,
       search: params.search?.trim() || undefined,
-      sort: params.sort?.trim() || undefined,
+      sort_field: params.sort_field?.trim() || undefined,
+      sort_order: params.sort_order,
     }),
-    [params.page, params.page_size, params.severity, params.status, params.search, params.sort],
+    [params.page, params.page_size, params.severity, params.status, params.search, params.sort_field, params.sort_order],
   );
 
   const queryKey = useMemo(
