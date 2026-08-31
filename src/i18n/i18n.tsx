@@ -39,6 +39,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('preferred-locale', locale);
   }, [locale]);
 
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = locale;
+    }
+  }, [locale]);
+
   const setLocale = (newLocale: Locale) => {
     setLocaleState(newLocale);
   };
