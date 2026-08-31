@@ -32,8 +32,12 @@ export interface OutagesQuery {
   sort_order?: "asc" | "desc" | undefined;
 }
 
-export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutages> {
+export async function fetchOutages(
+  query: OutagesQuery,
+  options?: { signal?: AbortSignal },
+): Promise<PaginatedOutages> {
   const { data } = await api.get<PaginatedOutages>("/outages", {
+    signal: options?.signal,
     params: {
       page: query.page,
       page_size: query.page_size ?? 20,

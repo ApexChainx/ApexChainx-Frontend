@@ -84,8 +84,10 @@ export function useOutages(params: UseOutagesParams = {}) {
   const query = useQuery<PaginatedOutages, Error>({
     queryKey,
 
-    queryFn: async () => {
-      const data = await fetchOutages(normalizedParams as unknown as OutagesQuery);
+    queryFn: async ({ signal }) => {
+      const data = await fetchOutages(normalizedParams as unknown as OutagesQuery, {
+        signal,
+      });
 
       // Persist successful fetches to IndexedDB
       if (data && data.items.length > 0) {
