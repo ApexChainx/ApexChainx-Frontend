@@ -25,6 +25,8 @@ export default function WebhooksPage() {
   const [formEvents, setFormEvents] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const { data: webhooks = [], isLoading } = useQuery({
     queryKey: ["webhooks"],
@@ -65,9 +67,19 @@ export default function WebhooksPage() {
   });
 
   const retryMutation = useMutation({
-    mutationFn: ({ webhookId, deliveryId }: { webhookId: string; deliveryId: string }) =>
-      retryDelivery(webhookId, deliveryId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-deliveries", selectedWebhook?.id] }),
+    mutationFn: async ({ webhookId, deliveryId }: { webhookId: string; deliveryId: string }) => {
+      setRetryingId(deliveryId);
+      setRetryError(null);
+      return retryDelivery(webhookId, deliveryId);
+    },
+    onSuccess: () => {
+      setRetryingId(null);
+      qc.invalidateQueries({ queryKey: ["webhook-deliveries", selectedWebhook?.id] });
+    },
+    onError: (err: Error) => {
+      setRetryingId(null);
+      setRetryError(err.message || "Failed to retry delivery.");
+    },
   });
 
   function resetForm() {
@@ -247,7 +259,13 @@ export default function WebhooksPage() {
                   ) : deliveries.length === 0 ? (
                     <p className="text-xs text-gray-400">No deliveries yet.</p>
                   ) : (
-                    <div className="space-y-2">
+                    <>
+                      {retryError && (
+                        <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+                          {retryError}
+                        </p>
+                      )}
+                      <div className="space-y-2">
                       {deliveries.map((d: WebhookDelivery) => (
                         <div
                           key={d.id}
@@ -279,16 +297,17 @@ export default function WebhooksPage() {
                                 onClick={() =>
                                   retryMutation.mutate({ webhookId: wh.id, deliveryId: d.id })
                                 }
-                                disabled={retryMutation.isPending}
+                                disabled={retryMutation.isPending || retryingId === d.id}
                                 className="rounded border border-blue-200 px-2 py-0.5 text-blue-600 hover:bg-blue-50 disabled:opacity-40"
                               >
-                                Retry
+                                {retryingId === d.id ? "Retrying…" : "Retry"}
                               </button>
                             )}
                           </div>
                         </div>
                       ))}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
