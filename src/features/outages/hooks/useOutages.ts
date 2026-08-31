@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 
-import { fetchOutages } from "@/lib/outages";
+import { DEFAULT_OUTAGES_PAGE_SIZE, fetchOutages } from "@/lib/outages";
 import { persistedCache } from "@/lib/persisted-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
@@ -26,7 +26,7 @@ export interface UseOutagesParams {
 }
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = DEFAULT_OUTAGES_PAGE_SIZE;
 const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
 
 function cacheKey(params: UseOutagesParams): string {
