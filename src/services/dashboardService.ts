@@ -44,10 +44,17 @@ export const fetchDashboardMetrics = async (filters: DashboardFilters = {}): Pro
   return {
     sla_compliance_percentage: slaCompliancePercentage,
     penalties: {
+      // Amount comes straight from the KPI endpoint; the count is the number
+      // of violations the backend attributed to the period.
       total: kpis.total_penalties,
       count: kpis.total_violations,
     },
     rewards: {
+      // Amount comes straight from the KPI endpoint. The KPI response does not
+      // yet expose a rewarded-outage count, so `count` is derived as the
+      // number of outages that were not flagged as violations. Keep this in
+      // sync with the backend's reward semantics; switch to a server-supplied
+      // count when the API adds one.
       total: kpis.total_rewards,
       count: compliantOutages,
     },

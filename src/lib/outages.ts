@@ -32,6 +32,9 @@ export interface OutagesQuery {
   sort_order?: "asc" | "desc" | undefined;
 }
 
+/** Default page size, aligned with the UI pager (see useOutages). */
+export const DEFAULT_OUTAGES_PAGE_SIZE = 10;
+
 export async function fetchOutages(
   query: OutagesQuery,
   options?: { signal?: AbortSignal },
@@ -40,7 +43,7 @@ export async function fetchOutages(
     signal: options?.signal,
     params: {
       page: query.page,
-      page_size: query.page_size ?? 20,
+      page_size: query.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
       severity: query.severity,
       status: query.status,
       search: query.search,

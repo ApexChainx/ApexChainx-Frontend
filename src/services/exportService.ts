@@ -3,15 +3,46 @@ import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
-function getFilenameFromDisposition(
+function decodeRfc5987(value: string): string {
+  // filename*=UTF-8''<percent-encoded>
+  const eq = value.indexOf("''");
+  const encoded = eq >= 0 ? value.slice(eq + 2) : value;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+/**
+ * Parse a Content-Disposition header into a filename.
+ *
+ * Prefers the RFC 5987 `filename*=` form (percent-decoded), falls back to
+ * the legacy `filename=` form, and returns `null` when neither is present.
+ */
+export function getFilenameFromDisposition(
   dispositionHeader: string | undefined,
-  fallbackFormat: ExportFormat,
-) {
-  const match = dispositionHeader?.match(/filename="?([^"]+)"?/i);
-  if (match?.[1]) {
-    return match[1];
+): string | null {
+  if (!dispositionHeader) return null;
+
+  const starMatch = dispositionHeader.match(/filename\*\s*=\s*(?:UTF-8'')?([^;\s]+)/i);
+  if (starMatch?.[1]) {
+    return decodeRfc5987(starMatch[1]);
   }
 
+  const plainMatch = dispositionHeader.match(/filename\s*=\s*"?([^";\s]+)"?/i);
+  if (plainMatch?.[1]) {
+    return plainMatch[1];
+  }
+
+  return null;
+}
+
+function resolveExportFilename(dispositionHeader: string | undefined, fallbackFormat: ExportFormat): string {
+  const parsed = getFilenameFromDisposition(dispositionHeader);
+  if (parsed) {
+    return parsed;
+  }
   return `outages_export_${new Date().toISOString().slice(0, 10)}.${fallbackFormat}`;
 }
 
@@ -48,7 +79,7 @@ export const exportOutages = async (
           { type: mimeType },
         );
   const url = URL.createObjectURL(blob);
-  const filename = getFilenameFromDisposition(
+  const filename = resolveExportFilename(
     response.headers["content-disposition"],
     format,
   );

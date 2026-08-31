@@ -11,6 +11,8 @@
 
 import { useState, useEffect, useRef } from "react";
 
+import { env } from "@/lib/config/env";
+
 export type StellarHealthStatus = "checking" | "reachable" | "unreachable";
 
 export interface StellarHealthState {
@@ -19,21 +21,16 @@ export interface StellarHealthState {
   lastChecked: Date | null;
 }
 
-const DEFAULT_HORIZON_URL = "https://horizon-testnet.stellar.org";
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 const TIMEOUT_MS = 5_000; // 5 seconds
 
 /**
- * Resolve the Horizon URL from the environment, falling back to testnet.
+ * Resolve the Horizon URL from the single source of truth in env.ts.
  * In Next.js client components, process.env.NEXT_PUBLIC_* is replaced at
  * build time by the framework.
  */
 function getHorizonUrl(): string {
-  return (
-    (typeof process !== "undefined"
-      ? process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL
-      : undefined) ?? DEFAULT_HORIZON_URL
-  );
+  return env.STELLAR_HORIZON_URL;
 }
 
 /**
