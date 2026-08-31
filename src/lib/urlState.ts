@@ -6,6 +6,21 @@ export type SortOrder = "asc" | "desc";
 export const VALID_SORT_FIELDS: SortField[] = ["detected_at", "severity", "status"];
 export const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
 
+export const MIN_PAGE = 1;
+export const DEFAULT_PAGE_SIZE = 10;
+export const MAX_PAGE_SIZE = 100;
+
+function normalizePage(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= MIN_PAGE ? Math.floor(n) : MIN_PAGE;
+}
+
+function normalizePageSize(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < MIN_PAGE) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(n), MAX_PAGE_SIZE);
+}
+
 export interface OutagesFilter {
   page: number;
   page_size: number;
@@ -21,8 +36,8 @@ export function parseOutagesFilter(params: URLSearchParams | { get: (name: strin
   const sortOrderRaw = params.get("sort_order");
   
   return {
-    page: Math.max(1, Number(params.get("page") ?? 1)),
-    page_size: Number(params.get("page_size") ?? 10),
+    page: normalizePage(params.get("page") ?? MIN_PAGE),
+    page_size: normalizePageSize(params.get("page_size") ?? DEFAULT_PAGE_SIZE),
     severity: params.get("severity") ?? undefined,
     status: params.get("status") ?? undefined,
     search: params.get("search") ?? undefined,
@@ -33,8 +48,8 @@ export function parseOutagesFilter(params: URLSearchParams | { get: (name: strin
 
 export function serializeOutagesFilter(filter: Partial<OutagesFilter>): URLSearchParams {
   const params = new URLSearchParams();
-  if (filter.page !== undefined) params.set("page", String(Math.max(1, filter.page)));
-  if (filter.page_size !== undefined) params.set("page_size", String(filter.page_size));
+  if (filter.page !== undefined) params.set("page", String(normalizePage(filter.page)));
+  if (filter.page_size !== undefined) params.set("page_size", String(normalizePageSize(filter.page_size)));
   if (filter.severity) params.set("severity", filter.severity);
   if (filter.status) params.set("status", filter.status);
   if (filter.search) params.set("search", filter.search);

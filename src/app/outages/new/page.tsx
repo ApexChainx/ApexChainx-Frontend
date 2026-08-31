@@ -5,6 +5,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createOutage } from "@/services/outages";
 import type { OutageCreate, Severity, OutageStatus } from "@/types/outages";
+import {
+  isFormDirty,
+  useUnsavedChangesGuard,
+} from "@/hooks/useUnsavedChangesGuard";
 
 function generateId() {
   return `OUT-${Date.now()}`;
@@ -26,6 +30,9 @@ export default function NewOutagePage() {
     affected_subscribers: "",
     assigned_to: "",
   });
+
+  const dirty = isFormDirty(form);
+  const { confirmLeave, markClean } = useUnsavedChangesGuard(dirty);
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -60,6 +67,7 @@ export default function NewOutagePage() {
 
     try {
       const outage = await createOutage(payload);
+      markClean();
       router.push(`/outages/${outage.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create outage.");
@@ -67,11 +75,17 @@ export default function NewOutagePage() {
     }
   }
 
+  function handleLeave() {
+    if (confirmLeave()) {
+      router.push("/outages");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <div className="mb-6 flex items-center gap-4">
         <button
-          onClick={() => router.push("/outages")}
+          onClick={handleLeave}
           className="text-sm text-slate-500 hover:text-slate-800"
         >
           ← Back to outages
@@ -204,7 +218,7 @@ export default function NewOutagePage() {
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
-            onClick={() => router.push("/outages")}
+            onClick={handleLeave}
             className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancel
