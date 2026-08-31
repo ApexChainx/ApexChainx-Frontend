@@ -769,3 +769,4 @@ export function DataTable<TData, TValue>({
 
 // ─── Re-exports ──────────────────────────────────────────────────────────────
 export type { ColumnDef, VisibilityState, SortingState, PaginationState };
+// virtualized table rows optimization helper
