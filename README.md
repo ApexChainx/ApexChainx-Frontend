@@ -160,6 +160,7 @@ The application will be available at **[http://localhost:3000](http://localhost:
 | `npm run build` | Create optimized production build |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint for code quality |
+| `npm run typecheck` | Run TypeScript type checking without a full build |
 | `npm run test` | Run Vitest test suite |
 
 ---
