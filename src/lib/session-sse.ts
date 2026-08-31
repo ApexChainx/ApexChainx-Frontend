@@ -100,6 +100,7 @@ export function connectSessionSse(
   async function connect() {
     if (closed) return;
     controller = new AbortController();
+    let shouldRetry = true;
 
     try {
       const baseUrl = env.API_BASE_URL.replace(/\/+$/, "");
@@ -121,7 +122,7 @@ export function connectSessionSse(
           return;
         }
         console.warn(
-          `[session-sse] /auth/events returned ${response.status} — retrying`,
+          `[session-sse] /auth/events returned ${response.status} — ${response.status === 401 || response.status === 403 ? "stopping" : "retrying"}`,
         );
         return;
       }
@@ -129,24 +130,31 @@ export function connectSessionSse(
       // Reset retry count on successful connection
       retryCount = 0;
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        console.warn("[session-sse] Response body has no readable stream");
-        return; // triggers reconnect with backoff
+        if (response.status === 401 || response.status === 403) {
+          shouldRetry = false;
+        }
+      } else {
+        // Reset retry count on successful connection
+        retryCount = 0;
       }
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+      if (shouldRetry) {
+        const reader = response.body?.getReader();
+        if (!reader) {
+          console.warn("[session-sse] Response body has no readable stream");
+        } else {
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-      while (!closed) {
-        const { done, value } = await reader.read();
-        if (done) break;
+          while (!closed) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE frames
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? ""; // Keep incomplete frame in buffer
+            // Parse SSE frames
+            const frames = buffer.split("\n\n");
+            buffer = frames.pop() ?? ""; // Keep incomplete frame in buffer
 
         for (const frame of frames) {
           const event = parseSessionSseFrame(frame);
@@ -159,7 +167,7 @@ export function connectSessionSse(
     }
 
     // Reconnect with backoff if not closed
-    if (!closed) {
+    if (!closed && shouldRetry) {
       retryCount++;
       const delay = getReconnectDelay();
       retryTimeout = setTimeout(connect, delay);
