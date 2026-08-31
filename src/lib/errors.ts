@@ -62,3 +62,5 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
 
   return { message, kind, status, correlationId };
 }
+
+// aligned api errors schema
