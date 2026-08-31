@@ -27,6 +27,10 @@ export async function apiClient(
     });
   }
 
-  return res.json();
+  // 204 No Content (and other empty bodies) must not be parsed as JSON.
+  if (res.status === 204) return null;
+
+  const text = await res.text();
+  return text.trim() ? JSON.parse(text) : null;
 }
 // aligned exports for api client
