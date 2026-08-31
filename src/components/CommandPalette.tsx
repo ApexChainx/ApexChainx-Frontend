@@ -11,6 +11,7 @@ type CommandAction = {
   run: () => void;
 };
 
+import { useMemo, useCallback } from "react";
 export default function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname() ?? "";
