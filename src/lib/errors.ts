@@ -38,14 +38,18 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
     e?.response?.data?.requestId;
 
   const rawDetail = e?.response?.data?.detail;
-  const message =
-    Array.isArray(rawDetail)
-      ? rawDetail.map((d) => d.msg).join("; ")
-      : typeof rawDetail === "string"
-        ? rawDetail
-        : e?.response?.data?.message ??
-          e?.message ??
-          "Unexpected API error";
+  let message = "Unexpected API error";
+  if (rawDetail) {
+    if (Array.isArray(rawDetail)) {
+      message = rawDetail.map((d) => d.msg).join("; ");
+    } else if (typeof rawDetail === "string") {
+      message = rawDetail;
+    } else if (typeof rawDetail === "object" && rawDetail !== null) {
+      message = (rawDetail as any).message || (rawDetail as any).detail || JSON.stringify(rawDetail);
+    }
+  } else {
+    message = e?.response?.data?.message ?? e?.message ?? "Unexpected API error";
+  }
 
   const kind: ApiErrorKind =
     status === 401 || status === 403
