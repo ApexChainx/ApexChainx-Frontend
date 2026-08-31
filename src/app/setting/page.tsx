@@ -123,13 +123,16 @@ export default function SettingsPage() {
 
     // Listen for system preference changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', () => {
+
+    function handleSystemThemeChange() {
       if (theme === 'system') {
         applyTheme('system');
       }
-    });
+    }
 
-    return () => mediaQuery.removeEventListener('change', () => {});
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, [theme]);
 
   async function handleSignOut() {
