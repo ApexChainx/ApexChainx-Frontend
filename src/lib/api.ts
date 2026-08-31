@@ -120,6 +120,14 @@ api.interceptors.request.use((config) => {
   if (config.timeout === undefined) {
     config.timeout = 15000;
   }
+  const correlationId = typeof window !== "undefined" ? window.sessionStorage.getItem("noc_correlation_id") || (() => {
+    const id = Math.random().toString(36).substring(7);
+    window.sessionStorage.setItem("noc_correlation_id", id);
+    return id;
+  })() : "server-side";
+  if (config.headers) {
+    config.headers["X-Correlation-ID"] = correlationId;
+  }
   const csrfToken = getCookie("apex_csrf");
   if (csrfToken && config.headers) {
     config.headers["X-CSRF-Token"] = csrfToken;
