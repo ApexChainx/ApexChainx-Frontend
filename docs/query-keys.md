@@ -19,16 +19,14 @@ useQuery({ queryKey: slaEventKeys.outages.detail(id), ... });
 queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.all });
 ```
 
-Why this one and not `slaQueryKeys` in `src/services/sla.ts` (see
-[Known divergence](#known-divergence-do-not-copy) below): `slaEventKeys` is
-rooted under a single shared prefix (`"sla-events"`), which is what lets one
-mutation invalidate outages, payments, disputes, and dashboard data together
-(see [How invalidation works](#how-invalidation-works)). `slaQueryKeys` is
-rooted under a different, narrower prefix (`"sla"`) that only covers
-calculate/preview/disputes and cannot participate in that shared
-invalidation. It predates `slaEventKeys` and is kept only so existing
-imports of it don't break — do not add new keys to it, and prefer migrating
-call sites to `slaEventKeys` when you touch them.
+Why this one and not the legacy `slaQueryKeys` (which has been removed —
+there were no call sites left): `slaEventKeys` is rooted under a single
+shared prefix (`"sla-events"`), which is what lets one mutation invalidate
+outages, payments, disputes, and dashboard data together (see
+[How invalidation works](#how-invalidation-works)). The legacy factory was
+rooted under a different, narrower prefix (`"sla"`) that only covered
+calculate/preview/disputes and could not participate in that shared
+invalidation. Prefer `slaEventKeys` for all query keys.
 
 ## How invalidation works: prefix matching
 
@@ -61,7 +59,7 @@ every dependent query without having to know about it individually.
 **The corollary — and the rule that matters most in practice:** if a query's
 key is *not* built from the shared factory (a literal array like
 `["dashboard-metrics", filters]`, or a key rooted under a different prefix
-like `slaQueryKeys`'s `["sla", ...]`), then invalidating
+like `["sla", ...]`), then invalidating
 `slaEventKeys.*` will never touch it, no matter how obviously related the
 data is. Prefix matching only helps you if the key was actually built
 under the shared prefix to begin with.
@@ -143,6 +141,5 @@ then confirm the existing `invalidateQueries` calls in
 | Rule | Why |
 | --- | --- |
 | Use `slaEventKeys` (`src/lib/query-keys.ts`) for all new query keys | It's the canonical, project-wide factory — the only one designed for cross-domain invalidation |
-| Don't add new keys to `slaQueryKeys` (`src/services/sla.ts`) | Legacy, narrower-scoped factory kept only for backward compatibility |
 | Never hand-roll a literal key array for data also covered by `slaEventKeys` | Breaks prefix-matching invalidation — see [Known divergence](#known-divergence-do-not-copy) |
 | Every new key family needs a registered `invalidateQueries` root | An unregistered family is a silent staleness bug |
