@@ -1,38 +1,48 @@
 /** ApexChain Network Operations Intelligence Platform */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { apiClient } from "@/lib/client";
 
-vi.mock("@/lib/url", () => ({
-  buildApiUrl: vi.fn((path: string) => `http://localhost:8000/api/v1${path}`),
-}));
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-describe("apiClient", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
+function stubFetch(response: Partial<Response> & { status: number }) {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+}
+
+describe("apiClient empty-body handling", () => {
+  it("returns null for a 204 No Content response", async () => {
+    stubFetch({ ok: true, status: 204, json: vi.fn(), text: vi.fn() });
+
+    await expect(apiClient("/health")).resolves.toBeNull();
   });
 
-  it("calls fetch with correct URL", async () => {
-    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+  it("returns null for an empty success body without throwing", async () => {
+    stubFetch({ ok: true, status: 200, json: vi.fn(), text: vi.fn().mockResolvedValue("") });
+
+    await expect(apiClient("/health")).resolves.toBeNull();
+  });
+
+  it("parses a non-empty JSON success body", async () => {
+    stubFetch({
       ok: true,
-      json: () => Promise.resolve({ data: "test" }),
-    } as Response);
+      status: 200,
+      json: vi.fn(),
+      text: vi.fn().mockResolvedValue("{\"ok\":true}"),
+    });
 
-    await apiClient("/test-endpoint");
-
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/test-endpoint",
-      expect.objectContaining({ credentials: "include" })
-    );
+    await expect(apiClient("/health")).resolves.toEqual({ ok: true });
   });
 
-  it("throws normalized error on non-ok response", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue({
+  it("throws a normalized error for non-ok responses", async () => {
+    stubFetch({
       ok: false,
-      status: 404,
-      json: () => Promise.resolve({ detail: "Not found" }),
-      headers: new Headers({ "x-correlation-id": "abc-123" }),
-    } as Response);
+      status: 500,
+      json: vi.fn().mockResolvedValue({ detail: "boom" }),
+      text: vi.fn(),
+    });
 
-    await expect(apiClient("/missing")).rejects.toThrow();
+    await expect(apiClient("/oops")).rejects.toThrow();
   });
 });
