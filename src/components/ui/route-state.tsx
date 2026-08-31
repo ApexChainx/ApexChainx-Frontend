@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { Announcer } from "@/components/ui/live-region";
+
 import {
   AlertTriangleIcon,
   RefreshCwIcon,
@@ -25,6 +27,8 @@ type BaseRouteStateProps = {
   icon?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** When true, marks the container as an assertive alert region. */
+  role?: "alert";
 };
 
 type RouteEmptyStateProps = BaseRouteStateProps & {
@@ -46,10 +50,12 @@ function RouteStateContainer({
   icon,
   children,
   className = "",
+  role,
 }: BaseRouteStateProps) {
   return (
     <div className="flex min-h-[40vh] items-center justify-center px-4 py-10">
       <div
+        role={role}
         className={`w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm ${className}`}
       >
         {icon ? (
@@ -118,6 +124,7 @@ export function RouteLoadingState({
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
       }
     >
+      <Announcer message={title} />
       <div className="mt-4">
         <div className="mx-auto h-2 w-40 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full animate-pulse rounded-full bg-slate-300" />
@@ -144,6 +151,7 @@ export function RouteEmptyState({
       icon={icon}
       className="border-dashed border-slate-200 bg-slate-50"
     >
+      <Announcer message={title} />
       {action ? (
         <ActionButton
           label={action.label}
@@ -170,11 +178,13 @@ export function RouteErrorState({
     <RouteStateContainer
       title={title}
       description={description}
+      role="alert"
       className="border-red-200"
       icon={
         <AlertTriangleIcon className="h-7 w-7 text-red-600" />
       }
     >
+      <Announcer message={title} assertive />
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
         {primaryAction ? (
           <ActionButton
