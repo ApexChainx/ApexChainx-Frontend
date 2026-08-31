@@ -32,6 +32,14 @@ export const fetchWebhookDeliveries = async (webhookId: string): Promise<Webhook
   return res.data;
 };
 
-export const retryDelivery = async (webhookId: string, deliveryId: string): Promise<void> => {
-  await api.post(ENDPOINTS.webhooks.retryDelivery(webhookId, deliveryId));
+/**
+ * Trigger a retry of a failed webhook delivery. Returns the delivery record
+ * (or an acknowledgement payload) so callers can render a per-delivery
+ * outcome instead of only fire-and-forget success.
+ */
+export const retryDelivery = async (webhookId: string, deliveryId: string): Promise<WebhookDelivery | Record<string, unknown>> => {
+  const res = await api.post<WebhookDelivery | Record<string, unknown>>(
+    ENDPOINTS.webhooks.retryDelivery(webhookId, deliveryId),
+  );
+  return res.data;
 };
