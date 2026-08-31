@@ -185,22 +185,3 @@ export async function resolveDispute(
 /* -------------------------------------------------------------------------- */
 /*                            Optional Query Keys                             */
 /* -------------------------------------------------------------------------- */
-
-export const slaQueryKeys = {
-  all: ["sla"] as const,
-
-  calculate: (
-    params: CalculateSLAParams
-  ) => ["sla", "calculate", params] as const,
-
-  preview: (
-    params: PreviewSLAParams
-  ) => ["sla", "preview", params] as const,
-
-  disputes: (
-    params?: Partial<DisputeListParams>
-  ) => ["sla", "disputes", params] as const,
-
-  dispute: (id: string) =>
-    ["sla", "dispute", id] as const,
-};

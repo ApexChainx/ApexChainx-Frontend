@@ -117,6 +117,9 @@ export const api = axios.create({
 
 // Attach CSRF token and access token to every request
 api.interceptors.request.use((config) => {
+  if (config.timeout === undefined) {
+    config.timeout = 15000;
+  }
   const csrfToken = getCookie("apex_csrf");
   if (csrfToken && config.headers) {
     config.headers["X-CSRF-Token"] = csrfToken;
@@ -192,7 +195,11 @@ api.interceptors.response.use(
     }
 
     // 1. Handle 401 Authentication Refresh with Circuit Breaker
-    if (axiosErr.response?.status === 401 && !retried.has(config)) {
+    if (config.signal?.aborted) {
+      return Promise.reject(new DOMException("Aborted", "AbortError"));
+    }
+    const isSafeMethod = config.method === "get" || config.method === "head" || config.method === "options";
+    if (axiosErr.response?.status === 401 && !retried.has(config) && isSafeMethod) {
       if (refreshBreaker.getState() === "OPEN") {
         clearTokens();
         return Promise.reject(
@@ -226,6 +233,9 @@ api.interceptors.response.use(
       } catch (refreshErr) {
         if (isDefinitiveAuthFailure(refreshErr)) {
           clearTokens();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
           return Promise.reject(new Error("Session expired. Please sign in again."));
         }
         // Transient failure — keep tokens/cookies intact so the session can

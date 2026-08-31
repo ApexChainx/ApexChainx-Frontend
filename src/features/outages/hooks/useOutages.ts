@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 
-import { fetchOutages } from "@/lib/outages";
+import { DEFAULT_OUTAGES_PAGE_SIZE, fetchOutages } from "@/lib/outages";
 import { persistedCache } from "@/lib/persisted-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
@@ -26,7 +26,7 @@ export interface UseOutagesParams {
 }
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = DEFAULT_OUTAGES_PAGE_SIZE;
 const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
 
 function cacheKey(params: UseOutagesParams): string {
@@ -65,10 +65,13 @@ export function useOutages(params: UseOutagesParams = {}) {
 
     persistedCache.get<PaginatedOutages>(cacheKeyStr).then((cached) => {
       if (!mounted) return;
-      if (cached && cached.items.length > 0) {
-        // Only set query data if there's no existing data yet
+      if (cached) {
+        // Only set query data if there's no existing data yet. Hydrate both
+        // non-empty and legitimately-empty (successful) responses so that an
+        // operator with no known incidents still sees a confirmed-empty view
+        // offline instead of an error/loading state.
         const existing = queryClient.getQueryData<PaginatedOutages>(queryKey);
-        if (!existing || existing.items.length === 0) {
+        if (!existing) {
           queryClient.setQueryData(queryKey, cached);
         }
       }
@@ -87,10 +90,10 @@ export function useOutages(params: UseOutagesParams = {}) {
     queryFn: async () => {
       const data = await fetchOutages(normalizedParams as unknown as OutagesQuery);
 
-      // Persist successful fetches to IndexedDB
-      if (data && data.items.length > 0) {
-        void persistedCache.set(cacheKeyStr, data, CACHE_TTL_MS);
-      }
+      // Persist successful fetches to IndexedDB. A successful response with
+      // zero items is still meaningful ("no incidents match this filter") and
+      // must be cached so the confirmed-empty state is available offline.
+      void persistedCache.set(cacheKeyStr, data, CACHE_TTL_MS);
 
       return data;
     },

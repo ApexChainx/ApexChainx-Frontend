@@ -1,10 +1,15 @@
 /** ApexChain - Network Operations Intelligence Platform */
-const NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet") as "mainnet" | "testnet";
+import { env } from "@/lib/config/env";
 
-const BASE: Record<typeof NETWORK, string> = {
+export type StellarNetwork = "mainnet" | "testnet";
+
+const BASE: Record<StellarNetwork, string> = {
   mainnet: "https://stellar.expert/explorer/public",
   testnet: "https://stellar.expert/explorer/testnet",
 };
+
+const NETWORK: StellarNetwork =
+  env.STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
 export function explorerLink(type: "account" | "tx", value: string | null | undefined): string | null {
   if (!value || value.trim() === "") return null;
