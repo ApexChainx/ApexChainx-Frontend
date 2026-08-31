@@ -44,6 +44,10 @@ function BulkResolveModal({
   if (!isOpen) return null;
 
   async function handleResolve() {
+    if (mttrInput.trim() === "") {
+      setValidationError("MTTR is required.");
+      return;
+    }
     const parsed = Number(mttrInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
       setValidationError("MTTR must be a non-negative number.");
