@@ -35,8 +35,12 @@ export interface OutagesQuery {
 /** Default page size, aligned with the UI pager (see useOutages). */
 export const DEFAULT_OUTAGES_PAGE_SIZE = 10;
 
-export async function fetchOutages(query: OutagesQuery): Promise<PaginatedOutages> {
+export async function fetchOutages(
+  query: OutagesQuery,
+  options?: { signal?: AbortSignal },
+): Promise<PaginatedOutages> {
   const { data } = await api.get<PaginatedOutages>("/outages", {
+    signal: options?.signal,
     params: {
       page: query.page,
       page_size: query.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
