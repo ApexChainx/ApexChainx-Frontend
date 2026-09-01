@@ -107,7 +107,9 @@ test.describe("Payment retry queue", () => {
 
     await expect(row).not.toBeVisible();
     // With no failed payments left, the empty state takes over.
-    await expect(page.getByText("No failed payments")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No failed payments" }),
+    ).toBeVisible();
   });
 
   test("shows the empty state when there are no failed payments in the window", async ({
@@ -121,7 +123,9 @@ test.describe("Payment retry queue", () => {
     await expect(
       page.getByRole("heading", { name: "Payment Retry Queue" }),
     ).toBeVisible();
-    await expect(page.getByText("No failed payments")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No failed payments" }),
+    ).toBeVisible();
     await expect(
       page.getByText("There are no failed payments from the last 7 days."),
     ).toBeVisible();

@@ -71,6 +71,15 @@ test("cleared cookies and storage flag redirect a hard refresh to /login", async
   await page.evaluate(() => localStorage.clear());
   await page.context().clearCookies();
 
+  // The generic mock fulfilled /auth/session with a valid session for the
+  // login step. Once the browser's cookie jar is wiped there is no httpOnly
+  // session cookie to send, so a real backend would answer 401 — overlay a
+  // 401 for the cookie-only bootstrap endpoint to emulate that (this route
+  // is registered after mockApi's, so it wins for this spec only).
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" })
+  );
+
   await page.reload();
 
   // Without any session evidence the bootstrap short-circuits to
