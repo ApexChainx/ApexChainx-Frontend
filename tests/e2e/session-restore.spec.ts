@@ -63,6 +63,23 @@ test("keeps the session across a hard refresh and restores via /auth/session", a
 test("cleared cookies and storage flag redirect a hard refresh to /login", async ({
   page,
 }) => {
+  // Playwright serves matching page.route handlers in registration order, so
+  // this override must be registered BEFORE mockApi below to take precedence
+  // over its generic handler. Until the session is wiped we fall through to
+  // mockApi's normal copy; once `sessionWiped` is set the cookie-only
+  // bootstrap endpoint returns 401 so the app redirects to /login.
+  let sessionWiped = false;
+  await page.route("**/api/v1/auth/session", (route) => {
+    if (sessionWiped) {
+      return route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: "{}",
+      });
+    }
+    return route.fallback();
+  });
+
   await mockApi(page);
   await login(page);
 
@@ -70,15 +87,7 @@ test("cleared cookies and storage flag redirect a hard refresh to /login", async
   // localStorage and remove every cookie (including the session cookies).
   await page.evaluate(() => localStorage.clear());
   await page.context().clearCookies();
-
-  // The generic mock fulfilled /auth/session with a valid session for the
-  // login step. Once the browser's cookie jar is wiped there is no httpOnly
-  // session cookie to send, so a real backend would answer 401 — overlay a
-  // 401 for the cookie-only bootstrap endpoint to emulate that (this route
-  // is registered after mockApi's, so it wins for this spec only).
-  await page.route("**/api/v1/auth/session", (route) =>
-    route.fulfill({ status: 401, contentType: "application/json", body: "{}" })
-  );
+  sessionWiped = true;
 
   await page.reload();
 
