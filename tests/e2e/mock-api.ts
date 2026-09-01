@@ -148,10 +148,21 @@ export interface MockApiOptions {
   failedPayments?: FailedPaymentSeed[];
 }
 
+/**
+ * Controlled session state for the mock backend. Defaults to a valid session
+ * so authenticated tests work out of the box; a spec simulating a wiped
+ * browser sets `mockSession.valid = false`, after which /auth/session,
+ * /auth/me and /auth/refresh all answer 401 (mirroring a real backend with no
+ * session cookie). Reset to `true` at the start of every mockApi() call so
+ * specs never inherit another test's flag.
+ */
+export const mockSession = { valid: true };
+
 export async function mockApi(
   page: Page,
   options: MockApiOptions = {},
 ): Promise<void> {
+  mockSession.valid = true;
   // Mutable per-call fixture list — retrying a payment splices it out, so
   // subsequent GETs (e.g. after the retry-queue view refetches) reflect it.
   const failedPayments = (options.failedPayments ?? []).map((seed) => ({
@@ -239,21 +250,29 @@ export async function mockApi(
     }
 
     // Cookie-only session check. The app prefers this endpoint during
-    // bootstrap so a hard refresh can restore the session; the mock treats
-    // any reachable session as valid (tests always log in first).
+    // bootstrap so a hard refresh can restore the session; the mock treats a
+    // reachable session as valid unless a spec has marked the session wiped
+    // (mockSession.valid === false), in which case it answers 401.
     if (method === "GET" && path === "/api/v1/auth/session") {
+      if (!mockSession.valid) return json(401, { message: "No active session" });
       return json(200, MOCK_USER);
     }
 
     if (method === "GET" && path === "/api/v1/auth/me") {
+      if (!mockSession.valid) return json(401, { message: "No active session" });
       return json(200, MOCK_USER);
     }
 
     if (method === "POST" && path === "/api/v1/auth/logout") {
+      if (!mockSession.valid) return json(401, { message: "No active session" });
       return json(200, { message: "Logged out" });
     }
 
     if (method === "POST" && path === "/api/v1/auth/refresh") {
+      // A wiped session must report 401 on refresh too, so the axios 401
+      // interceptor treats it as a definitive auth failure and redirects to
+      // /login instead of keeping the user "signed in" via a fresh token.
+      if (!mockSession.valid) return json(401, { message: "No active session" });
       return json(200, {
         access_token: "mock-access-token",
         refresh_token: "mock-refresh-token",
