@@ -130,14 +130,6 @@ export function connectSessionSse(
       // Reset retry count on successful connection
       retryCount = 0;
 
-        if (response.status === 401 || response.status === 403) {
-          shouldRetry = false;
-        }
-      } else {
-        // Reset retry count on successful connection
-        retryCount = 0;
-      }
-
       if (shouldRetry) {
         const reader = response.body?.getReader();
         if (!reader) {
