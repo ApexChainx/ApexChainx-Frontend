@@ -12,7 +12,7 @@ describe("normalizeApiError", () => {
     [403, "auth"],
     [422, "validation"],
     [409, "conflict"],
-    [429, "rate_limited"],
+    [429, "rate_limit"],
     [404, "not_found"],
     [500, "unknown"],
   ] as const)("maps status %s to %s", (status, kind) => {

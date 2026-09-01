@@ -4,7 +4,7 @@ export type ApiErrorKind =
   | "auth"
   | "validation"
   | "conflict"
-  | "rate_limited"
+  | "rate_limit"
   | "not_found"
   | "unknown";
 
@@ -59,7 +59,7 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
         : status === 409
           ? "conflict"
           : status === 429
-            ? "rate_limited"
+            ? "rate_limit"
             : status === 404
               ? "not_found"
               : "unknown";
