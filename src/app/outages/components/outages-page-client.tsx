@@ -368,6 +368,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
         <input
           type="text"
           placeholder="Search outages..."
+          aria-label="Search outages"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           data-tour="outages-search"
