@@ -148,9 +148,11 @@ export function connectSessionSse(
             const frames = buffer.split("\n\n");
             buffer = frames.pop() ?? ""; // Keep incomplete frame in buffer
 
-        for (const frame of frames) {
-          const event = parseSessionSseFrame(frame);
-          if (event) onEvent(event);
+            for (const frame of frames) {
+              const event = parseSessionSseFrame(frame);
+              if (event) onEvent(event);
+            }
+          }
         }
       }
     } catch (err) {

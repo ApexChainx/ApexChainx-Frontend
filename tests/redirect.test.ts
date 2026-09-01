@@ -1,10 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { describe, it, expect } from "vitest";
-import {
-  isSafeRedirect,
-  sanitizeRedirect,
-  getSafeDefault,
-} from "@/lib/auth/redirect";
+import { isSafeRedirect, sanitizeRedirect, getSafeDefault } from "@/lib/auth/redirect";
 
 describe("isSafeRedirect", () => {
   describe("rejects attack payloads", () => {
@@ -62,6 +58,7 @@ describe("sanitizeRedirect", () => {
 
   it("falls back to the safe default for unsafe values", () => {
     expect(sanitizeRedirect("//evil.example/phish")).toBe(getSafeDefault());
+    expect(sanitizeRedirect("https://evil.example.com")).toBe(getSafeDefault());
     expect(sanitizeRedirect("/\\evil.example")).toBe(getSafeDefault());
     expect(sanitizeRedirect("javascript:alert(1)")).toBe(getSafeDefault());
     expect(sanitizeRedirect("/login")).toBe(getSafeDefault());
@@ -70,10 +67,17 @@ describe("sanitizeRedirect", () => {
   it("keeps safe in-app paths unchanged", () => {
     expect(sanitizeRedirect("/payments")).toBe("/payments");
     expect(sanitizeRedirect("/outages/123")).toBe("/outages/123");
-  getSafeDefault,
-  isSafeRedirect,
-  sanitizeRedirect,
-} from "@/lib/auth/redirect";
+    expect(sanitizeRedirect("/payments/retry-queue")).toBe(
+      "/payments/retry-queue"
+    );
+  });
+
+  it("never sends users to /login or /register (auth loops)", () => {
+    expect(isSafeRedirect("/login")).toBe(false);
+    expect(isSafeRedirect("/register")).toBe(false);
+    expect(sanitizeRedirect("/login?next=/outages")).toBe("/");
+  });
+});
 
 /**
  * Known-good routes, mirroring the Next.js app router tree in `src/app/`
@@ -94,40 +98,12 @@ const KNOWN_ROUTES = [
   "/bulk-import",
 ];
 
-describe("auth/redirect — safe default", () => {
-  it("falls back to `/` for absent redirects", () => {
-    expect(sanitizeRedirect(undefined)).toBe("/");
-    expect(sanitizeRedirect(null)).toBe("/");
-    expect(sanitizeRedirect()).toBe(getSafeDefault());
-  });
-
-  it("falls back to `/` for unsafe redirects", () => {
-    expect(sanitizeRedirect("https://evil.example.com")).toBe("/");
-    expect(sanitizeRedirect("//evil.example.com")).toBe("/");
-    expect(sanitizeRedirect("javascript:alert(1)")).toBe("/");
-  });
-
-  it("keeps safe redirects untouched", () => {
-    expect(sanitizeRedirect("/outages")).toBe("/outages");
-    expect(sanitizeRedirect("/payments/retry-queue")).toBe(
-      "/payments/retry-queue"
-    );
-  });
-
-  it("never sends users to /login or /register (auth loops)", () => {
-    expect(isSafeRedirect("/login")).toBe(false);
-    expect(isSafeRedirect("/register")).toBe(false);
-    expect(sanitizeRedirect("/login?next=/outages")).toBe("/");
-  });
-});
-
 describe("auth/redirect — fallback is a real route (issue #312)", () => {
   it("default matches a known-good route in the app", () => {
     expect(KNOWN_ROUTES).toContain(getSafeDefault());
   });
 
   it("default agrees with Navigation: the dashboard is rendered at `/`", () => {
-    // src/components/Navigation.tsx links the dashboard via href="/"
     expect(getSafeDefault()).toBe("/");
     expect(getSafeDefault()).not.toBe("/dashboard");
   });
