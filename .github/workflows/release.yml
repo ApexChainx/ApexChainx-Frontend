@@ -3,7 +3,7 @@ name: Release Docker Image
 on:
   push:
     tags:
-      - 'v*' # Trigger on version tags like v1.0.0
+      - "v*" # Trigger on version tags like v1.0.0
 
 jobs:
   build-and-push:
@@ -34,11 +34,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          tags:
-            - type=semver,pattern={{version}} # Use the tag version
-            - type=semver,pattern={{major}}.{{minor}} # Also tag major.minor
-            - type=semver,pattern={{major}} # Also tag major
-            - type=sha,prefix= # Also tag with commit SHA
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
