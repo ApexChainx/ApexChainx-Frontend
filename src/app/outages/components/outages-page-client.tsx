@@ -412,6 +412,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
             type="checkbox"
             checked={selectedIds.length === filteredData.length && filteredData.length > 0}
             onChange={toggleSelectAll}
+            aria-label="Select all outages"
             className="h-4 w-4"
           />
           <span className="text-sm text-slate-600 dark:text-slate-400">
@@ -445,6 +446,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
               type="checkbox"
               checked={selectedIds.includes(item.id)}
               onChange={() => toggleSelect(item.id)}
+              aria-label={`Select ${item.title}`}
               className="h-4 w-4"
             />
           </div>
