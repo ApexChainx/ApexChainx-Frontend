@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockApi } from "./mock-api";
+import { mockApi, mockSession } from "./mock-api";
 
 /**
  * Session restore on hard refresh (#400).
@@ -63,23 +63,6 @@ test("keeps the session across a hard refresh and restores via /auth/session", a
 test("cleared cookies and storage flag redirect a hard refresh to /login", async ({
   page,
 }) => {
-  // Playwright serves matching page.route handlers in registration order, so
-  // this override must be registered BEFORE mockApi below to take precedence
-  // over its generic handler. Until the session is wiped we fall through to
-  // mockApi's normal copy; once `sessionWiped` is set the cookie-only
-  // bootstrap endpoint returns 401 so the app redirects to /login.
-  let sessionWiped = false;
-  await page.route("**/api/v1/auth/session", (route) => {
-    if (sessionWiped) {
-      return route.fulfill({
-        status: 401,
-        contentType: "application/json",
-        body: "{}",
-      });
-    }
-    return route.fallback();
-  });
-
   await mockApi(page);
   await login(page);
 
@@ -87,7 +70,12 @@ test("cleared cookies and storage flag redirect a hard refresh to /login", async
   // localStorage and remove every cookie (including the session cookies).
   await page.evaluate(() => localStorage.clear());
   await page.context().clearCookies();
-  sessionWiped = true;
+
+  // Tell the mock the backend session no longer exists. The app's bootstrap
+  // probes /auth/session and falls back to /auth/me; with the mock reporting
+  // 401 on those and on /auth/refresh, the axios 401 interceptor treats the
+  // refresh as a definitive auth failure and hard-redirects to /login.
+  mockSession.valid = false;
 
   await page.reload();
 
