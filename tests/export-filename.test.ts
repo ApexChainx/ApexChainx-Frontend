@@ -20,7 +20,7 @@ describe("getFilenameFromDisposition", () => {
     ).toBe("report.csv");
   });
 
-  it("parses an RFC 5987 filename*="" value (percent-decoded)", () => {
+  it("parses an RFC 5987 filename* percent-decoded value", () => {
     expect(
       getFilenameFromDisposition(
         "attachment; filename*=UTF-8''outages_%E2%80%94_2026.csv",
@@ -28,7 +28,7 @@ describe("getFilenameFromDisposition", () => {
     ).toBe("outages_—_2026.csv");
   });
 
-  it("parses an RFC 5987 filename*="" ASCII value", () => {
+  it("parses an RFC 5987 filename* ASCII value", () => {
     expect(
       getFilenameFromDisposition("attachment; filename*=outages_2026.csv"),
     ).toBe("outages_2026.csv");

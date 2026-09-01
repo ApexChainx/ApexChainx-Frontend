@@ -210,6 +210,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Create User
+         * @description Admin-only endpoint to create a user with an explicit role.
+         *
+         *     Every creation is audit-logged with the approving admin's identity.
+         */
+        post: operations["admin_create_user_api_v1_auth_admin_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -408,8 +430,7 @@ export interface paths {
          * Export My Data
          * @description Export all personal data for the authenticated user (GDPR compliance).
          *
-         *     Returns a tarball containing user data and audit log entries.
-         *     Designed to complete in < 30 s for up to 1 000 audit events.
+         *     Returns a streaming gzip tarball containing user data and audit log entries.
          */
         post: operations["export_my_data_api_v1_auth_me_export_post"];
         delete?: never;
@@ -575,7 +596,7 @@ export interface paths {
         };
         /**
          * List Jobs
-         * @description List all jobs with optional filters.
+         * @description List jobs with cursor-based pagination.
          */
         get: operations["list_jobs_api_v1_jobs_get"];
         put?: never;
@@ -1108,10 +1129,11 @@ export interface paths {
          *
          *     When `expected_token` is provided:
          *     - The update is atomic: policy_version is bumped, content_hash is computed,
-         *       history is recorded.
+         *       history is recorded in sla_config_history.
          *     - If another concurrent update has already occurred, returns 409 Conflict.
          *
-         *     Without `expected_token`, the update is backward-compatible (no version bump).
+         *     Without `expected_token`, the update still records a version bump and a
+         *     history entry (see #272).
          */
         put: operations["update_sla_config_api_v1_sla_config__severity__put"];
         post?: never;
@@ -1131,6 +1153,9 @@ export interface paths {
         /**
          * Get Config Publish Token
          * @description Get the current publish token for optimistic concurrency control (#37).
+         *
+         *     Reads the latest persisted history row so a token fetched after a
+         *     restart matches the token the publish path compares against (#272).
          */
         get: operations["get_config_publish_token_api_v1_sla_config__severity__token_get"];
         put?: never;
@@ -1484,6 +1509,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payments/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Payments */
+        get: operations["export_payments_api_v1_payments_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payments/ping": {
         parameters: {
             query?: never;
@@ -1600,7 +1642,10 @@ export interface paths {
         };
         /**
          * List Retry Queue
-         * @description Return all payments eligible for retry with computed backoff metadata.
+         * @description Return payments eligible for retry with computed backoff metadata.
+         *
+         *     Supports cursor-based pagination. The cursor encodes
+         *     ``(created_at, id)`` of the last item on the previous page.
          */
         get: operations["list_retry_queue_api_v1_payments_retry_queue_get"];
         put?: never;
@@ -1645,12 +1690,16 @@ export interface paths {
          * @description Inbound callback from a payment provider to update payment status (BE-028).
          *
          *     Security model:
-         *     - HMAC-SHA256 signature (X-Webhook-Signature) verified when
-         *       PAYMENT_WEBHOOK_SECRET is configured.  The signed message includes the
-         *       nonce so replaying a captured request fails if the nonce changes.
+         *     - HMAC-SHA256 signature (X-Webhook-Signature) is verified whenever
+         *       PAYMENT_WEBHOOK_SECRET is configured. PAYMENT_WEBHOOK_SECRET is required
+         *       in non-local environments (validate_critical_settings), so signature
+         *       verification is effectively mandatory in deployments.  The signed
+         *       message includes the nonce so replaying a captured request fails if the
+         *       nonce changes.
          *     - Replay protection: the nonce (from X-Callback-Nonce header or the
-         *       ``nonce`` body field) must be unique within a 5-minute window.
-         *       Duplicate nonces are rejected with 409 Conflict.
+         *       ``nonce`` body field) is MANDATORY. Nonce-less callbacks are rejected
+         *       with 400, and duplicate nonces within the 5-minute window are rejected
+         *       with 409 Conflict.
          *     - Idempotency: a callback that moves a payment into its current status
          *       is silently accepted (returns 200 with the unchanged record).
          *     - Failures and suspicious events are written to the audit log so they
@@ -1959,15 +2008,35 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AdminCreateUserRequest
+         * @description Request body for the admin-only user creation endpoint.
+         * @example {
+         *       "email": "newuser@example.com",
+         *       "full_name": "New User",
+         *       "password": "Password123!",
+         *       "role": "engineer"
+         *     }
+         */
+        AdminCreateUserRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /** Full Name */
+            full_name: string;
+            /** @default engineer */
+            role: components["schemas"]["Role"];
+        };
         /** ApiKeyCreateRequest */
         ApiKeyCreateRequest: {
             /** Name */
             name?: string | null;
-            /**
-             * Scopes
-             * @default []
-             */
-            scopes: string[];
+            /** Scopes */
+            scopes?: string[];
             /** Expires At */
             expires_at?: string | null;
         };
@@ -2004,6 +2073,8 @@ export interface components {
             created_at: string;
             /** Created By */
             created_by: string;
+            /** Status */
+            status: string;
         };
         /** ApiKeyListResponse */
         ApiKeyListResponse: {
@@ -2123,8 +2194,6 @@ export interface components {
         };
         /** CreateProposedSLARequest */
         CreateProposedSLARequest: {
-            /** Created By */
-            created_by: string;
             /** Severity */
             severity: string;
             /** Mttr Minutes */
@@ -2142,11 +2211,39 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /**
+         * CursorPage
+         * @description Standard cursor-paginated response envelope.
+         *
+         *     Every list endpoint that supports cursor pagination returns this shape.
+         *
+         *     .. code-block:: json
+         *
+         *         {
+         *           "items": [...],
+         *           "next_cursor": "eyJpZCI6ICIuLi4iLCAidiI6ICIuLi4ifQ",
+         *           "has_more": true
+         *         }
+         */
+        CursorPage: {
+            /** Items */
+            items: unknown[];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Has More */
+            has_more: boolean;
+        };
         /** DisputeAuditLogResponse */
         DisputeAuditLogResponse: {
-            /** Id */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Dispute Id */
+            /**
+             * Dispute Id
+             * Format: uuid
+             */
             dispute_id: string;
             /** Action */
             action: string;
@@ -2163,11 +2260,6 @@ export interface components {
         /** DisputeFlagRequest */
         DisputeFlagRequest: {
             /**
-             * Flagged By
-             * @description Identifier of the operator flagging the dispute
-             */
-            flagged_by: string;
-            /**
              * Dispute Reason
              * @description Reason for disputing the SLA calculation
              */
@@ -2175,11 +2267,6 @@ export interface components {
         };
         /** DisputeResolveRequest */
         DisputeResolveRequest: {
-            /**
-             * Resolved By
-             * @description Identifier of the operator resolving the dispute
-             */
-            resolved_by: string;
             /**
              * Resolution Notes
              * @description Notes explaining the resolution decision
@@ -2196,7 +2283,10 @@ export interface components {
         };
         /** DisputeResponse */
         DisputeResponse: {
-            /** Id */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
             /** Sla Result Id */
             sla_result_id: number;
@@ -2234,22 +2324,6 @@ export interface components {
             job_id: string;
             /** Message */
             message: string;
-        };
-        /** GDPRExportResponse */
-        GDPRExportResponse: {
-            /** Job Id */
-            job_id: string;
-            /** Exported At */
-            exported_at: string;
-            /** Size Bytes */
-            size_bytes: number;
-            /**
-             * Tarball Base64
-             * Format: binary
-             */
-            tarball_base64: string;
-            /** Entry Count */
-            entry_count: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2517,7 +2591,10 @@ export interface components {
          *     }
          */
         LoginRequest: {
-            /** Email */
+            /**
+             * Email
+             * Format: email
+             */
             email: string;
             /** Password */
             password: string;
@@ -2666,36 +2743,15 @@ export interface components {
             has_more: boolean;
         };
         /**
-         * PaymentRetryQueueItem
-         * @description A payment in the retry queue with backoff metadata.
+         * PaymentSortDirection
+         * @enum {string}
          */
-        PaymentRetryQueueItem: {
-            /** Id */
-            id: string;
-            /** Transaction Hash */
-            transaction_hash: string;
-            /** Type */
-            type: string;
-            /** Amount */
-            amount: number;
-            /** Status */
-            status: string;
-            /** Outage Id */
-            outage_id: string;
-            /** Attempt Count */
-            attempt_count: number;
-            /** Next Retry At */
-            next_retry_at: string | null;
-            /** Backoff Seconds */
-            backoff_seconds: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Last Retried At */
-            last_retried_at: string | null;
-        };
+        PaymentSortDirection: "asc" | "desc";
+        /**
+         * PaymentSortField
+         * @enum {string}
+         */
+        PaymentSortField: "created_at" | "amount" | "status";
         /**
          * PaymentTransaction
          * @example {
@@ -2828,19 +2884,19 @@ export interface components {
          * @example {
          *       "email": "user@example.com",
          *       "full_name": "Example User",
-         *       "password": "Password123!",
-         *       "role": "engineer"
+         *       "password": "Password123!"
          *     }
          */
         RegisterRequest: {
-            /** Email */
+            /**
+             * Email
+             * Format: email
+             */
             email: string;
             /** Password */
             password: string;
             /** Full Name */
             full_name: string;
-            /** @default engineer */
-            role: components["schemas"]["Role"];
         };
         /** ResolveOutageRequest */
         ResolveOutageRequest: {
@@ -3797,6 +3853,41 @@ export interface operations {
             };
         };
     };
+    admin_create_user_api_v1_auth_admin_users_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthUser"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -4125,7 +4216,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GDPRExportResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4374,6 +4465,7 @@ export interface operations {
                 job_type?: components["schemas"]["JobType"] | null;
                 status?: components["schemas"]["JobStatus"] | null;
                 limit?: number;
+                cursor?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -4389,7 +4481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"][];
+                    "application/json": components["schemas"]["CursorPage"];
                 };
             };
             /** @description Validation Error */
@@ -4602,7 +4694,9 @@ export interface operations {
     get_metrics_api_v1_metrics_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4615,6 +4709,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -4759,7 +4862,10 @@ export interface operations {
     };
     list_violations_api_v1_outages_violations_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -5899,7 +6005,9 @@ export interface operations {
     get_dispute_api_v1_sla__sla_result_id__dispute_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 sla_result_id: number;
             };
@@ -6041,7 +6149,9 @@ export interface operations {
     get_dispute_history_api_v1_sla__sla_result_id__dispute_history_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 sla_result_id: number;
             };
@@ -6080,6 +6190,46 @@ export interface operations {
                 cursor?: string | null;
                 /** @description Limit for cursor-based pagination (used with cursor). */
                 limit?: number;
+                status?: string | null;
+                type?: string | null;
+                outage_id?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                sort_by?: components["schemas"]["PaymentSortField"];
+                sort_dir?: components["schemas"]["PaymentSortDirection"];
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_payments_api_v1_payments_export_get: {
+        parameters: {
+            query?: {
+                format?: string;
                 status?: string | null;
                 type?: string | null;
                 outage_id?: string | null;
@@ -6307,7 +6457,12 @@ export interface operations {
     };
     list_retry_queue_api_v1_payments_retry_queue_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Cursor for pagination. */
+                cursor?: string | null;
+                /** @description Max items per page. */
+                limit?: number;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -6322,7 +6477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaymentRetryQueueItem"][];
+                    "application/json": components["schemas"]["CursorPage"];
                 };
             };
             /** @description Validation Error */
@@ -6601,7 +6756,9 @@ export interface operations {
                 /** @description Number of records to skip */
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 webhook_id: string;
             };
@@ -6665,7 +6822,9 @@ export interface operations {
     retry_delivery_api_v1_webhooks__webhook_id__deliveries__delivery_id__retry_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 webhook_id: string;
                 delivery_id: string;
@@ -6699,7 +6858,9 @@ export interface operations {
             query?: {
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 webhook_id: string;
             };
@@ -6730,7 +6891,9 @@ export interface operations {
     replay_dead_letter_delivery_api_v1_webhooks__webhook_id__deliveries__delivery_id__replay_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path: {
                 webhook_id: string;
                 delivery_id: string;
@@ -6764,7 +6927,9 @@ export interface operations {
             query: {
                 event: components["schemas"]["WebhookEvent"];
             };
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
