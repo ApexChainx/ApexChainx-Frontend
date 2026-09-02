@@ -152,6 +152,10 @@ describe("useSession", () => {
 
     it("is unauthenticated when no token or past session exists", async () => {
       mockGetAccessToken.mockReturnValue(null);
+      // The provider always probes the cookie-only /auth/session endpoint
+      // (a missing local flag does not rule out valid httpOnly cookies);
+      // a 401 means definitively no session.
+      mockHttp({ sessionStatus: 401 });
 
       const { result } = renderSessionHook();
 
@@ -161,13 +165,17 @@ describe("useSession", () => {
 
       expect(result.current.user).toBeNull();
 
-      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockGet).toHaveBeenCalledWith(
+        "/auth/session",
+        expect.any(Object),
+      );
     });
   });
 
   describe("storeSession", () => {
     it("stores session and updates authenticated state", async () => {
       mockGetAccessToken.mockReturnValue(null);
+      mockHttp({ sessionStatus: 401 });
 
       const { result } = renderSessionHook();
 
@@ -260,6 +268,8 @@ describe("useSession", () => {
 
     it("does not call clearTokens unnecessarily", async () => {
       mockGetAccessToken.mockReturnValue(null);
+      // A valid cookie session means no tokens need clearing.
+      mockHttp({ sessionStatus: 200 });
 
       renderSessionHook();
 

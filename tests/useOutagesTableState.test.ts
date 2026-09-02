@@ -1,11 +1,15 @@
 /** ApexChain Network Operations Intelligence Platform */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useFilterPresets } from "@/hooks/useOutagesTableState";
+import { resetPreferences } from "@/lib/preferences";
 
 describe("useFilterPresets", () => {
   beforeEach(() => {
     localStorage.clear();
+    // The preferences module caches state at module level; reset it between
+    // tests so presets from one test don't leak into the next.
+    resetPreferences();
   });
 
   it("initializes with empty presets", () => {
@@ -15,7 +19,11 @@ describe("useFilterPresets", () => {
 
   it("loads presets from localStorage", () => {
     const presets = [{ name: "High Severity", severity: "high" }];
-    localStorage.setItem("outage_filter_presets", JSON.stringify(presets));
+    // Presets live inside the synced preferences object (see src/lib/preferences.ts).
+    localStorage.setItem(
+      "apexchain_user_preferences",
+      JSON.stringify({ outageFilterPresets: presets }),
+    );
 
     const { result } = renderHook(() => useFilterPresets());
     expect(result.current.presets).toEqual(presets);

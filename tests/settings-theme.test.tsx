@@ -83,7 +83,7 @@ describe("SettingsPage theme effect", () => {
 
     const changeRemovals = removeEventListener.mock.calls.filter(([type]) => type === "change");
     expect(changeRemovals).toHaveLength(1);
-    expect(changeRemovals[0][1]).toBe(addedHandler);
+    expect(changeRemovals[0]![1]).toBe(addedHandler);
   });
 
   it("keeps add/remove balanced across re-renders (no growing leak)", () => {

@@ -68,13 +68,15 @@ describe("PaymentsView", () => {
   it("shows empty state", async () => {
     mockFetchPayments.mockResolvedValue({ items: [], total: 0 });
     render(<PaymentsView />);
-    expect(await screen.findByText("No payments found")).toBeInTheDocument();
+    // RouteEmptyState repeats the title in a polite live region, so query
+    // the visible heading instead of any text node.
+    expect(await screen.findByRole("heading", { name: "No payments found" })).toBeInTheDocument();
   });
 
   it("shows error state on failure", async () => {
     mockFetchPayments.mockRejectedValue(new Error("fail"));
     render(<PaymentsView />);
-    expect(await screen.findByText("Payments unavailable")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Payments unavailable" })).toBeInTheDocument();
   });
 });
 
