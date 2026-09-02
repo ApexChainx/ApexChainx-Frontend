@@ -34,7 +34,7 @@ export interface SessionSseEvent {
 
 export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
   const fields = new Map<string, string[]>();
-  for (const line of frame.replaceAll("\\r\\n", "\\n").split("\\n")) {
+  for (const line of frame.replaceAll("\r\n", "\n").split("\n")) {
     if (!line || line.startsWith(":")) continue;
     const separator = line.indexOf(":");
     const field = separator === -1 ? line : line.slice(0, separator);
@@ -44,7 +44,7 @@ export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
   }
 
   const eventType = fields.get("event")?.at(-1);
-  const dataStr = fields.get("data")?.join("\\n");
+  const dataStr = fields.get("data")?.join("\n");
   if (eventType !== "session_revoked" || !dataStr) return null;
 
   try {
@@ -100,7 +100,6 @@ export function connectSessionSse(
   async function connect() {
     if (closed) return;
     controller = new AbortController();
-    let shouldRetry = true;
 
     try {
       const baseUrl = env.API_BASE_URL.replace(/\/+$/, "");
@@ -122,15 +121,17 @@ export function connectSessionSse(
           return;
         }
         console.warn(
-          `[session-sse] /auth/events returned ${response.status} — ${response.status === 401 || response.status === 403 ? "stopping" : "retrying"}`,
+          `[session-sse] /auth/events returned ${response.status} — retrying`,
         );
-        return;
+        // Fall through to the reconnect block: a 5xx/429 is transient and
+        // must reschedule a connection attempt with backoff instead of
+        // silently giving up and leaving the stream dead until reload.
       }
 
-      // Reset retry count on successful connection
+      // A successful connection resets the backoff ladder.
       retryCount = 0;
 
-      if (shouldRetry) {
+      {
         const reader = response.body?.getReader();
         if (!reader) {
           console.warn("[session-sse] Response body has no readable stream");
@@ -160,8 +161,9 @@ export function connectSessionSse(
       if (closed) return;
     }
 
-    // Reconnect with backoff if not closed
-    if (!closed && shouldRetry) {
+    // Reconnect with backoff if not closed (also reached on a transient
+    // non-ok response via the fall-through above).
+    if (!closed) {
       retryCount++;
       const delay = getReconnectDelay();
       retryTimeout = setTimeout(connect, delay);

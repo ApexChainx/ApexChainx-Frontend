@@ -13,8 +13,12 @@ const h = vi.hoisted(() => {
     isActive: vi.fn(() => false),
     highlight: vi.fn(),
   };
-  const state: { config: any } = { config: null };
-  const driver = vi.fn((config: any) => {
+  interface DriverConfig {
+    onDestroyed: () => void;
+    [key: string]: unknown;
+  }
+  const state: { config: DriverConfig | null } = { config: null };
+  const driver = vi.fn((config: DriverConfig) => {
     state.config = config;
     return driverInstance;
   });
@@ -98,8 +102,10 @@ describe("OnboardingTour", () => {
     await waitFor(() => expect(h.driver).toHaveBeenCalledTimes(1));
 
     // driver.js fires onDestroyed however the tour ends — simulate it.
+    const config = h.state.config;
+    if (!config) throw new Error("driver was never constructed");
     act(() => {
-      h.state.config.onDestroyed();
+      config.onDestroyed();
     });
 
     expect(prefs.updatePreferences).toHaveBeenCalledWith({ onboardingTourDone: true });

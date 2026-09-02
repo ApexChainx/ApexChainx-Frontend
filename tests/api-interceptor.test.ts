@@ -13,7 +13,7 @@
  *   authenticated PUT (e.g. preferences sync) recovers on 401.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import axios from "axios";
+import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 
 import {
   api,
@@ -42,9 +42,22 @@ function clearAllCookies(): void {
 }
 
 /** Drive the request interceptor directly (single registered interceptor). */
-function runRequestInterceptor(config: Record<string, unknown>): Record<string, any> {
-  const interceptor = (api.interceptors.request as any).handlers[0];
-  return interceptor.fulfilled(config).headers;
+function runRequestInterceptor(config: Record<string, unknown>): Record<string, unknown> {
+  const { handlers } = api.interceptors.request as unknown as {
+    handlers: Array<{ fulfilled: (c: unknown) => { headers: Record<string, unknown> } }>;
+  };
+  return handlers[0]!.fulfilled(config).headers;
+}
+
+/** Minimal AxiosResponse-shaped value for api.request mocks. */
+function axiosResponse(): AxiosResponse {
+  return {
+    data: {},
+    status: 200,
+    statusText: "OK",
+    headers: {},
+    config: {} as InternalAxiosRequestConfig,
+  };
 }
 
 /** Build an AxiosError-shaped 401 rejection for the response interceptor. */
@@ -67,7 +80,10 @@ function makeAxiosAuthError(status: number): unknown {
 
 /** The response interceptor's rejection handler (fulfilled is res => res). */
 function responseErrorHandler(): (err: unknown) => Promise<unknown> {
-  return (api.interceptors.response as any).handlers[0].rejected;
+  const { handlers } = api.interceptors.response as unknown as {
+    handlers: Array<{ rejected: (e: unknown) => Promise<unknown> }>;
+  };
+  return handlers[0]!.rejected;
 }
 
 describe("token storage (#294)", () => {
@@ -150,13 +166,7 @@ describe("401 refresh pipeline (#295)", () => {
 
   it("adopts the rotated refresh token and presents it on the next refresh", async () => {
     setTokens("stale-access", "stale-refresh");
-    vi.spyOn(api, "request").mockResolvedValue({
-      data: {},
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {},
-    } as any);
+    vi.spyOn(api, "request").mockResolvedValue(axiosResponse());
 
     const errorHandler = responseErrorHandler();
 
@@ -194,13 +204,7 @@ describe("401 refresh pipeline (#295)", () => {
 
   it("keeps the same refresh token when the backend does not rotate", async () => {
     setTokens("stale-access", "unchanged-refresh");
-    vi.spyOn(api, "request").mockResolvedValue({
-      data: {},
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {},
-    } as any);
+    vi.spyOn(api, "request").mockResolvedValue(axiosResponse());
 
     const errorHandler = responseErrorHandler();
 
@@ -217,15 +221,9 @@ describe("401 refresh pipeline (#295)", () => {
     );
   });
 
-  it("persists the renewed access token for all subsequent requests", async () => {
+  it("persists the renewed access token for renewed requests", async () => {
     setTokens("stale-access", "refresh-1");
-    const requestSpy = vi.spyOn(api, "request").mockResolvedValue({
-      data: {},
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {},
-    } as any);
+    const requestSpy = vi.spyOn(api, "request").mockResolvedValue(axiosResponse());
 
     postSpy.mockResolvedValueOnce({
       status: 200,
@@ -236,7 +234,8 @@ describe("401 refresh pipeline (#295)", () => {
 
     // The retried request carried the fresh bearer token…
     expect(requestSpy).toHaveBeenCalledTimes(1);
-    expect((requestSpy.mock.calls[0]![0] as any).headers.Authorization).toBe("Bearer access-2");
+    const retryConfig = requestSpy.mock.calls[0]![0] as { headers: { Authorization?: string } };
+    expect(retryConfig.headers.Authorization).toBe("Bearer access-2");
 
     // …and so does every request made afterwards (not just the retried one).
     const headers = runRequestInterceptor({ headers: {} });
@@ -245,13 +244,7 @@ describe("401 refresh pipeline (#295)", () => {
 
   it("recovers an authenticated PUT through the refresh flow (#293)", async () => {
     setTokens("stale-access", "refresh-1");
-    const requestSpy = vi.spyOn(api, "request").mockResolvedValue({
-      data: {},
-      status: 200,
-      statusText: "OK",
-      headers: {},
-      config: {},
-    } as any);
+    const requestSpy = vi.spyOn(api, "request").mockResolvedValue(axiosResponse());
 
     postSpy.mockResolvedValueOnce({ status: 200, data: { access_token: "access-2" } });
 

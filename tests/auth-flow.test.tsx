@@ -150,8 +150,13 @@ describe("useSession", () => {
       expect(mockClearTokens).toHaveBeenCalledTimes(1);
     });
 
-    it("is unauthenticated when no token or past session exists", async () => {
+    it("is unauthenticated when the cookie probe definitively fails", async () => {
+      // The provider always probes /auth/session — a missing local flag is
+      // not proof that no httpOnly cookie session exists (privacy tools and
+      // clear-site-data can remove localStorage while cookies stay valid).
+      // A definitive 401 from that probe is the "no session" signal.
       mockGetAccessToken.mockReturnValue(null);
+      mockHttp({ sessionStatus: 401 });
 
       const { result } = renderSessionHook();
 
@@ -161,13 +166,17 @@ describe("useSession", () => {
 
       expect(result.current.user).toBeNull();
 
-      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockGet).toHaveBeenCalledWith(
+        "/auth/session",
+        expect.any(Object),
+      );
     });
   });
 
   describe("storeSession", () => {
     it("stores session and updates authenticated state", async () => {
       mockGetAccessToken.mockReturnValue(null);
+      mockHttp({ sessionStatus: 401 });
 
       const { result } = renderSessionHook();
 
@@ -258,8 +267,11 @@ describe("useSession", () => {
       expect(result.current.user).toBeNull();
     });
 
-    it("does not call clearTokens unnecessarily", async () => {
+    it("does not call clearTokens on transient bootstrap failures", async () => {
+      // Network errors during bootstrap must not destroy a possibly-valid
+      // httpOnly session — only a definitive 401/403 may.
       mockGetAccessToken.mockReturnValue(null);
+      mockGet.mockRejectedValue(new Error("network down"));
 
       renderSessionHook();
 

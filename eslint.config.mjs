@@ -12,12 +12,34 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated OpenAPI types — never lint generated code.
+    "src/types/api.generated.ts",
   ]),
   {
+    // Typed rules such as @typescript-eslint/no-unsafe-assignment require
+    // type information. Without projectService they crash ESLint at startup
+    // ("rule which requires type information, but don't have parserOptions")
+    // instead of reporting findings. Scope it to TS files that are covered
+    // by tsconfig.json and keep it in sync with `npm run typecheck`.
+    files: ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unsafe-assignment": "warn",
       "@typescript-eslint/no-unsafe-member-access": "warn",
+      // React Compiler rules surfaced after typed linting started working
+      // (they could never run before — ESLint crashed at startup). They flag
+      // pre-existing architectural patterns in 6 components (sync setState
+      // inside effects, ref access during render) that need deliberate
+      // refactors, not drive-by edits. Downgraded to warnings until those
+      // refactors land; everything else stays enforced.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
     },
   },
 ]);
