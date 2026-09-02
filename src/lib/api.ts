@@ -19,9 +19,6 @@ export function dedupeByKey<T>(key: string, fetcher: () => Promise<T>): Promise<
   requestCache.set(key, promise);
   return promise;
 }
-export const TOKEN_KEY = "noc_access_token";
-export const REFRESH_KEY = "noc_refresh_token";
-
 // Allow requests to opt out of the Authorization header. Used by the
 // cookie-only `/auth/session` check so a stale bearer token can never
 // override a valid httpOnly session cookie.
@@ -31,32 +28,41 @@ declare module "axios" {
   }
 }
 
+/**
+ * Issue #294 — tokens are held in memory only, never in `document.cookie`,
+ * sessionStorage or localStorage. A refresh token stored where JavaScript
+ * can read it (a readable cookie or Web Storage) is exfiltratable by any
+ * XSS payload; the
+ * httpOnly session cookies set by the backend (see `/auth/session` and
+ * `doRefresh` below) are the actual long-lived credential and are out of JS
+ * reach by design.
+ *
+ * Consequences handled elsewhere:
+ * - Hard refresh: in-memory tokens are gone, but the session is restored by
+ *   the cookie-only `/auth/session` bootstrap (src/providers/session.tsx)
+ *   and the httpOnly refresh cookie sent automatically by `doRefresh`.
+ * - Cross-tab: authentication state is broadcast over the session-sync
+ *   channel, not via shared cookies.
+ */
 let memoryAccessToken: string | null = null;
 let memoryRefreshToken: string | null = null;
 
 export function getAccessToken(): string | null {
-  if (typeof document !== "undefined") {
-    const token = getCookie(TOKEN_KEY);
-    if (token) return token;
-  }
   return memoryAccessToken;
 }
 
 export function getRefreshToken(): string | null {
-  if (typeof document !== "undefined") {
-    const token = getCookie(REFRESH_KEY);
-    if (token) return token;
-  }
   return memoryRefreshToken;
 }
 
+/**
+ * Store tokens in memory only.
+ * Issue #294: deliberately does NOT touch document.cookie — a test asserts
+ * no token is ever written to a JS-readable cookie.
+ */
 export function setTokens(access: string, refresh: string): void {
   memoryAccessToken = access;
   memoryRefreshToken = refresh;
-  if (typeof document !== "undefined") {
-    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(access)}; path=/; SameSite=Lax; Secure`;
-    document.cookie = `${REFRESH_KEY}=${encodeURIComponent(refresh)}; path=/; SameSite=Lax; Secure`;
-  }
 }
 
 export function clearTokens(): void {
@@ -65,9 +71,12 @@ export function clearTokens(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("auth:logout"));
   }
+  // Issue #294: sweep any legacy readable-token cookies left by earlier
+  // versions so old sessions cannot linger and mask a valid httpOnly one.
   if (typeof document !== "undefined") {
-    document.cookie = `${TOKEN_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-    document.cookie = `${REFRESH_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    for (const name of LEGACY_COOKIE_KEYS) {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    }
   }
 }
 
@@ -106,6 +115,9 @@ export class CircuitBreaker {
 
 export const refreshBreaker = new CircuitBreaker();
 
+/** Readable-token cookies written by pre-#294 versions of setTokens(). */
+export const LEGACY_COOKIE_KEYS = ["noc_access_token", "noc_refresh_token"];
+
 export const api = axios.create({
   baseURL: env.API_BASE_URL,
   timeout: 15_000,
@@ -115,7 +127,10 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// Attach CSRF token and access token to every request
+// Attach CSRF token and access token to every request. Every authenticated
+// call goes through this pipeline (Issue #293) — including the preferences
+// sync in src/lib/preferences.ts — so CSRF headers, bearer auth, single-
+// flight refresh and timeouts behave identically for all of them.
 api.interceptors.request.use((config) => {
   if (config.timeout === undefined) {
     config.timeout = 15000;
@@ -150,18 +165,46 @@ let refreshPromise: Promise<string | null> | null = null;
 // Track retried request IDs to prevent infinite loops
 const retried = new WeakSet<object>();
 
+interface RefreshResponse {
+  access_token: string;
+  /**
+   * Present when the backend rotates refresh tokens; may be absent when it
+   * keeps the same refresh token for the session lifetime.
+   */
+  refresh_token?: string;
+}
+
 async function doRefresh(): Promise<string> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) throw new Error("No refresh token");
 
-  const res = await axios.post<{ access_token: string; refresh_token: string }>(
+  const res = await axios.post<RefreshResponse>(
     env.API_REFRESH_URL,
     { refresh_token: refreshToken },
     // Send cookies so the backend can also validate the httpOnly refresh
     // cookie when the token itself is not readable from JS.
     { withCredentials: true },
   );
-  return res.data.access_token ?? null;
+
+  const newAccess = res.data.access_token ?? null;
+  if (newAccess) {
+    // Issue #295 — adopt the rotated refresh token when the backend issues
+    // one. Presenting the stale token after rotation would make every
+    // refresh after the first fail (server has invalidated it) and force a
+    // logout. Only one writer runs at a time because doRefresh is invoked
+    // under the single-flight refreshPromise, so the write is race-safe.
+    if (res.data.refresh_token) {
+      memoryRefreshToken = res.data.refresh_token;
+    } else {
+      memoryRefreshToken = refreshToken;
+    }
+    // Issue #295 — persist the renewed access token too. Without this only
+    // the retried request sees the new token; every other request would
+    // keep presenting the stale Bearer token and re-trigger the refresh
+    // flow for the rest of the session.
+    memoryAccessToken = newAccess;
+  }
+  return newAccess;
 }
 
 async function doRefreshWithBreaker(): Promise<string> {
@@ -206,8 +249,9 @@ api.interceptors.response.use(
     if (config.signal?.aborted) {
       return Promise.reject(new DOMException("Aborted", "AbortError"));
     }
-    const isSafeMethod = config.method === "get" || config.method === "head" || config.method === "options";
-    if (axiosErr.response?.status === 401 && !retried.has(config) && isSafeMethod) {
+    // Any method may recover through the refresh flow (Issue #293: an
+    // authenticated preferences PUT must refresh and retry, not just GETs).
+    if (axiosErr.response?.status === 401 && !retried.has(config)) {
       if (refreshBreaker.getState() === "OPEN") {
         clearTokens();
         return Promise.reject(
