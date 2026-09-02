@@ -14,16 +14,6 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
-    // Typed linting rules only work where type information exists. Scope them
-    // to app sources (covered by tsconfig.json) so config files like this one
-    // don't crash the lint run.
-    files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unsafe-assignment": "warn",

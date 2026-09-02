@@ -40,7 +40,7 @@ export async function fetchOutages(
   options?: { signal?: AbortSignal },
 ): Promise<PaginatedOutages> {
   const { data } = await api.get<PaginatedOutages>("/outages", {
-    ...(options?.signal ? { signal: options.signal } : {}),
+    signal: options?.signal,
     params: {
       page: query.page,
       page_size: query.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,
