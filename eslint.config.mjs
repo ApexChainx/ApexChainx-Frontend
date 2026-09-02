@@ -33,13 +33,10 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unsafe-assignment": "warn",
       "@typescript-eslint/no-unsafe-member-access": "warn",
       // React Compiler rules surfaced after typed linting started working
-      // (they could never run before — ESLint crashed at startup). They flag
-      // pre-existing architectural patterns in 6 components (sync setState
-      // inside effects, ref access during render) that need deliberate
-      // refactors, not drive-by edits. Downgraded to warnings until those
-      // refactors land; everything else stays enforced.
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/refs": "warn",
+      // (they could never run before — ESLint crashed at startup). All
+      // flagged components have been refactored, so both rules are enforced.
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/refs": "error",
     },
   },
 ]);
