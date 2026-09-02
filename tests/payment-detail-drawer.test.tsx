@@ -1,6 +1,6 @@
 /** ApexChain Network Operations Intelligence Platform */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 
@@ -8,12 +8,6 @@ vi.mock("@/services/paymentService", () => ({
   fetchPayment: vi.fn(),
   retryPayment: vi.fn(),
   reconcilePayment: vi.fn(),
-}));
-
-// The drawer calls useToast() unconditionally, which throws outside a
-// ToastProvider — mock it like the other component tests do.
-vi.mock("@/components/ui/toast", () => ({
-  useToast: () => vi.fn(),
 }));
 
 describe("PaymentDetailDrawer", () => {
@@ -32,7 +26,7 @@ describe("PaymentDetailDrawer", () => {
     const user = userEvent.setup();
     render(<PaymentDetailDrawer paymentId="123" onClose={mockOnClose} />);
     
-    const closeButton = screen.getByLabelText("Close drawer");
+    const closeButton = screen.getByLabelText("Close");
     await user.click(closeButton);
     
     expect(mockOnClose).toHaveBeenCalled();

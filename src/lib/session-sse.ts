@@ -34,7 +34,7 @@ export interface SessionSseEvent {
 
 export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
   const fields = new Map<string, string[]>();
-  for (const line of frame.replaceAll("\r\n", "\n").split("\n")) {
+  for (const line of frame.replaceAll("\\r\\n", "\\n").split("\\n")) {
     if (!line || line.startsWith(":")) continue;
     const separator = line.indexOf(":");
     const field = separator === -1 ? line : line.slice(0, separator);
@@ -44,7 +44,7 @@ export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
   }
 
   const eventType = fields.get("event")?.at(-1);
-  const dataStr = fields.get("data")?.join("\n");
+  const dataStr = fields.get("data")?.join("\\n");
   if (eventType !== "session_revoked" || !dataStr) return null;
 
   try {
@@ -119,16 +119,18 @@ export function connectSessionSse(
         if (response.status === 401 || response.status === 403) {
           closed = true;
           onEvent({ type: "session_revoked", reason: "session_expired" });
-          shouldRetry = false;
-        } else {
-          console.warn(
-            `[session-sse] /auth/events returned ${response.status} — retrying`,
-          );
+          return;
         }
-      } else {
-        // Reset retry count on successful connection
-        retryCount = 0;
+        console.warn(
+          `[session-sse] /auth/events returned ${response.status} — ${response.status === 401 || response.status === 403 ? "stopping" : "retrying"}`,
+        );
+        return;
+      }
 
+      // Reset retry count on successful connection
+      retryCount = 0;
+
+      if (shouldRetry) {
         const reader = response.body?.getReader();
         if (!reader) {
           console.warn("[session-sse] Response body has no readable stream");
@@ -153,9 +155,9 @@ export function connectSessionSse(
           }
         }
       }
-    } catch {
-      // Network/abort errors fall through to the reconnect check below;
-      // it no-ops when the connection was closed or aborted.
+    } catch (err) {
+      // If aborted/closed, don't reconnect
+      if (closed) return;
     }
 
     // Reconnect with backoff if not closed
