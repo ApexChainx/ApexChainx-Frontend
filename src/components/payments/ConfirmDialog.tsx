@@ -1,7 +1,7 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -15,8 +15,22 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
+/**
+ * Modal confirmation that requires typing `confirmPhrase`.
+ *
+ * The interactive content is a separate component mounted only while the
+ * dialog is open, so the typed value resets on every open via remounting
+ * instead of an effect-based setState.
+ */
 export function ConfirmDialog({
   isOpen,
+  ...rest
+}: ConfirmDialogProps) {
+  if (!isOpen) return null;
+  return <ConfirmDialogSurface {...rest} />;
+}
+
+function ConfirmDialogSurface({
   title,
   message,
   confirmPhrase,
@@ -25,27 +39,18 @@ export function ConfirmDialog({
   variant = "primary",
   onConfirm,
   onCancel,
-}: ConfirmDialogProps) {
+}: Omit<ConfirmDialogProps, "isOpen">) {
   const [typedValue, setTypedValue] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const isMatch = typedValue.trim() === confirmPhrase;
 
   useEffect(() => {
-    if (!isOpen) return;
-    setTypedValue("");
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !loading) onCancel();
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [isOpen, loading, onCancel]);
-
-  if (!isOpen) return null;
+  }, [loading, onCancel]);
 
   const buttonClasses =
     variant === "danger"
@@ -63,7 +68,6 @@ export function ConfirmDialog({
             Type <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-800">{confirmPhrase}</code> to confirm:
           </label>
           <input
-            ref={inputRef}
             autoFocus
             type="text"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"

@@ -14,7 +14,13 @@ import { useCallback, useEffect, useRef } from "react";
  */
 export function useUnsavedChangesGuard(dirty: boolean) {
   const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+
+  // Sync the latest `dirty` into the ref from an effect (not during render) so
+  // `confirmLeave`/`markClean` always observe the current value without
+  // mutating refs while React is rendering.
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   const confirmLeave = useCallback((): boolean => {
     if (!dirtyRef.current) return true;

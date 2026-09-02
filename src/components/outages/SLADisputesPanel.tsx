@@ -1,7 +1,7 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -62,10 +62,13 @@ export function SLADisputesPanel({
     [outageId, statusFilter, page]
   );
 
-  // Reset page on filter change
-  useEffect(() => {
+  // Changing the filter jumps back to the first page. Resetting inside the
+  // click handler keeps the two state writes in the same event (no
+  // effect-based setState, and no transient out-of-bounds query).
+  const applyStatusFilter = (status: DisputeStatus | "") => {
+    setStatusFilter(status);
     setPage(1);
-  }, [statusFilter]);
+  };
 
   const {
     data,
@@ -233,7 +236,7 @@ export function SLADisputesPanel({
               <button
                 key={status || "all"}
                 type="button"
-                onClick={() => setStatusFilter(status)}
+                onClick={() => applyStatusFilter(status)}
                 className={`rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors ${
                   isActive
                     ? "border-slate-900 bg-slate-900 text-white"

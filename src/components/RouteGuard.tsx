@@ -3,6 +3,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import Link from "next/link";
 import { useSession } from "@/hooks/useSession";
 import { ADMIN_ROUTES } from "@/components/Navigation";
 
@@ -46,9 +47,9 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
         <p className="text-sm text-slate-500">
           This page is restricted to administrators. Contact your admin if you need access.
         </p>
-        <a href="/" className="mt-2 text-sm text-blue-600 underline">
+        <Link href="/" className="mt-2 text-sm text-blue-600 underline">
           Return to dashboard
-        </a>
+        </Link>
       </div>
     );
   }

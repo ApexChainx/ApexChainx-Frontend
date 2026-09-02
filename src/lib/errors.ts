@@ -45,7 +45,8 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
     } else if (typeof rawDetail === "string") {
       message = rawDetail;
     } else if (typeof rawDetail === "object" && rawDetail !== null) {
-      message = (rawDetail as any).message || (rawDetail as any).detail || JSON.stringify(rawDetail);
+      const detail = rawDetail as { message?: string; detail?: string };
+      message = detail.message || detail.detail || JSON.stringify(rawDetail);
     }
   } else {
     message = e?.response?.data?.message ?? e?.message ?? "Unexpected API error";

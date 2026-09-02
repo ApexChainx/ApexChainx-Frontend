@@ -25,6 +25,7 @@ import {
 const PREFERENCES_STORAGE_KEY = "apexchain_user_preferences";
 
 const mockGet = vi.fn();
+const mockPut = vi.fn();
 const mockPost = vi.fn();
 const mockClearTokens = vi.fn();
 const mockGetAccessToken = vi.fn();
@@ -33,6 +34,7 @@ const mockSetTokens = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     get: (...args: unknown[]) => mockGet(...args),
+    put: (...args: unknown[]) => mockPut(...args),
     post: (...args: unknown[]) => mockPost(...args),
   },
   clearTokens: () => mockClearTokens(),
@@ -52,13 +54,9 @@ vi.mock("@/lib/session-heartbeat", () => ({
   startHeartbeat: () => ({ stop: () => {} }),
 }));
 
-// preferences.ts syncs to the server through a separate lightweight
-// apiClient (src/lib/client.ts, fetch-based) rather than the axios `api`
-// used by the session provider. Mock it so tests never hit the network.
-const mockApiClient = vi.fn();
-vi.mock("@/lib/client", () => ({
-  apiClient: (...args: unknown[]) => mockApiClient(...args),
-}));
+// preferences.ts syncs to the server through the same axios `api` pipeline
+// used by the session provider (Issue #293). Its calls are covered by the
+// @/lib/api mock above, so tests never hit the network.
 
 const mockUser = {
   id: "u1",
@@ -84,11 +82,11 @@ describe("logout clears preferences (Issue #413)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGet.mockReset();
+    mockPut.mockReset();
     mockPost.mockReset();
     mockClearTokens.mockReset();
     mockGetAccessToken.mockReset();
     mockSetTokens.mockReset();
-    mockApiClient.mockReset();
     window.localStorage.clear();
   });
 
@@ -99,7 +97,7 @@ describe("logout clears preferences (Issue #413)", () => {
 
   it("clears the preferences store after a user-initiated logout", async () => {
     // Seed preferences as if the operator customized their table view.
-    mockApiClient.mockResolvedValue({});
+    mockPut.mockResolvedValue({ data: {} });
     await updatePreferences({ tableDensity: "compact" });
 
     expect(getPreferences()).toEqual({ tableDensity: "compact" });
@@ -131,7 +129,7 @@ describe("logout clears preferences (Issue #413)", () => {
   });
 
   it("clears the preferences store identically on a forced logout (401)", async () => {
-    mockApiClient.mockResolvedValue({});
+    mockPut.mockResolvedValue({ data: {} });
     await updatePreferences({ tableDensity: "compact" });
     expect(getPreferences()).toEqual({ tableDensity: "compact" });
 
@@ -156,7 +154,7 @@ describe("logout clears preferences (Issue #413)", () => {
   });
 
   it("clears the preferences store when the auth:logout window event fires", async () => {
-    mockApiClient.mockResolvedValue({});
+    mockPut.mockResolvedValue({ data: {} });
     await updatePreferences({ tableDensity: "compact" });
     expect(getPreferences()).toEqual({ tableDensity: "compact" });
 
@@ -189,7 +187,7 @@ describe("logout clears preferences (Issue #413)", () => {
 
   it("a fresh sign-in does not inherit the previous user's presets", async () => {
     // Previous operator customized preferences.
-    mockApiClient.mockResolvedValue({});
+    mockPut.mockResolvedValue({ data: {} });
     await updatePreferences({ tableDensity: "compact" });
     expect(getPreferences()).toEqual({ tableDensity: "compact" });
 
@@ -211,7 +209,10 @@ describe("logout clears preferences (Issue #413)", () => {
 
     // A new operator signs in on the same browser. Their hydration call
     // returns their own (different) server-side preferences.
-    mockApiClient.mockResolvedValue({ tableDensity: "default" });
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/user/preferences") return Promise.resolve({ data: { tableDensity: "default" } });
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
     const hydrated = await hydratePreferences();
 
     // The new user's preferences must not contain any trace of the

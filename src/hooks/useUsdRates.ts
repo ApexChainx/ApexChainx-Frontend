@@ -1,8 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
+import { useEffect, useSyncExternalStore } from "react";
 import { STELLAR_NETWORK } from "@/lib/explorer";
-import { useEffect, useRef, useState } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CoinGeckoPriceResponse {
@@ -11,9 +11,10 @@ interface CoinGeckoPriceResponse {
   };
 }
 
-interface CachedRates {
-  rates: Record<string, number>;
-  fetchedAt: number;
+interface RatesState {
+  rates: Record<string, number> | null;
+  loading: boolean;
+  error: string | null;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -25,11 +26,34 @@ const STELLAR_ASSET_IDS: Record<string, string> = {
   APEX: "apex",
 };
 
-// Global cache shared across hook instances
-let globalCache: CachedRates | null = null;
+// ─── External store ──────────────────────────────────────────────────────────
+// The rates cache is shared across every hook instance, so it lives at module
+// scope and is exposed through useSyncExternalStore. That keeps reactivity
+// correct without setState-in-effect workarounds (forceRender hacks) —
+// subscribers simply re-render whenever the store version changes.
 
-function isCacheValid(cache: CachedRates): boolean {
-  return Date.now() - cache.fetchedAt < CACHE_TTL_MS;
+let store: RatesState = { rates: null, loading: false, error: null };
+let fetchedAt = 0;
+let inFlight = false;
+const listeners = new Set<() => void>();
+
+function emitChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot(): RatesState {
+  return store;
+}
+
+function isCacheFresh(): boolean {
+  return Date.now() - fetchedAt < CACHE_TTL_MS;
 }
 
 async function fetchRatesFromCoinGecko(): Promise<Record<string, number>> {
@@ -54,6 +78,32 @@ async function fetchRatesFromCoinGecko(): Promise<Record<string, number>> {
   return rates;
 }
 
+/** Kick off a fetch unless fresh rates are already cached or in flight. */
+function ensureRatesFresh(): void {
+  if (isCacheFresh() || inFlight) return;
+
+  inFlight = true;
+  store = { ...store, loading: true, error: null };
+  emitChange();
+
+  fetchRatesFromCoinGecko()
+    .then((rates) => {
+      fetchedAt = Date.now();
+      store = { rates, loading: false, error: null };
+    })
+    .catch((err: unknown) => {
+      store = {
+        ...store,
+        loading: false,
+        error: err instanceof Error ? err.message : "Failed to fetch rates",
+      };
+    })
+    .finally(() => {
+      inFlight = false;
+      emitChange();
+    });
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 export function useUsdRates(): {
   rates: Record<string, number> | null;
@@ -61,54 +111,21 @@ export function useUsdRates(): {
   error: string | null;
   isMainnet: boolean;
 } {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const isMainnet = STELLAR_NETWORK === "mainnet";
-  const fetchingRef = useRef(false);
 
-  // Re-render when cache populates
-  const [, forceRender] = useState(0);
+  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+  // Trigger the shared fetch; the store update happens asynchronously (or not
+  // at all when the cache is fresh), never synchronously during render.
+  useEffectBridge(isMainnet);
+
+  return { ...state, isMainnet };
+}
+
+/** Trigger the shared fetch once per mount/network change. */
+function useEffectBridge(isMainnet: boolean): void {
   useEffect(() => {
     if (!isMainnet) return;
-
-    // Return cached rates immediately if fresh
-    if (globalCache && isCacheValid(globalCache)) {
-      forceRender((n) => n + 1);
-      return;
-    }
-
-    // Prevent duplicate in-flight requests
-    if (fetchingRef.current) return;
-
-    const controller = new AbortController();
-    fetchingRef.current = true;
-
-    setLoading(true);
-    setError(null);
-
-    fetchRatesFromCoinGecko()
-      .then((rates) => {
-        if (controller.signal.aborted) return;
-        globalCache = { rates, fetchedAt: Date.now() };
-        fetchingRef.current = false;
-        setLoading(false);
-        forceRender((n) => n + 1);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        fetchingRef.current = false;
-        setError(err instanceof Error ? err.message : "Failed to fetch rates");
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-      fetchingRef.current = false;
-    };
-  }, [isMainnet]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const rates = globalCache && isCacheValid(globalCache) ? globalCache.rates : null;
-
-  return { rates, loading, error, isMainnet };
+    ensureRatesFresh();
+  }, [isMainnet]);
 }

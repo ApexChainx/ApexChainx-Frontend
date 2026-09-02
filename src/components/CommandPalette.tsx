@@ -98,17 +98,25 @@ export default function CommandPalette() {
     });
   }, [actions, query]);
 
+  // Reset the selection whenever the palette is opened. Doing it in the
+  // open-event handlers keeps every state write inside an event handler
+  // (no synchronous setState in effects); keystrokes already reset the
+  // selection via the input's onChange.
+  const openPalette = () => {
+    setOpen(true);
+    setSelectedIndex(0);
+  };
+
   useEffect(() => {
     if (!open) return;
     inputRef.current?.focus();
-    setSelectedIndex(0);
-  }, [open, query]);
+  }, [open]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setOpen(true);
+        openPalette();
         return;
       }
 
@@ -160,7 +168,7 @@ export default function CommandPalette() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredActions, open, selectedIndex]);
+  }, [filteredActions, open, openPalette, selectedIndex, query]);
 
   const handleSelect = (action: CommandAction) => {
     setOpen(false);
@@ -172,7 +180,7 @@ export default function CommandPalette() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openPalette}
         className="fixed bottom-4 right-4 z-50 rounded-full border border-slate-300 bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg backdrop-blur hover:bg-white"
       >
         ⌘K

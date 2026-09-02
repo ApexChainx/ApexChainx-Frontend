@@ -40,7 +40,9 @@ export async function fetchOutages(
   options?: { signal?: AbortSignal },
 ): Promise<PaginatedOutages> {
   const { data } = await api.get<PaginatedOutages>("/outages", {
-    signal: options?.signal,
+    // Spread only when present: with exactOptionalPropertyTypes an explicit
+    // `signal: undefined` does not satisfy the axios config type.
+    ...(options?.signal ? { signal: options.signal } : {}),
     params: {
       page: query.page,
       page_size: query.page_size ?? DEFAULT_OUTAGES_PAGE_SIZE,

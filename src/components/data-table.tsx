@@ -253,19 +253,24 @@ export function useTableKeyboardNavigation({
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const focusedIndexRef = useRef<number | null>(null);
 
+  // Clamp the focused index when the row count shrinks (pagination/filtering).
+  // Derived at read time rather than written back via an effect: the raw state
+  // may temporarily exceed the bounds, but nothing outside this hook ever sees
+  // an out-of-range index.
+  const effectiveFocusedIndex =
+    focusedIndex == null
+      ? null
+      : focusedIndex < rowCount
+        ? focusedIndex
+        : rowCount > 0
+          ? rowCount - 1
+          : null;
+
   // Keep a ref in sync so the row ref callback can focus rows that mount
   // after navigation (e.g. virtualized rows scrolled into view).
   useEffect(() => {
-    focusedIndexRef.current = focusedIndex;
-  }, [focusedIndex]);
-
-  // Clamp the focused index when the row count shrinks (pagination/filtering).
-  useEffect(() => {
-    setFocusedIndex((current) => {
-      if (current == null || current < rowCount) return current;
-      return rowCount > 0 ? rowCount - 1 : null;
-    });
-  }, [rowCount]);
+    focusedIndexRef.current = effectiveFocusedIndex;
+  }, [effectiveFocusedIndex]);
 
   const focusRow = useCallback(
     (index: number) => {
@@ -282,9 +287,9 @@ export function useTableKeyboardNavigation({
 
   // Move real DOM focus whenever the focused index changes.
   useEffect(() => {
-    if (focusedIndex == null) return;
-    focusRow(focusedIndex);
-  }, [focusedIndex, focusRow]);
+    if (effectiveFocusedIndex == null) return;
+    focusRow(effectiveFocusedIndex);
+  }, [effectiveFocusedIndex, focusRow]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -299,14 +304,18 @@ export function useTableKeyboardNavigation({
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
-          setFocusedIndex((current) =>
-            current == null ? 0 : Math.min(current + 1, rowCount - 1)
+          setFocusedIndex(() =>
+            effectiveFocusedIndex == null
+              ? 0
+              : Math.min(effectiveFocusedIndex + 1, rowCount - 1)
           );
           break;
         case "ArrowUp":
           event.preventDefault();
-          setFocusedIndex((current) =>
-            current == null ? 0 : Math.max(current - 1, 0)
+          setFocusedIndex(() =>
+            effectiveFocusedIndex == null
+              ? 0
+              : Math.max(effectiveFocusedIndex - 1, 0)
           );
           break;
         case "Home":
@@ -319,16 +328,16 @@ export function useTableKeyboardNavigation({
           break;
         case "Enter":
         case " ":
-          if (focusedIndex != null) {
+          if (effectiveFocusedIndex != null) {
             event.preventDefault();
-            onSelect?.(focusedIndex);
+            onSelect?.(effectiveFocusedIndex);
           }
           break;
         default:
           break;
       }
     },
-    [enabled, rowCount, focusedIndex, onSelect]
+    [enabled, rowCount, effectiveFocusedIndex, onSelect]
   );
 
   const registerRow = useCallback(
@@ -343,15 +352,15 @@ export function useTableKeyboardNavigation({
 
   const getRowTabIndex = useCallback(
     (index: number) => {
-      if (focusedIndex === index) return 0;
-      if (focusedIndex == null && index === 0) return 0;
+      if (effectiveFocusedIndex === index) return 0;
+      if (effectiveFocusedIndex == null && index === 0) return 0;
       return -1;
     },
-    [focusedIndex]
+    [effectiveFocusedIndex]
   );
 
   return {
-    focusedIndex,
+    focusedIndex: effectiveFocusedIndex,
     setFocusedIndex,
     handleKeyDown,
     registerRow,

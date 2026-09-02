@@ -2,7 +2,7 @@
 /** ApexChain Network Operations Intelligence Platform */
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -119,19 +119,18 @@ export default function SLADashboardView() {
 
   const comparisonFilters = useMemo(() => computeComparisonFilters(filters), [filters]);
 
+  // Comparison mode is only meaningful with a primary date range: the flag is
+  // derived at render time so a cleared range disables the comparison query
+  // and its UI immediately, without effect-based setState
+  // (react-hooks/set-state-in-effect).
+  const compareModeActive = compareMode && hasDateRange;
+
   const secondary = useQuery<DashboardMetrics>({
     queryKey: ["dashboard-metrics-compare", comparisonFilters],
     queryFn: () => fetchDashboardMetrics(comparisonFilters),
     staleTime: 30_000,
-    enabled: compareMode && hasDateRange,
+    enabled: compareModeActive,
   });
-
-  // Exit comparison mode if the primary date range is cleared.
-  useEffect(() => {
-    if (compareMode && !hasDateRange) {
-      setCompareMode(false);
-    }
-  }, [compareMode, hasDateRange]);
 
   const onTrendClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();
@@ -179,7 +178,7 @@ export default function SLADashboardView() {
   const lastUpdated = primary.dataUpdatedAt
     ? new Date(primary.dataUpdatedAt).toLocaleString()
     : "Not synced yet";
-  const cmp = compareMode && secondary.data ? secondary.data : null;
+  const cmp = compareModeActive && secondary.data ? secondary.data : null;
 
   return (
     <div className="space-y-6 p-6">
@@ -190,20 +189,21 @@ export default function SLADashboardView() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs uppercase tracking-wide text-gray-600">Updated {lastUpdated}</span>
-          <button
-            onClick={() => setCompareMode((v) => !v)}
-            disabled={!hasDateRange}
-            title={hasDateRange ? undefined : "Select a date range to enable comparison"}
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${compareMode ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-          >
-            {compareMode ? "Exit Compare" : "Compare"}
-          </button>
+        <button
+          onClick={() => setCompareMode((v) => !v)}
+          disabled={!hasDateRange}
+          title={hasDateRange ? undefined : "Select a date range to enable comparison"}
+          aria-pressed={compareModeActive}
+          className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${compareModeActive ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+        >
+          {compareModeActive ? "Exit Compare" : "Compare"}
+        </button>
           <button onClick={() => exportSnapshot(metrics)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Export</button>
           <button onClick={() => void primary.refetch()} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
         </div>
       </div>
 
-      {compareMode && secondary.isLoading ? (
+      {compareModeActive && secondary.isLoading ? (
         <p className="text-sm text-gray-400">Loading comparison window…</p>
       ) : null}
 
@@ -281,7 +281,7 @@ export default function SLADashboardView() {
         </div>
       ) : null}
 
-      {compareMode && cmp && cmp.trends.length === 0 ? (
+      {compareModeActive && cmp && cmp.trends.length === 0 ? (
         <p className="rounded-lg bg-yellow-50 px-4 py-2 text-sm text-yellow-700">No data available for the comparison window.</p>
       ) : null}
     </div>
