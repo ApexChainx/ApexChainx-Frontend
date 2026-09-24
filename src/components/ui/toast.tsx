@@ -35,17 +35,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
+
+      {/* Issue #537 — exactly ONE polite live region announces toasts to
+          assistive tech. Multiple per-toast role="alert"/aria-live regions
+          compete, interleave, and can make screen readers announce the whole
+          stale stack on each new toast. This single region announces only
+          the newest message and stays polite. */}
       <div
-        role="region"
+        role="log"
         aria-live="polite"
+        aria-atomic="true"
         aria-label="Notifications"
-        className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+        className="sr-only"
       >
+        {toasts.length > 0 ? toasts[toasts.length - 1]!.message : null}
+      </div>
+
+      {/* Visual stack — presentational only, no live-region semantics. */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="alert"
-            aria-live="assertive"
             className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm shadow-md ${variantClass[t.variant]}`}
           >
             <span>{t.message}</span>
