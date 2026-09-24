@@ -5,6 +5,7 @@ This document contains architectural diagrams that visualize ApexChain's compone
 ## Table of Contents
 - [Frontend Component Tree](#frontend-component-tree)
 - [Auth/Refresh Flow](#authrefresh-flow)
+- [Session Event Delivery](#session-event-delivery)
 - [Outage Resolve Flow with SLA + Stellar Payment](#outage-resolve-flow-with-sla--stellar-payment)
 
 ---
@@ -100,6 +101,18 @@ sequenceDiagram
     SessionProvider->>Frontend: Update state to unauthenticated
     Frontend-->>User: Redirect to login
 ```
+
+---
+
+## Session Event Delivery
+
+`src/lib/session-sse.ts` maintains a credentialed SSE stream for server-side
+session revocations. Each reconnect sends the most recent SSE event ID in the
+`Last-Event-ID` header, including IDs received on heartbeat frames. After a
+successful reconnect, `SessionProvider` calls `GET /auth/me` to reconcile any
+revocation missed while the stream was unavailable; a definitive `401` or
+`403` follows the normal auth logout path. Transient heartbeat failures leave
+the session intact and the SSE client continues its jittered reconnect loop.
 
 ---
 
