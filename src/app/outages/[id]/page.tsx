@@ -236,7 +236,7 @@ export default function OutageDetailsPage() {
           {!editing && (
             <button
               onClick={startEdit}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
             >
               Edit
             </button>
@@ -244,7 +244,7 @@ export default function OutageDetailsPage() {
           <button
             onClick={() => setIsResolveModalOpen(true)}
             disabled={isResolved || resolving}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
               isResolved
                 ? "cursor-not-allowed bg-gray-100 text-gray-500"
                 : "bg-blue-600 text-white hover:bg-blue-700"
@@ -254,7 +254,7 @@ export default function OutageDetailsPage() {
           </button>
           <button
             onClick={() => { setShowDeleteConfirm(true); setDeleteError(null); }}
-            className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
           >
             Delete
           </button>
@@ -543,34 +543,10 @@ export default function OutageDetailsPage() {
           <CardHeader className="pb-3"><CardTitle>Location</CardTitle></CardHeader>
           <CardContent className="text-sm">
             {outage.location ? (
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-6">
-                  <div>
-                    <span className="text-muted-foreground">Latitude</span>
-                    <p className="font-medium font-mono">{outage.location.latitude.toFixed(6)}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Longitude</span>
-                    <p className="font-medium font-mono">{outage.location.longitude.toFixed(6)}</p>
-                  </div>
-                </div>
-                <div className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50" style={{ paddingBottom: "40%" }}>
-                  <iframe
-                    title="Outage location map"
-                    className="absolute inset-0 h-full w-full"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${outage.location.longitude - 0.05},${outage.location.latitude - 0.05},${outage.location.longitude + 0.05},${outage.location.latitude + 0.05}&layer=mapnik&marker=${outage.location.latitude},${outage.location.longitude}`}
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <p className="text-xs text-slate-400">
-                  Map data ©{" "}
-                  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
-                    OpenStreetMap
-                  </a>{" "}
-                  contributors
-                </p>
-              </div>
+              <OutageLocationMap
+                latitude={outage.location.latitude}
+                longitude={outage.location.longitude}
+              />
             ) : (
               <span className="italic text-muted-foreground">No location data available for this outage.</span>
             )}
@@ -626,7 +602,7 @@ export default function OutageDetailsPage() {
             {deleteError && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {deleteError}{" "}
-                <button className="underline font-medium" onClick={() => void handleDelete()} disabled={deleting}>
+                <button className="underline font-medium rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600" onClick={() => void handleDelete()} disabled={deleting}>
                   Retry
                 </button>
               </div>
@@ -635,14 +611,14 @@ export default function OutageDetailsPage() {
               <button
                 onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
                 disabled={deleting}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleDelete()}
                 disabled={deleting}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 {deleting ? "Deleting…" : "Delete"}
               </button>
@@ -650,6 +626,96 @@ export default function OutageDetailsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Issue #544 — location panel that keeps coordinates usable even when the
+ * embedded OpenStreetMap iframe cannot load. The coordinates are always
+ * rendered as plain text with a Copy affordance and a deep link, while a
+ * text fallback layer sits underneath the iframe so a blocked tile server
+ * never leaves the map area blank.
+ */
+function OutageLocationMap({
+  latitude,
+  longitude,
+}: {
+  latitude: number;
+  longitude: number;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const coordinates = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  const mapSrc =
+    `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.05},${latitude - 0.05},${longitude + 0.05},${latitude + 0.05}&layer=mapnik&marker=${latitude},${longitude}`;
+  const openStreetMapLink =
+    `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`;
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(coordinates);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard denied — the text remains selectable below.
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-6">
+          <div>
+            <span className="text-muted-foreground">Latitude</span>
+            <p className="font-medium font-mono">{latitude.toFixed(6)}</p>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Longitude</span>
+            <p className="font-medium font-mono">{longitude.toFixed(6)}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+        >
+          {copied ? "Copied" : "Copy coordinates"}
+        </button>
+        <a
+          href={openStreetMapLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+        >
+          Open in OpenStreetMap
+        </a>
+      </div>
+
+      <div
+        className="relative w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+        style={{ paddingBottom: "40%" }}
+      >
+        {/* Fallback layer — visible whenever the iframe fails to paint. */}
+        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-400">
+          Map unavailable — coordinates provided below.
+        </div>
+        <iframe
+          title="Outage location map"
+          className="absolute inset-0 h-full w-full"
+          src={mapSrc}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+
+      <p className="text-xs text-slate-400">
+        Map data ©{" "}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
+          OpenStreetMap
+        </a>{" "}
+        contributors
+      </p>
     </div>
   );
 }
