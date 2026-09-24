@@ -30,9 +30,10 @@ export type SessionRevokeReason =
 export interface SessionSseEvent {
   type: "session_revoked";
   reason: SessionRevokeReason;
+  id?: string;
 }
 
-export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
+function parseSseFields(frame: string): Map<string, string[]> {
   const fields = new Map<string, string[]>();
   for (const line of frame.replaceAll("\r\n", "\n").split("\n")) {
     if (!line || line.startsWith(":")) continue;
@@ -42,6 +43,15 @@ export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
     if (value.startsWith(" ")) value = value.slice(1);
     fields.set(field, [...(fields.get(field) ?? []), value]);
   }
+  return fields;
+}
+
+export function parseSessionSseEventId(frame: string): string | null {
+  return parseSseFields(frame).get("id")?.at(-1) ?? null;
+}
+
+export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
+  const fields = parseSseFields(frame);
 
   const eventType = fields.get("event")?.at(-1);
   const dataStr = fields.get("data")?.join("\n");
@@ -55,7 +65,10 @@ export function parseSessionSseFrame(frame: string): SessionSseEvent | null {
       data.reason === "session_expired"
         ? data.reason
         : "unknown";
-    return { type: "session_revoked", reason };
+    const eventId = fields.get("id")?.at(-1);
+    return eventId
+      ? { type: "session_revoked", reason, id: eventId }
+      : { type: "session_revoked", reason };
   } catch {
     return null;
   }
@@ -72,6 +85,10 @@ export interface SseConnection {
   close(): void;
 }
 
+export interface SessionSseOptions {
+  onReconnect?: () => void;
+}
+
 /**
  * Opens an SSE connection to the backend's session events endpoint.
  * Automatically reconnects with exponential backoff on connection loss.
@@ -82,11 +99,14 @@ export interface SseConnection {
  */
 export function connectSessionSse(
   onEvent: SseEventHandler,
+  options: SessionSseOptions = {},
 ): SseConnection {
   let controller: AbortController | null = null;
   let retryTimeout: ReturnType<typeof setTimeout> | null = null;
   let retryCount = 0;
   let closed = false;
+  let lastEventId: string | null = null;
+  let hasConnected = false;
 
   function getReconnectDelay(): number {
     const delay = Math.min(
@@ -111,6 +131,7 @@ export function connectSessionSse(
         headers: {
           Accept: "text/event-stream",
           "Cache-Control": "no-cache",
+          ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
         },
       });
 
@@ -127,6 +148,9 @@ export function connectSessionSse(
         // must reschedule a connection attempt with backoff instead of
         // silently giving up and leaving the stream dead until reload.
       }
+
+      if (hasConnected) options.onReconnect?.();
+      hasConnected = true;
 
       // A successful connection resets the backoff ladder.
       retryCount = 0;
@@ -150,6 +174,8 @@ export function connectSessionSse(
             buffer = frames.pop() ?? ""; // Keep incomplete frame in buffer
 
             for (const frame of frames) {
+              const eventId = parseSessionSseEventId(frame);
+              if (eventId) lastEventId = eventId;
               const event = parseSessionSseFrame(frame);
               if (event) onEvent(event);
             }

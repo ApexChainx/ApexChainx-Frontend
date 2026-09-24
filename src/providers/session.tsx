@@ -2,28 +2,26 @@
 /** ApexChain Network Operations Intelligence Platform */
 
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
 } from "react";
 
 import {
-  api,
-  clearTokens,
-  getAccessToken,
-  setTokens,
+    api,
+    clearTokens,
+    getAccessToken,
+    setTokens,
 } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
-import { resetPreferences } from "@/lib/preferences";
-import { checkRateLimit } from "@/lib/rate-limit";
-
-const LOGOUT_RATE_LIMIT = { maxAttempts: 5, windowMs: 60_000 };
 import { logger } from "@/lib/logger";
+import { checkLogoutRateLimit } from "@/lib/logout-rate-limit";
+import { resetPreferences } from "@/lib/preferences";
 
 /**
  * localStorage flag recording that this browser has successfully
@@ -35,22 +33,23 @@ const SESSION_FLAG_KEY = "noc_session_seen";
 
 /** Bootstrap retry policy for transient (non-auth) failures. */
 const MAX_BOOTSTRAP_ATTEMPTS = 3;
-const BOOTSTRAP_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+const BOOTSTRAP_RETRY_BASE_MS = 1_000;
+const BOOTSTRAP_RETRY_CAP_MS = 5_000;
 
 import {
-  createSessionSync,
-  type SessionSync,
-  type SessionSyncMessage,
+    createSessionSync,
+    type SessionSync,
+    type SessionSyncMessage,
 } from "@/lib/session-sync";
 
 import {
-  connectSessionSse,
-  type SseConnection,
+    connectSessionSse,
+    type SseConnection,
 } from "@/lib/session-sse";
 
 import {
-  startHeartbeat,
-  type HeartbeatHandle,
+    startHeartbeat,
+    type HeartbeatHandle,
 } from "@/lib/session-heartbeat";
 
 export type SessionState =
@@ -97,19 +96,26 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function getSessionFlagKey(userId: string): string {
+  return `${SESSION_FLAG_KEY}:${encodeURIComponent(userId)}`;
+}
+
 function hasSessionFlag(): boolean {
   if (!isBrowser()) return false;
   try {
-    return window.localStorage.getItem(SESSION_FLAG_KEY) === "1";
+    if (window.localStorage.getItem(SESSION_FLAG_KEY) === "1") return true;
+    return Object.keys(window.localStorage).some((key) =>
+      key.startsWith(`${SESSION_FLAG_KEY}:`),
+    );
   } catch {
     return false;
   }
 }
 
-function setSessionFlag(): void {
+function setSessionFlag(userId: string): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(SESSION_FLAG_KEY, "1");
+    window.localStorage.setItem(getSessionFlagKey(userId), "1");
   } catch {
     // Storage may be unavailable (e.g. private browsing) — non-fatal.
   }
@@ -119,6 +125,11 @@ function clearSessionFlag(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(SESSION_FLAG_KEY);
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith(`${SESSION_FLAG_KEY}:`)) {
+        window.localStorage.removeItem(key);
+      }
+    }
   } catch {
     // Storage may be unavailable (e.g. private browsing) — non-fatal.
   }
@@ -162,7 +173,7 @@ export function SessionProvider({
   const setAuthenticated = useCallback(
     (sessionUser: SessionUser) => {
       wasAuthenticatedRef.current = true;
-      setSessionFlag();
+      setSessionFlag(sessionUser.id);
       setUser(sessionUser);
       setState("authenticated");
     },
@@ -263,6 +274,10 @@ export function SessionProvider({
         reason: event.reason,
       });
       clearSession();
+    }, {
+      onReconnect: () => {
+        void api.get(ENDPOINTS.auth.me).catch(() => undefined);
+      },
     });
 
     sseRef.current = sse;
@@ -351,6 +366,24 @@ export function SessionProvider({
     if (!isBrowser()) return;
 
     const controller = new AbortController();
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function getBootstrapRetryDelay(attempt: number): number {
+      const exponentialDelay = Math.min(
+        BOOTSTRAP_RETRY_BASE_MS * 2 ** attempt,
+        BOOTSTRAP_RETRY_CAP_MS,
+      );
+      return exponentialDelay * (0.75 + Math.random() * 0.5);
+    }
+
+    function waitForRetry(attempt: number): Promise<void> {
+      return new Promise((resolve) => {
+        retryTimeout = setTimeout(() => {
+          retryTimeout = null;
+          resolve();
+        }, getBootstrapRetryDelay(attempt));
+      });
+    }
 
     function isCanceled(error: unknown): boolean {
       return (error as { name?: string })?.name === "CanceledError";
@@ -408,9 +441,7 @@ export function SessionProvider({
         });
 
         if (attempt < MAX_BOOTSTRAP_ATTEMPTS - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, BOOTSTRAP_RETRY_DELAYS_MS[attempt])
-          );
+          await waitForRetry(attempt);
           if (!mountedRef.current) return;
           return tryMe(attempt + 1);
         }
@@ -495,6 +526,7 @@ export function SessionProvider({
       mountedRef.current = false;
 
       controller.abort();
+      if (retryTimeout) clearTimeout(retryTimeout);
 
       window.removeEventListener(
         "auth:logout",
@@ -530,7 +562,7 @@ export function SessionProvider({
    */
 
   const logout = useCallback(async (): Promise<LogoutResult> => {
-    if (!checkRateLimit("auth:logout", LOGOUT_RATE_LIMIT.maxAttempts, LOGOUT_RATE_LIMIT.windowMs)) {
+    if (!checkLogoutRateLimit()) {
       console.warn("Logout rate limit exceeded. Please wait before trying again.");
       // Companion issue: the throttle path intentionally does not clear
       // local state or broadcast — that UX is tracked separately. Either
