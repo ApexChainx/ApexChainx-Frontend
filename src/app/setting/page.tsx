@@ -161,14 +161,26 @@ export default function SettingsPage() {
       await logout();
       router.replace("/login");
     } catch (err) {
-      // logout-all endpoint may not exist yet; fall back to single logout
-      if ((err as { response?: { status?: number } }).response?.status === 404) {
-        await logout();
-        router.replace("/login");
-      } else {
-        setSessionActionError("Could not revoke all sessions. Please try again.");
+      const status = (err as { response?: { status?: number } }).response?.status;
+
+      // Issue #529 — a 404 means the all-session revocation endpoint is not
+      // deployed yet. This is NOT a server fault: signing out every session
+      // is a single-vendor convenience, and the backend may not support it.
+      // Sign out locally and stay on the page instead of silently navigating
+      // (the server-side token may still be valid on other devices).
+      if (status === 404) {
         setSessionActionLoading(null);
+        await logout().catch(() => undefined);
+        setSessionActionError(
+          "All-session revocation isn't available on this server yet — you've been signed out of this session only. Other sessions will expire on their own."
+        );
+        return;
       }
+
+      // Any other failure (5xx, network) — keep the session intact and let
+      // the user retry rather than destroying local state for a failed call.
+      setSessionActionError("Could not revoke all sessions. Please try again.");
+      setSessionActionLoading(null);
     }
   }
   const [session, setSession] = useState<AuthSessionResponse | null>(null);

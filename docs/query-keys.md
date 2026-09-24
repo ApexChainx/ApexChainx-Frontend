@@ -136,6 +136,30 @@ fix is mechanical: replace the literal array with the matching
 then confirm the existing `invalidateQueries` calls in
 `useInvalidateOnResolve.ts` actually refetch the view.
 
+## The session key family (`sessionKeys`)
+
+> Issue #532 — session query keys now live in the same factory file, as a
+> distinct family rooted under `"session"` rather than `"sla-events"`.
+
+```typescript
+import { sessionKeys } from "@/lib/query-keys";
+
+queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+```
+
+`sessionKeys` centralises the keys used by the two-factor auth hooks so a 2FA
+change refreshes the whole session cache:
+
+- `sessionKeys.all` → `["session"]`
+- `sessionKeys.me` → `["session", "me"]`
+- `sessionKeys.twoFactor` → `["session", "two-factor"]`
+
+The root `["session"]` deliberately matches the literal key that pre-dated
+the factory, so any remaining `invalidateQueries({ queryKey: ["session"] })`
+call site — or a consumer reading `["session"]` — keeps working. Prefer
+`sessionKeys.*` for new session work exactly as you'd prefer `slaEventKeys.*`
+for SLA/outage work.
+
 ## Summary
 
 | Rule | Why |
