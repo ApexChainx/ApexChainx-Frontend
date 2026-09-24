@@ -36,6 +36,16 @@ const MAX_BOOTSTRAP_ATTEMPTS = 3;
 const BOOTSTRAP_RETRY_BASE_MS = 1_000;
 const BOOTSTRAP_RETRY_CAP_MS = 5_000;
 
+/**
+ * Issue #526 — per-attempt timeout budget. A stalled request (firewall
+ * blackhole, hung proxy) previously never settled, leaving the app on the
+ * loading shell indefinitely. Each attempt now aborts after this budget.
+ */
+const BOOTSTRAP_ATTEMPT_TIMEOUT_MS = 10_000;
+
+/** Error name surfaced by AbortSignal.timeout() when the budget is exceeded. */
+const TIMEOUT_ERROR_NAME = "TimeoutError";
+
 import {
     createSessionSync,
     type SessionSync,
@@ -146,6 +156,11 @@ export function SessionProvider({
   const [user, setUser] =
     useState<SessionUser | null>(null);
 
+  // Issue #526 — bootstrap feedback and terminal retry state.
+  const [bootstrapNotice, setBootstrapNotice] = useState<string | null>(null);
+  const [bootstrapTerminal, setBootstrapTerminal] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
+
   const syncRef =
     useRef<SessionSync | null>(null);
 
@@ -204,6 +219,9 @@ export function SessionProvider({
     clearTokens();
     setUser(null);
     setState("unauthenticated");
+    // Issue #526 — a definitive logout is not a slow-connection state.
+    setBootstrapNotice(null);
+    setBootstrapTerminal(false);
     broadcastLogout();
     clearSessionFlag();
 
@@ -393,6 +411,38 @@ export function SessionProvider({
       return (error as { response?: { status?: number } })?.response?.status;
     }
 
+    function isTimeout(error: unknown): boolean {
+      return (error as { name?: string })?.name === TIMEOUT_ERROR_NAME;
+    }
+
+    /**
+     * Issue #526 — every attempt gets an abortable timeout so a stalled
+     * request (firewall blackhole, hung proxy) settles and the user can
+     * retry instead of staring at an eternal loading shell.
+     */
+    function attemptSignal(): AbortSignal {
+      return AbortSignal.any([
+        controller.signal,
+        AbortSignal.timeout(BOOTSTRAP_ATTEMPT_TIMEOUT_MS),
+      ]);
+    }
+
+    /** Non-blocking feedback while slow attempts retry (issue #526). */
+    function noteSlowAttempt(attempt: number) {
+      if (!mountedRef.current) return;
+      setBootstrapNotice(
+        attempt > 0
+          ? "Connection seems slow — retrying…"
+          : "Connection seems slow — waiting for the server…"
+      );
+    }
+
+    function clearBootstrapFeedback() {
+      if (!mountedRef.current) return;
+      setBootstrapNotice(null);
+      setBootstrapTerminal(false);
+    }
+
     /**
      * Fallback validation via /auth/me. Distinguishes a definitive
      * "no session" (401/403 response) from a transient failure (network
@@ -407,17 +457,25 @@ export function SessionProvider({
         const response = await api.get<SessionUser>(
           ENDPOINTS.auth.me,
           {
-            signal: controller.signal,
+            signal: attemptSignal(),
           } as Parameters<typeof api.get>[1]
         );
 
         if (!mountedRef.current) return;
 
+        clearBootstrapFeedback();
         setAuthenticated(response.data);
       } catch (error: unknown) {
         if (isCanceled(error)) return;
 
         const status = getStatus(error);
+
+        // A per-attempt timeout (or a pure network failure with no HTTP
+        // status) is transient — tell the user the app is still trying,
+        // never a forced logout.
+        if (isTimeout(error) || status === undefined) {
+          noteSlowAttempt(attempt);
+        }
 
         // Definitive: the server says there is no valid session.
         if (status === 401 || status === 403) {
@@ -450,8 +508,12 @@ export function SessionProvider({
 
         // Give up on the UI state, but preserve cookies so a later refresh
         // or page load can recover the session without a forced logout.
+        // Issue #526 — reach a terminal, actionable state instead of an
+        // eternal spinner by surfacing a Retry affordance.
         setUser(null);
         setState("unauthenticated");
+        setBootstrapNotice(null);
+        setBootstrapTerminal(true);
       }
     }
 
@@ -475,17 +537,22 @@ export function SessionProvider({
         const sessionResponse = await api.get<SessionUser>(
           ENDPOINTS.auth.session,
           {
-            signal: controller.signal,
+            signal: attemptSignal(),
             skipAuth: true,
           } as Parameters<typeof api.get>[1]
         );
 
         if (!mountedRef.current) return;
 
+        clearBootstrapFeedback();
         setAuthenticated(sessionResponse.data);
         return;
       } catch (error: unknown) {
         if (isCanceled(error)) return;
+
+        if (isTimeout(error)) {
+          noteSlowAttempt(0);
+        }
 
         const status = getStatus(error);
 
@@ -533,7 +600,21 @@ export function SessionProvider({
         handleLogoutEvent
       );
     };
-  }, [clearSession, setAuthenticated]);
+    // Issue #526 — bumping retryToken re-runs the bootstrap from its initial
+    // state after the user retries from the terminal error screen.
+  }, [clearSession, setAuthenticated, retryToken]);
+
+  /**
+   * -------------------------
+   * Retry Bootstrap
+   * -------------------------
+   */
+
+  const retryBootstrap = useCallback(() => {
+    setBootstrapTerminal(false);
+    setBootstrapNotice(null);
+    setRetryToken((token) => token + 1);
+  }, []);
 
   /**
    * -------------------------
@@ -624,6 +705,54 @@ export function SessionProvider({
 
   return (
     <SessionContext.Provider value={value}>
+      {/* Issue #526 — non-blocking notice while bootstrap attempts stall. */}
+      {bootstrapNotice && !bootstrapTerminal && (
+        <div
+          aria-live="polite"
+          role="status"
+          className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-50/95 px-4 py-2 text-center text-sm text-amber-800 shadow-sm"
+        >
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+          {bootstrapNotice}
+        </div>
+      )}
+
+      {/* Issue #526 — terminal bootstrap state: the session could not be
+          established after all retries. Offer a real Retry action instead of
+          an endless spinner. */}
+      {bootstrapTerminal && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-white/95"
+        >
+          <div className="mx-auto w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-xl">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Couldn’t restore your session
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">
+              The network appears to be unreachable after several attempts.
+              Your session data was left untouched — refresh or retry to
+              continue.
+            </p>
+            <button
+              type="button"
+              onClick={retryBootstrap}
+              className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500"
+            >
+              Refresh page
+            </button>
+          </div>
+        </div>
+      )}
+
       {children}
     </SessionContext.Provider>
   );
