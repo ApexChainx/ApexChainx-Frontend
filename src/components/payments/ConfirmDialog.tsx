@@ -1,7 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -44,13 +45,15 @@ function ConfirmDialogSurface({
 
   const isMatch = typedValue.trim() === confirmPhrase;
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !loading) onCancel();
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
+  const handleEscape = useCallback(() => {
+    if (!loading) onCancel();
   }, [loading, onCancel]);
+
+  // Issue #535 — the dialog traps focus and owns the Escape key (ignored
+  // while the confirm action is in flight). Focus is restored to the
+  // element that opened the dialog on close.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(panelRef, true, handleEscape);
 
   const buttonClasses =
     variant === "danger"
@@ -59,8 +62,14 @@ function ConfirmDialogSurface({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200">
-        <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200"
+      >
+        <h2 id="confirm-dialog-title" tabIndex={-1} className="text-xl font-semibold text-slate-900">{title}</h2>
         <p className="mt-2 text-sm text-slate-600">{message}</p>
 
         <div className="mt-4 space-y-2">

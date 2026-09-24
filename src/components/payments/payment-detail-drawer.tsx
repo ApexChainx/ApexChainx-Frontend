@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { useToast } from "@/components/ui/toast";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { explorerLink } from "@/lib/explorer";
 import { fetchPayment, retryPayment, reconcilePayment } from "@/services/paymentService";
 import type { Payment } from "@/types/payment";
@@ -235,32 +236,24 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
   }, [paymentId, loadPayment]);
 
   // ─── Keyboard & Focus Management ───────────────────────────────────────────
+  // Focus trap ref
+  const drawerRef = useRef<HTMLElement | null>(null);
+
+  // Issue #534 — the focus trap owns the Escape key and initial focus while
+  // the drawer is open. It targets the dialog heading first ($#drawer-title)
+  // so keyboard and screen-reader users start at a meaningful landmark, and
+  // it restores focus to the trigger element when the drawer closes.
+  useFocusTrap(drawerRef, Boolean(paymentId), onClose, {
+    initialFocus: "#drawer-title",
+  });
+
+  // Body scrolling is still locked while the drawer is open.
   useEffect(() => {
     if (!paymentId) return;
-    
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    
-    document.addEventListener("keydown", handleEscape);
     document.body.style.overflow = "hidden";
-    
     return () => {
-      document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "";
     };
-  }, [paymentId, onClose]);
-
-  // Focus trap ref
-  const drawerRef = useRef<HTMLElement>(null);
-  
-  useEffect(() => {
-    if (paymentId && drawerRef.current) {
-      const focusable = drawerRef.current.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      focusable?.focus();
-    }
   }, [paymentId]);
 
   if (!paymentId) return null;
@@ -289,7 +282,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-white">
-          <h2 id="drawer-title" className="text-lg font-semibold text-slate-900">
+          <h2 id="drawer-title" tabIndex={-1} className="text-lg font-semibold text-slate-900">
             Payment Details
           </h2>
           <button 

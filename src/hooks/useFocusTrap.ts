@@ -10,11 +10,18 @@ const FOCUSABLE =
  * Traps focus within `containerRef` while `open` is true.
  * Restores focus to the element that was active when the trap engaged.
  * Closes on Escape via `onClose`.
+ *
+ * `options.initialFocus` (a CSS selector, issue #534) lets the caller land
+ * initial focus on a landmark — commonly a dialog heading with
+ * `tabIndex={-1}` — instead of always jumping to the first focusable
+ * element. When omitted, the first focusable element (or the element that
+ * opened the trap) is used.
  */
 export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
   open: boolean,
   onClose: () => void,
+  options?: { initialFocus?: string | null },
 ) {
   useEffect(() => {
     if (!open) return;
@@ -22,9 +29,14 @@ export function useFocusTrap(
     const trigger = document.activeElement as HTMLElement | null;
     const container = containerRef.current;
 
-    // Move focus into the container on open
+    // Move focus into the container on open — prefer the caller-selected
+    // landmark (e.g. the dialog heading), otherwise the first focusable.
+    const initialSelector = options?.initialFocus?.trim();
+    const initialTarget = initialSelector
+      ? container?.querySelector<HTMLElement>(initialSelector)
+      : null;
     const firstFocusable = container?.querySelector<HTMLElement>(FOCUSABLE);
-    firstFocusable?.focus();
+    (initialTarget ?? firstFocusable)?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
       if (!container) return;
@@ -57,5 +69,5 @@ export function useFocusTrap(
       document.removeEventListener("keydown", handleKeyDown);
       trigger?.focus();
     };
-  }, [open, containerRef, onClose]);
+  }, [open, containerRef, onClose, options?.initialFocus]);
 }
