@@ -2,12 +2,21 @@
  * ApexChain — Session Heartbeat Poll
  *
  * Polls `/auth/me` at a configurable interval while the page is in the
- * background (not focused). When the tab comes into focus it performs an
- * immediate check and then stops polling.
+ * background (not focused). While the tab is visible it also polls, but at a
+ * much lower cadence, and it fires an immediate check whenever the document
+ * becomes visible again.
  *
  * This catches server-side session revocation within one heartbeat interval
  * even on devices / browsers that do not support SharedWorker or SSE,
  * serving as a universal fallback.
+ *
+ * Issue #521 — an operator parked on a cached/offline-first view (outages list
+ * hydrated from the persisted cache) does not punch the API on every
+ * interaction, so a hidden-only heartbeat could leave a visible tab signed in
+ * long after the session was revoked server-side. The visible-tab cadence
+ * (5 minutes by default) bounds how stale a visible tab can get, and the
+ * `visibilitychange` immediate check covers the common "tab switched back"
+ * moment.
  *
  * The heartbeat uses the existing `api` client so it benefits from the
  * same auth interceptor, CSRF, and circuit-breaker logic as every other
@@ -23,7 +32,11 @@ export type HeartbeatStatus = "active" | "error";
 
 export type HeartbeatCallback = (status: HeartbeatStatus) => void;
 
-const DEFAULT_INTERVAL_MS = 30_000;
+/** Poll cadence while the tab is in the background. */
+const HIDDEN_INTERVAL_MS = 30_000;
+
+/** Low-frequency poll cadence while the tab is visible (issue #521). */
+const VISIBLE_INTERVAL_MS = 5 * 60_000;
 
 export interface HeartbeatHandle {
   /** Stop the heartbeat polling */
@@ -33,39 +46,54 @@ export interface HeartbeatHandle {
 /**
  * Starts heartbeat polling.
  *
- * Polls `/auth/me` every `intervalMs` while the document is hidden
- * (page in background). When the document becomes visible, it fires
- * one immediate check and pauses.
+ * Polls `/auth/me` every `visibleIntervalMs` while the document is visible
+ * and every `hiddenIntervalMs` while it is hidden, with an immediate check on
+ * every `visibilitychange` back to visible.
  *
- * @param onStatusChange  Optional callback fired on each heartbeat result.
- * @param intervalMs      Poll interval in ms (default 30_000).
- * @returns               A handle to stop the heartbeat.
+ * @param onStatusChange      Optional callback fired on each heartbeat result.
+ * @param visibleIntervalMs   Visible-tab poll interval in ms (default 5 min).
+ * @param hiddenIntervalMs    Hidden-tab poll interval in ms (default 30 s).
+ * @returns                   A handle to stop the heartbeat.
  */
 export function startHeartbeat(
   onStatusChange?: HeartbeatCallback,
-  intervalMs: number = DEFAULT_INTERVAL_MS,
+  visibleIntervalMs: number = VISIBLE_INTERVAL_MS,
+  hiddenIntervalMs: number = HIDDEN_INTERVAL_MS,
 ): HeartbeatHandle {
   let timer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
+  let lastCheck: Promise<void> | null = null;
 
   async function checkSession() {
     if (stopped) return;
 
-    try {
-      await api.get(ENDPOINTS.auth.me);
-      onStatusChange?.("active");
-    } catch {
-      // If the request failed (e.g. network error) but the session is
-      // still valid, we don't want to force a logout — only `clearTokens`
-      // in the 401 interceptor will actually revoke, so we just report
-      // the status.
-      onStatusChange?.("error");
+    // Guard against overlapping checks when the interval fires while a
+    // previous check is still in flight.
+    if (lastCheck) {
+      await lastCheck.catch(() => undefined);
     }
+
+    const current = (async () => {
+      try {
+        await api.get(ENDPOINTS.auth.me);
+        onStatusChange?.("active");
+      } catch {
+        // If the request failed (e.g. network error) but the session is
+        // still valid, we don't want to force a logout — only `clearTokens`
+        // in the 401 interceptor will actually revoke, so we just report
+        // the status.
+        onStatusChange?.("error");
+      }
+    })();
+
+    lastCheck = current;
+    await current.catch(() => undefined);
+    if (lastCheck === current) lastCheck = null;
   }
 
-  function startPolling() {
+  function startPolling(intervalMs: number) {
     if (timer) clearInterval(timer);
-    timer = setInterval(checkSession, intervalMs);
+    timer = setInterval(() => void checkSession(), intervalMs);
   }
 
   function stopPolling() {
@@ -81,21 +109,21 @@ export function startHeartbeat(
     if (stopped) return;
 
     if (document.hidden) {
-      // Tab is now in background — start polling
-      startPolling();
+      // Tab is now in background — poll at the hidden cadence.
+      startPolling(hiddenIntervalMs);
     } else {
-      // Tab is now in foreground — do an immediate check and stop polling
-      stopPolling();
+      // Tab is now in foreground — poll at the low visible cadence AND run
+      // an immediate check so a revocation is caught right away.
+      startPolling(visibleIntervalMs);
       void checkSession();
     }
   }
 
   /* ─── Bootstrap ─── */
 
-  // If the page is already hidden when the heartbeat starts, begin polling.
-  if (document.hidden) {
-    startPolling();
-  }
+  // If the page is already hidden when the heartbeat starts, poll at the
+  // hidden cadence; otherwise poll at the low visible cadence (issue #521).
+  startPolling(document.hidden ? hiddenIntervalMs : visibleIntervalMs);
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
 

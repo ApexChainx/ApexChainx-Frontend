@@ -158,6 +158,12 @@ export function SessionProvider({
   const mountedRef = useRef(true);
 
   /**
+   * Mirrors the authenticated user so event handlers (cross-tab broadcasts)
+   * can compare against the current identity without a re-render.
+   */
+  const userRef = useRef<SessionUser | null>(null);
+
+  /**
    * wasAuthenticatedRef tracks whether the user was previously authenticated
    * on this tab, so we only broadcast "logout" when we had an active session
    * (e.g. not during the initial bootstrap when no session exists).
@@ -174,6 +180,7 @@ export function SessionProvider({
     (sessionUser: SessionUser) => {
       wasAuthenticatedRef.current = true;
       setSessionFlag(sessionUser.id);
+      userRef.current = sessionUser;
       setUser(sessionUser);
       setState("authenticated");
     },
@@ -245,6 +252,9 @@ export function SessionProvider({
           break;
 
         case "authenticated":
+          // Ignore a redundant announcement of the same user so another
+          // tab's echo doesn't churn the heartbeat/SSE lifecycle.
+          if (msg.user.id === userRef.current?.id) break;
           setAuthenticated(msg.user);
           break;
 
@@ -258,6 +268,27 @@ export function SessionProvider({
       syncRef.current = null;
     };
   }, [clearSession, setAuthenticated]);
+
+  /**
+   * Issue #524 — fallback session beacon. When the SharedWorker path is
+   * unavailable (browsers that do not support worker threads), cross-tab
+   * sync degrades to BroadcastChannel announcements that only reach tabs
+   * open when they were posted. Re-announce the authenticated user on an
+   * interval so a freshly opened tab adopts the session and missed
+   * announcements re-synchronise. Skipped while the document is hidden to
+   * keep background tabs quiet.
+   */
+  useEffect(() => {
+    if (!syncRef.current?.usesWorkerFallback) return;
+
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      const currentUser = userRef.current;
+      if (currentUser) broadcastAuth(currentUser);
+    }, 15_000);
+
+    return () => window.clearInterval(interval);
+  }, [broadcastAuth]);
 
   /**
    * -------------------------
