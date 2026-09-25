@@ -503,7 +503,7 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
           {t('settings.walletControl')}
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-600">
           {t('settings.manageSessionWallet')}
         </p>
       </div>
@@ -517,7 +517,7 @@ export default function SettingsPage() {
       {/* Theme Settings */}
       <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Appearance Settings</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Customize your visual theme preference.</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Customize your visual theme preference.</p>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <button
             onClick={() => setTheme("light")}
@@ -564,7 +564,7 @@ export default function SettingsPage() {
       {/* Onboarding tour replay (Issue #159) — mirrors OnboardingTour's START_TOUR_EVENT */}
       <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Onboarding</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Replay the guided tour of the dashboard, outages, and payments.
         </p>
         <button
@@ -578,12 +578,12 @@ export default function SettingsPage() {
       {/* FE-056: Account profile section */}
       <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Account Profile</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current session identity and metadata.</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Current session identity and metadata.</p>
         {sessionState === "loading" && (
-          <p className="mt-4 text-sm text-slate-400">{t('settings.loadingSession')}</p>
+          <p className="mt-4 text-sm text-slate-600">{t('settings.loadingSession')}</p>
         )}
         {sessionState === "unauthenticated" && (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Not signed in.</p>
+          <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">Not signed in.</p>
         )}
         {sessionState === "authenticated" && sessionUser && (
           <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -601,7 +601,7 @@ export default function SettingsPage() {
               },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-600">{label}</dt>
                 <dd className="mt-1 truncate font-medium text-slate-900">{value}</dd>
               </div>
             ))}
@@ -618,7 +618,7 @@ export default function SettingsPage() {
       {/* FE-008: Session management */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">{t('settings.sessionManagement')}</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600">
           {t('settings.controlActiveSession')}
         </p>
 
@@ -636,7 +636,7 @@ export default function SettingsPage() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
             <h3 className="font-medium text-slate-900">{t('settings.signOutOfThisSession')}</h3>
-            <p className="text-slate-500">
+            <p className="text-slate-600">
               {t('settings.endsCurrentSession')}
             </p>
             <button
@@ -650,7 +650,7 @@ export default function SettingsPage() {
 
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
             <h3 className="font-medium text-slate-900">{t('settings.revokeAllSessions')}</h3>
-            <p className="text-slate-500">
+            <p className="text-slate-600">
               {t('settings.invalidateAllTokens')}
             </p>
             <button
@@ -677,7 +677,7 @@ export default function SettingsPage() {
       {/* Language Settings */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">{t('settings.languageSettings')}</h2>
-        <p className="mt-1 text-sm text-slate-500">{t('settings.selectLanguage')}</p>
+        <p className="mt-1 text-sm text-slate-600">{t('settings.selectLanguage')}</p>
         
         <div className="mt-6 max-w-md">
           <DropdownMenu>
@@ -711,21 +711,21 @@ export default function SettingsPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">{t('settings.session')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
             {currentUser ? t('settings.authenticated') : t('settings.notSignedIn')}
           </p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             {currentUser?.email ?? t('settings.loadCreateAccount')}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.wallet')}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">{t('settings.wallet')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
             {walletAddress ? t('settings.connected') : t('settings.notLinked')}
           </p>
-          <p className="mt-1 truncate text-sm text-slate-500">
+          <p className="mt-1 truncate text-sm text-slate-600">
             {walletAddress || t('settings.createLinkWallet')}
           </p>
           {env.STELLAR_NETWORK === "testnet" && walletAddress ? (
@@ -741,11 +741,11 @@ export default function SettingsPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.readiness')}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">{t('settings.readiness')}</p>
           <p className={`mt-2 text-xl font-semibold ${walletReadinessTone}`}>
             {walletReadinessLabel}
           </p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             {walletStatus
               ? `${walletStatus.funded ? t('settings.funded') : t('settings.unfunded')} • ${
                   walletStatus.trustline_ready ? t('settings.trustlineReady') : t('settings.trustlineMissing')
@@ -755,9 +755,9 @@ export default function SettingsPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.balances')}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">{t('settings.balances')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{walletAssetCount}</p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             {walletAssetCount > 0 ? t('settings.trackedAssetsLoaded') : t('settings.noBalanceData')}
           </p>
         </div>
@@ -781,7 +781,7 @@ export default function SettingsPage() {
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">{t('settings.accountSession')}</h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-600">
               {t('settings.registerSignInValidate')}
             </p>
           </div>
@@ -901,7 +901,7 @@ export default function SettingsPage() {
                 </div>
               </dl>
             ) : (
-              <p className="mt-3 text-slate-500">{t('settings.noActiveUser')}</p>
+              <p className="mt-3 text-slate-600">{t('settings.noActiveUser')}</p>
             )}
           </div>
         </section>
@@ -909,7 +909,7 @@ export default function SettingsPage() {
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">{t('settings.walletStatus')}</h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-600">
               {t('settings.walletBackendBridge')}
             </p>
           </div>
@@ -1031,7 +1031,7 @@ export default function SettingsPage() {
                   </div>
                 </dl>
               ) : (
-                <p className="mt-3 text-slate-500">No wallet loaded yet.</p>
+                <p className="mt-3 text-slate-600">No wallet loaded yet.</p>
               )}
             </div>
 
@@ -1059,7 +1059,7 @@ export default function SettingsPage() {
                   </div>
                 </dl>
               ) : (
-                <p className="mt-3 text-slate-500">Load wallet details to inspect readiness.</p>
+                <p className="mt-3 text-slate-600">Load wallet details to inspect readiness.</p>
               )}
             </div>
           </div>
@@ -1087,7 +1087,7 @@ export default function SettingsPage() {
                 })}
               </div>
             ) : (
-              <p className="mt-3 text-slate-500">No balance data loaded yet.</p>
+              <p className="mt-3 text-slate-600">No balance data loaded yet.</p>
             )}
           </div>
         </section>
@@ -1171,7 +1171,7 @@ function StellarHealthCard({
           <h2 className="text-xl font-semibold text-slate-900">
             Stellar Network Status
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Horizon endpoint health check for the {network} network
           </p>
         </div>
@@ -1183,7 +1183,7 @@ function StellarHealthCard({
 
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
             Latency
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
@@ -1195,7 +1195,7 @@ function StellarHealthCard({
           </p>
         </div>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
             Network
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-900 capitalize">
@@ -1266,7 +1266,7 @@ function SLAContractIdCard({
           <h2 className="text-xl font-semibold text-slate-900">
             SLA Contract ID
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Resolved smart contract identifier used for SLA calculation calls
           </p>
         </div>
@@ -1298,7 +1298,7 @@ function SLAContractIdCard({
 
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
             Resolved Contract ID
           </p>
           <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
@@ -1307,7 +1307,7 @@ function SLAContractIdCard({
         </div>
         {isConfigured && canonicalId && (
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
               Expected ({network})
             </p>
             <p className="mt-1 font-mono text-sm font-semibold text-slate-900">

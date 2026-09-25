@@ -62,7 +62,7 @@ function BulkResolveModal({
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-xl">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Bulk resolve outages</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Confirm to resolve {selectedIds.length} selected outage{selectedIds.length !== 1 ? 's' : ''}.
           </p>
         </div>
@@ -161,7 +161,7 @@ function BulkAssignModal({
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-xl">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Bulk assign outages</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Assign {selectedIds.length} selected outage{selectedIds.length !== 1 ? 's' : ''} to a team member.
           </p>
         </div>
@@ -431,7 +431,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
             <div>
               <h3 className="font-medium text-slate-900 dark:text-white">{item.title}</h3>
               <div className="flex items-center gap-2 mt-1">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {new Date(item.createdAt).toLocaleString()}
                 </p>
                 {item.assigned_to && (

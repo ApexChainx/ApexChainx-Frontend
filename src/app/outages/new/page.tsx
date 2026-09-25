@@ -74,7 +74,7 @@ export default function NewOutagePage() {
       <div className="mb-6 flex items-center gap-4">
         <button
           onClick={handleLeave}
-          className="text-sm text-slate-500 hover:text-slate-800"
+          className="text-sm text-slate-600 hover:text-slate-800"
         >
           ← Back to outages
         </button>
@@ -161,7 +161,7 @@ export default function NewOutagePage() {
             placeholder="Describe the outage…"
             required
           />
-          <div className="text-right text-xs text-slate-500 mt-1">
+          <div className="text-right text-xs text-slate-600 mt-1">
             {form.description.length} / 2000
           </div>
         </div>

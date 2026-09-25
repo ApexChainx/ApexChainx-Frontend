@@ -68,7 +68,7 @@ function RouteStateContainer({
           {title}
         </h2>
 
-        <p className="mt-2 text-sm leading-6 text-slate-500">
+        <p className="mt-2 text-sm leading-6 text-slate-600">
           {description}
         </p>
 

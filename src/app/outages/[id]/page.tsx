@@ -381,7 +381,7 @@ export default function OutageDetailsPage() {
                 value={editForm.description ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.description ?? "").length} / 2000
               </div>
             </div>
@@ -394,7 +394,7 @@ export default function OutageDetailsPage() {
                 value={editForm.root_cause ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, root_cause: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.root_cause ?? "").length} / 2000
               </div>
             </div>
@@ -407,7 +407,7 @@ export default function OutageDetailsPage() {
                 value={editForm.resolution_notes ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, resolution_notes: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.resolution_notes ?? "").length} / 2000
               </div>
             </div>
@@ -590,8 +590,8 @@ export default function OutageDetailsPage() {
                   <li key={i} className="relative">
                     <span className="absolute -left-[1.35rem] top-1 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" />
                     <p className="text-sm font-medium text-slate-900">{event.label}</p>
-                    <p className="text-xs text-slate-500">{new Date(event.time).toLocaleString()}</p>
-                    {event.note && <p className="mt-0.5 text-xs text-slate-400">{event.note}</p>}
+                    <p className="text-xs text-slate-600">{new Date(event.time).toLocaleString()}</p>
+                    {event.note && <p className="mt-0.5 text-xs text-slate-600">{event.note}</p>}
                   </li>
                 ))}
               </ol>
@@ -757,7 +757,7 @@ function OutageLocationMap({
         style={{ paddingBottom: "40%" }}
       >
         {/* Fallback layer — visible whenever the iframe fails to paint. */}
-        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-400">
+        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-600">
           Map unavailable — coordinates provided below.
         </div>
         <iframe
@@ -769,7 +769,7 @@ function OutageLocationMap({
         />
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-600">
         Map data ©{" "}
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
           OpenStreetMap
