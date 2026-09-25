@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { flagDispute, getDisputes, resolveDispute } from "@/services/sla";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { DisputeStatus, SLADispute } from "@/types/sla";
 
 const PAGE_SIZE = 5;
@@ -58,7 +59,7 @@ export function SLADisputesPanel({
   );
 
   const queryKey = useMemo(
-    () => ["sla-disputes", outageId, statusFilter, page],
+    () => slaEventKeys.disputes.list({ outageId, status: statusFilter, page }),
     [outageId, statusFilter, page]
   );
 
@@ -100,7 +101,7 @@ export function SLADisputesPanel({
 
   const invalidateDisputes = async () => {
     await queryClient.invalidateQueries({
-      queryKey: ["sla-disputes", outageId],
+      queryKey: slaEventKeys.disputes.list({ outageId }),
     });
   };
 
