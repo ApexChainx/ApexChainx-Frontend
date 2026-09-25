@@ -1,6 +1,5 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
-/** ApexChain Network Operations Intelligence Platform */
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -11,8 +10,8 @@ import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart"
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
-import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
+import { useDashboardMetrics } from "@/features/dashboard/hooks/useDashboardMetrics";
+import type { DashboardFilters, DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
   const snapshot = {
@@ -95,22 +94,7 @@ export default function SLADashboardView() {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  const primary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics", filters],
-    queryFn: () => fetchDashboardMetrics(filters),
-    staleTime: 30_000,
-    structuralSharing: (oldData: unknown, newData: unknown) => {
-      if (!oldData || !newData) return newData as DashboardMetrics;
-      const o = oldData as DashboardMetrics;
-      const n = newData as DashboardMetrics;
-      if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
-          o.penalties.total === n.penalties.total &&
-          o.rewards.total === n.rewards.total) {
-        return o;
-      }
-      return n;
-    },
-  });
+  const primary = useDashboardMetrics(filters);
 
   const hasDateRange = useMemo(
     () => Boolean(filters.date_from || filters.date_to),
@@ -125,12 +109,7 @@ export default function SLADashboardView() {
   // (react-hooks/set-state-in-effect).
   const compareModeActive = compareMode && hasDateRange;
 
-  const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare", comparisonFilters],
-    queryFn: () => fetchDashboardMetrics(comparisonFilters),
-    staleTime: 30_000,
-    enabled: compareModeActive,
-  });
+  const secondary = useDashboardMetrics(comparisonFilters);
 
   const onTrendClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();
