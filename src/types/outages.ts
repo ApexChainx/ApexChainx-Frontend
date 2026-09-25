@@ -51,7 +51,13 @@ export interface Outage {
 }
 
 export interface OutageCreate {
-  id: string;
+  /**
+   * Issue #569 — optional and client-supplied only as a last-resort hint.
+   * The backend is the authority on outage identity: omit the field and use
+   * the canonical `OUT-` id from the create response for navigation and
+   * cache keys.
+   */
+  id?: string | undefined;
   site_name: string;
   site_id?: string | undefined;
   severity: Severity;
