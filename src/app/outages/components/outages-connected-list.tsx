@@ -3,6 +3,7 @@
 
 import { RouteLoadingState } from "@/components/ui/route-state";
 import { useOutages } from "@/features/outages/hooks/useOutages";
+import { getSiteDisplayTitle } from "@/lib/site-display";
 import OutagesPageClient from "./outages-page-client";
 
 /**
@@ -30,7 +31,7 @@ export default function OutagesConnectedList() {
 
   const items: ClientOutage[] = (data?.items ?? []).map((outage) => ({
     id: outage.id,
-    title: outage.site_name,
+    title: getSiteDisplayTitle(outage.site_name),
     site_name: outage.site_name,
     status: outage.status,
     createdAt: outage.detected_at,
