@@ -63,3 +63,25 @@ export const slaEventKeys = {
   /** SLA configuration */
   config: ["sla-events", "config"] as const,
 };
+
+/**
+ * Query-key factory — SESSION family
+ *
+ * Issue #532 — Centralise session-related React Query keys. All session
+ * mutations (2FA setup/verify/disable) invalidate sessionKeys.all so the
+ * user/session caches are refreshed consistently instead of scattering the
+ * literal ["session"] key across hooks.
+ *
+ * The root "session" segment matches the key used pre-factory, so any
+ * remaining literal ["session"] invalidation keeps working.
+ */
+export const sessionKeys = {
+  /** The root key — invalidating this busts every session cache below */
+  all: ["session"] as const,
+
+  /** Current authenticated user data */
+  me: ["session", "me"] as const,
+
+  /** Two-factor authentication status/flags */
+  twoFactor: ["session", "two-factor"] as const,
+};

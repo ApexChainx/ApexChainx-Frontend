@@ -2,6 +2,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { sessionKeys } from "@/lib/query-keys";
 import {
   setupTwoFactor,
   verifyTwoFactor,
@@ -26,7 +27,7 @@ export function useTwoFactorVerify() {
   return useMutation({
     mutationFn: verifyTwoFactor,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["session"] });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
     },
   });
 }
@@ -39,7 +40,7 @@ export function useTwoFactorDisable() {
   return useMutation({
     mutationFn: disableTwoFactor,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["session"] });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
     },
   });
 }
