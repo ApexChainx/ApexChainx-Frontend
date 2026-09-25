@@ -3,8 +3,9 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { api } from "@/lib/api";
-import { useSlaConfig, useUpdateSlaConfig } from "@/hooks/useSlaConfig";
+import { slaConfigQueryKey, useSlaConfig, useUpdateSlaConfig } from "@/hooks/useSlaConfig";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -34,6 +35,10 @@ describe("useSlaConfig cache invalidation", () => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
+  it("exposes a stable query key shape", () => {
+    expect(slaConfigQueryKey()).toEqual(["sla", "config"]);
+  });
+
   it("populates cache after successful fetch", async () => {
     mockedApi.get.mockResolvedValueOnce({
       data: { critical: { threshold_minutes: 30, penalty_per_minute: 5, reward_base: 100 } },
@@ -44,22 +49,32 @@ describe("useSlaConfig cache invalidation", () => {
 
     expect(result.current.data?.length).toBe(1);
     expect(result.current.data?.[0]?.severity).toBe("critical");
+    expect(mockedApi.get).toHaveBeenCalledWith("/sla/config");
+    // The payload is readable through the documented query key.
+    expect(client.getQueryData(slaConfigQueryKey())).toHaveLength(1);
   });
 
   it("updates cache entry after mutation without refetch", async () => {
-    const initial = [{ severity: "high", threshold_minutes: 60, penalty_per_minute: 2, reward_base: 50 }];
-    client.setQueryData(["sla", "config"], initial);
+    const initial = [
+      { severity: "high" as const, threshold_minutes: 60, penalty_per_minute: 2, reward_base: 50 },
+    ];
+    client.setQueryData(slaConfigQueryKey(), initial);
 
     mockedApi.put.mockResolvedValueOnce({
       data: { threshold_minutes: 45, penalty_per_minute: 3, reward_base: 50 },
     });
 
     const { result } = renderHook(() => useUpdateSlaConfig(), { wrapper: makeWrapper(client) });
-    result.current.mutate({ severity: "high", threshold_minutes: 45, penalty_per_minute: 3, reward_base: 50 });
+    result.current.mutate({
+      severity: "high",
+      threshold_minutes: 45,
+      penalty_per_minute: 3,
+      reward_base: 50,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const cached = client.getQueryData<typeof initial>(["sla", "config"]);
+    const cached = client.getQueryData<typeof initial>(slaConfigQueryKey());
     expect(cached?.[0]?.threshold_minutes).toBe(45);
     expect(mockedApi.get).not.toHaveBeenCalled();
   });

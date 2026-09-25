@@ -23,11 +23,19 @@ const SEVERITY_ORDER: Record<Severity, number> = {
   low: 3,
 };
 
-const SLA_CONFIG_KEY = ["sla", "config"] as const;
+/**
+ * Query key for the SLA configuration read path. Exported so consumers (and tests)
+ * can assert the cache shape and drive invalidation without duplicating the literal.
+ */
+export function slaConfigQueryKey() {
+  return ["sla", "config"] as const;
+}
+
+export const SLA_CONFIG_KEY = slaConfigQueryKey();
 
 export function useSlaConfig() {
   return useQuery({
-    queryKey: SLA_CONFIG_KEY,
+    queryKey: slaConfigQueryKey(),
     queryFn: async () => {
       const { data } = await dedupeByKey("/sla/config", () => api.get<SLAConfigMap>("/sla/config"));
       return Object.entries(data)
