@@ -1,6 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
+import { useSearchParams } from "next/navigation";
+import { useDebounce } from "@/hooks/useDebounce";
 import { RouteLoadingState } from "@/components/ui/route-state";
 import { useOutages } from "@/features/outages/hooks/useOutages";
 import OutagesPageClient from "./outages-page-client";
@@ -19,6 +21,8 @@ type ClientOutage = {
   assigned_to?: string;
 };
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 /**
  * Connects the /outages route to `useOutages`, the offline-first data path:
  * successful fetches are persisted to IndexedDB and the hook hydrates from
@@ -26,7 +30,11 @@ type ClientOutage = {
  * last-known outage list.
  */
 export default function OutagesConnectedList() {
-  const { data, isLoading } = useOutages();
+  const searchParams = useSearchParams();
+  const rawSearch = searchParams?.get("search") ?? "";
+  const debouncedSearch = useDebounce(rawSearch, SEARCH_DEBOUNCE_MS);
+
+  const { data, isLoading, isFetching } = useOutages({ search: debouncedSearch || undefined });
 
   const items: ClientOutage[] = (data?.items ?? []).map((outage) => ({
     id: outage.id,
@@ -50,5 +58,12 @@ export default function OutagesConnectedList() {
     );
   }
 
-  return <OutagesPageClient data={items} />;
+  return (
+    <OutagesPageClient
+      data={items}
+      isFetching={isFetching}
+      searchTerm={rawSearch}
+      debouncedSearch={debouncedSearch}
+    />
+  );
 }
