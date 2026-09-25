@@ -1,5 +1,6 @@
 /** ApexChain Frontend Test Suite */
 /** ApexChain Network Operations Intelligence Platform */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +15,18 @@ vi.mock("@/lib/api", () => ({
     get: (...args: unknown[]) => mockGet(...args),
     put: (...args: unknown[]) => mockPut(...args),
   },
+  dedupeByKey: <T,>(_key: string, fetcher: () => Promise<T>) => fetcher(),
 }));
+
+// The page is hook-backed now, so it needs a query client in scope.
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <SlaConfigPage />
+    </QueryClientProvider>,
+  );
+}
 
 describe("SLA config page", () => {
   beforeEach(() => {
@@ -45,13 +57,14 @@ describe("SLA config page", () => {
       },
     });
 
-    render(<SlaConfigPage />);
+    renderPage();
 
     expect(await screen.findByText("Severity Service Level Agreements")).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/sla/config");
     expect(screen.getByText("critical")).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
+    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    fireEvent.click(editButtons[0]!);
 
     const thresholdInput = screen.getByLabelText("Threshold (minutes)");
     const rewardInput = screen.getByLabelText("Reward Base");

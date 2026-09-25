@@ -6,33 +6,24 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
+import { PaymentsTable, type SortDir, type SortKey } from "@/components/payments/payments-table";
 import type { TableDensity } from "@/components/data-table";
-import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { exportPayments, fetchPayments } from "@/services/paymentService";
 import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
-import type { PaginatedPayments, Payment } from "@/types/payment";
+import type { PaginatedPayments } from "@/types/payment";
 
-type SortKey = "created_at" | "amount" | "status";
-type SortDir = "asc" | "desc";
-
-const statusStyles: Record<string, string> = {
-  completed: "bg-green-100 text-green-700",
-  pending: "bg-yellow-100 text-yellow-700",
-  failed: "bg-red-100 text-red-700",
-  confirmed: "bg-emerald-100 text-emerald-700",
-};
-
-const typeStyles: Record<string, string> = {
-  reward: "bg-blue-100 text-blue-700",
-  penalty: "bg-red-100 text-red-700",
-};
+/**
+ * Pages larger than the table's virtualization threshold render as a windowed list
+ * instead of mounting every row.
+ */
+const ROWS_PER_PAGE_OPTIONS = [10, 100, 500] as const;
 
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
-  const [perPage] = useState(10);
+  const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
@@ -82,6 +73,11 @@ export default function PaymentsView() {
     updatePreferences({ tableDensity: newDensity });
   };
 
+  const handlePerPageChange = (nextPerPage: number) => {
+    setPerPage(nextPerPage);
+    setPage(1);
+  };
+
   const requestKey = useMemo(
     () => `${page}:${perPage}:${statusFilter}:${typeFilter}:${dateFrom}:${dateTo}:${sortKey}:${sortDir}`,
     [page, perPage, statusFilter, typeFilter, dateFrom, dateTo, sortKey, sortDir]
@@ -116,13 +112,7 @@ export default function PaymentsView() {
     setPage(1);
   }
 
-  function SortIndicator({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <span className="ml-1 text-gray-300">↕</span>;
-    return <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>;
-  }
-
   const totalPages = data ? Math.max(1, Math.ceil(data.total / perPage)) : 1;
-  const cell = density === "compact" ? "px-3 py-1.5 text-xs" : "px-4 py-3 text-sm";
 
   async function handleExport() {
     setExporting(true);
@@ -175,6 +165,22 @@ export default function PaymentsView() {
               </button>
             ))}
           </div>
+          {/* Rows per page: larger pages exercise the table's virtualization window */}
+          <label className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-medium">Rows:</span>
+            <select
+              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+              value={perPage}
+              onChange={(e) => handlePerPageChange(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {ROWS_PER_PAGE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -226,92 +232,17 @@ export default function PaymentsView() {
         </label>
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm" data-tour="payments-table">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50">
-            <tr>
-              {/* FE-070: Outage ID column is now a link */}
-              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Outage</th>
-              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Type</th>
-              {/* FE-072: sortable Amount */}
-              <th
-                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
-                onClick={() => toggleSort("amount")}
-              >
-                Amount <SortIndicator col="amount" />
-              </th>
-              {/* FE-072: sortable Date */}
-              <th
-                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
-                onClick={() => toggleSort("created_at")}
-              >
-                Date <SortIndicator col="created_at" />
-              </th>
-              <th className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500`}>Asset</th>
-              {/* FE-072: sortable Status */}
-              <th
-                className={`${cell} text-xs font-semibold uppercase tracking-wide text-gray-500 cursor-pointer select-none`}
-                onClick={() => toggleSort("status")}
-              >
-                Status <SortIndicator col="status" />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="p-0">
-                <RouteLoadingState title="Loading payments" description="Retrieving the latest reward and penalty records." />
-              </td></tr>
-            ) : error ? (
-              <tr><td colSpan={6} className="p-0">
-                <RouteErrorState title="Payments unavailable" description={error} primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }} />
-              </td></tr>
-            ) : (data && data.items.length === 0) ? (
-              <tr><td colSpan={6} className="p-0">
-                <RouteEmptyState title="No payments found" description="Try adjusting your filters." />
-              </td></tr>
-            ) : (data && data.items.map((payment: Payment) => (
-              <tr
-                key={payment.id}
-                className="border-t transition-colors hover:bg-gray-50 cursor-pointer"
-                onClick={() => openDrawer(payment.id)}
-              >
-                {/* FE-070: outage link in table */}
-                <td className={`${cell} font-mono text-gray-700`}>
-                  {payment.outage_id ? (
-                    <Link
-                      href={`/outages/${payment.outage_id}`}
-                      className="text-blue-600 hover:underline underline-offset-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {payment.outage_id}
-                    </Link>
-                  ) : (
-                    <span className="italic text-gray-400">—</span>
-                  )}
-                </td>
-                <td className={cell}>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${typeStyles[payment.type]}`}>
-                    {payment.type}
-                  </span>
-                </td>
-                <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-700" : "text-green-700"}`}>
-                  {payment.type === "penalty" ? "-" : "+"}${payment.amount.toLocaleString()}
-                </td>
-                <td className={`${cell} text-gray-600`}>
-                  {new Date(payment.created_at).toLocaleDateString()}
-                </td>
-                <td className={`${cell} font-mono text-gray-500`}>{payment.asset_code}</td>
-                <td className={cell}>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"}`}>
-                    {payment.status}
-                  </span>
-                </td>
-              </tr>
-            )))}
-          </tbody>
-        </table>
-      </div>
+      <PaymentsTable
+        items={data?.items ?? []}
+        density={density}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={toggleSort}
+        onRowClick={openDrawer}
+        loading={loading}
+        error={error}
+        onReload={() => window.location.reload()}
+      />
 
       {data && totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-gray-500">

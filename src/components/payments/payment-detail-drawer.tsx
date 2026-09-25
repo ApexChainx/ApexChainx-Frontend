@@ -8,8 +8,8 @@ import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state"
 import { useToast } from "@/components/ui/toast";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { explorerLink } from "@/lib/explorer";
-import { fetchPayment, retryPayment, reconcilePayment } from "@/services/paymentService";
-import type { Payment } from "@/types/payment";
+import { retryPayment, reconcilePayment } from "@/services/paymentService";
+import { usePaymentDetail } from "@/hooks/usePaymentDetail";
 import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -139,52 +139,27 @@ function ActionAlert({ state }: { state: ActionState }) {
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
-  const [payment, setPayment] = useState<Payment | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: payment,
+    isLoading,
+    isError,
+    error: loadError,
+    refetch,
+    cachePayment,
+  } = usePaymentDetail(paymentId);
+
   const [actionState, setActionState] = useState<ActionState | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ActionType | null>(null);
-  
+
   const toast = useToast();
-  const abortRef = useRef<AbortController | null>(null);
 
-  // ─── Data Fetching ─────────────────────────────────────────────────────────
-  const loadPayment = useCallback(async (id: string, signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    setActionState(null);
-    
-    try {
-      const data = await fetchPayment(id, signal);
-      setPayment(data);
-    } catch (err: unknown) {
-      if ((err as { name?: string }).name === "CanceledError" || (err as { name?: string }).name === "AbortError") {
-        return; // Silently ignore aborts
-      }
-      setError(err instanceof Error ? err.message : "Failed to load payment details.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Clear stale action feedback whenever the drawer switches to another payment.
   useEffect(() => {
-    if (!paymentId) {
-      setPayment(null);
-      setError(null);
-      setActionState(null);
-      return;
-    }
+    setActionState(null);
+  }, [paymentId]);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-    
-    void loadPayment(paymentId, controller.signal);
-    
-    return () => {
-      controller.abort();
-      abortRef.current = null;
-    };
-  }, [paymentId, loadPayment]);
+  const loadErrorMessage =
+    loadError instanceof Error ? loadError.message : "Failed to load payment details.";
 
   // ─── Actions ───────────────────────────────────────────────────────────────
   const executeAction = useCallback(async (type: ActionType) => {
@@ -197,7 +172,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
         ? await retryPayment(payment.id)
         : await reconcilePayment(payment.id);
       
-      setPayment(updated);
+      cachePayment(updated);
       const message = `${type === "retry" ? "Retry" : "Reconciliation"} succeeded.`;
       
       setActionState({ type, status: "success", message });
@@ -207,7 +182,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
       setActionState({ type, status: "error", message });
       toast(message, "error");
     }
-  }, [payment, toast]);
+  }, [payment, cachePayment, toast]);
 
   const handleAction = useCallback((type: ActionType) => {
     if (!payment) return;
@@ -230,10 +205,8 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
   const handleRetryLoad = useCallback(() => {
     if (!paymentId) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    void loadPayment(paymentId, controller.signal);
-  }, [paymentId, loadPayment]);
+    void refetch();
+  }, [paymentId, refetch]);
 
   // ─── Keyboard & Focus Management ───────────────────────────────────────────
   // Focus trap ref
@@ -298,21 +271,21 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {loading && (
+          {isLoading && (
             <div className="py-8">
               <RouteLoadingState title="Loading payment" description="Fetching transaction metadata..." />
             </div>
           )}
           
-          {error && (
+          {isError && (
             <RouteErrorState
               title="Failed to load"
-              description={error}
+              description={loadErrorMessage}
               primaryAction={{ label: "Try Again", onClick: handleRetryLoad }}
             />
           )}
           
-          {!loading && !error && payment && (
+          {!isLoading && !isError && payment && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <dl className="space-y-4">
                 <DetailRow label="Payment ID" value={payment.id} mono />

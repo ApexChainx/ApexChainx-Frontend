@@ -1,25 +1,19 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
-import { api } from "@/lib/api";
+import { useSlaConfig, useUpdateSlaConfig, type EditableConfig } from "@/hooks/useSlaConfig";
 
-type Severity = "critical" | "high" | "medium" | "low";
+type Severity = EditableConfig["severity"];
 
 type SLASeverityConfig = {
   threshold_minutes: number;
   penalty_per_minute: number;
   reward_base: number;
-};
-
-type SLAConfigMap = Record<string, SLASeverityConfig>;
-
-type EditableConfig = SLASeverityConfig & {
-  severity: Severity;
 };
 
 function getErrorMessage(error: unknown) {
@@ -34,48 +28,22 @@ function getSeverityVariant(severity: Severity) {
 }
 
 export default function SlaConfigPage() {
-  const [configs, setConfigs] = useState<EditableConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: configs = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useSlaConfig();
+  const updateConfig = useUpdateSlaConfig();
+
   const [editingConfig, setEditingConfig] = useState<EditableConfig | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [formData, setFormData] = useState<SLASeverityConfig>({
     threshold_minutes: 0,
     penalty_per_minute: 0,
     reward_base: 0,
   });
-
-  useEffect(() => {
-    void fetchConfigs();
-  }, []);
-
-  async function fetchConfigs() {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await api.get<SLAConfigMap>("/sla/config");
-      const nextConfigs = Object.entries(response.data)
-        .map(([severity, config]) => ({
-          severity: severity as Severity,
-          ...config,
-        }))
-        .sort((left, right) => {
-          const order: Record<Severity, number> = {
-            critical: 0,
-            high: 1,
-            medium: 2,
-            low: 3,
-          };
-          return order[left.severity] - order[right.severity];
-        });
-      setConfigs(nextConfigs);
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function handleEditClick(config: EditableConfig) {
     setEditingConfig(config);
@@ -106,31 +74,20 @@ export default function SlaConfigPage() {
       return;
     }
 
-    setIsSaving(true);
     setSaveError(null);
 
     try {
-      const response = await api.put<SLASeverityConfig>(
-        `/sla/config/${editingConfig.severity}`,
-        formData,
-      );
-
-      setConfigs((currentConfigs) =>
-        currentConfigs.map((config) =>
-          config.severity === editingConfig.severity
-            ? { severity: editingConfig.severity, ...response.data }
-            : config,
-        ),
-      );
+      await updateConfig.mutateAsync({
+        severity: editingConfig.severity,
+        ...formData,
+      });
       setEditingConfig(null);
     } catch (issue) {
       setSaveError(getErrorMessage(issue));
-    } finally {
-      setIsSaving(false);
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <RouteLoadingState
         title="Loading SLA configuration"
@@ -139,15 +96,17 @@ export default function SlaConfigPage() {
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
       <RouteErrorState
         title="Configuration unavailable"
-        description={error}
-        primaryAction={{ label: "Try again", onClick: () => void fetchConfigs() }}
+        description={getErrorMessage(error)}
+        primaryAction={{ label: "Try again", onClick: () => void refetch() }}
       />
     );
   }
+
+  const isSaving = updateConfig.isPending;
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">

@@ -1,4 +1,5 @@
 /** ApexChain Frontend Test Suite */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,19 +32,25 @@ const payment = {
   transaction_hash: "tx1", created_at: "2026-01-01T00:00:00Z", confirmed_at: null,
 };
 
+// The detail drawer reads through react-query now, so a client must be in scope.
+function renderWithQueryClient(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
 describe("PaymentsView", () => {
   beforeEach(() => { mockFetchPayments.mockReset(); mockFetchPayment.mockReset(); });
 
   it("renders payment list", async () => {
     mockFetchPayments.mockResolvedValue({ items: [payment], total: 1 });
-    render(<PaymentsView />);
+    renderWithQueryClient(<PaymentsView />);
     expect(await screen.findByText("reward")).toBeInTheDocument();
     expect(screen.getByText("+$200")).toBeInTheDocument();
   });
 
   it("passes default sort parameters to the API", async () => {
     mockFetchPayments.mockResolvedValue({ items: [payment], total: 1 });
-    render(<PaymentsView />);
+    renderWithQueryClient(<PaymentsView />);
     await screen.findByText("reward");
     const callArgs = mockFetchPayments.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(callArgs?.sort_by).toBe("created_at");
@@ -52,7 +59,7 @@ describe("PaymentsView", () => {
 
   it("re-fetches when sort column changes", async () => {
     mockFetchPayments.mockResolvedValue({ items: [payment], total: 1 });
-    render(<PaymentsView />);
+    renderWithQueryClient(<PaymentsView />);
     await screen.findByText("reward");
 
     // Click Amount header to change sort
@@ -67,7 +74,7 @@ describe("PaymentsView", () => {
 
   it("shows empty state", async () => {
     mockFetchPayments.mockResolvedValue({ items: [], total: 0 });
-    render(<PaymentsView />);
+    renderWithQueryClient(<PaymentsView />);
     // RouteEmptyState renders the title twice (visual heading + screen-
     // reader Announcer), so assert on the heading role instead of raw text.
     expect(
@@ -77,7 +84,7 @@ describe("PaymentsView", () => {
 
   it("shows error state on failure", async () => {
     mockFetchPayments.mockRejectedValue(new Error("fail"));
-    render(<PaymentsView />);
+    renderWithQueryClient(<PaymentsView />);
     // RouteErrorState also renders the title via its Announcer.
     expect(await screen.findAllByText("Payments unavailable")).toHaveLength(2);
   });
@@ -85,13 +92,15 @@ describe("PaymentsView", () => {
 
 describe("PaymentDetailDrawer", () => {
   it("renders nothing when paymentId is null", () => {
-    const { container } = render(<PaymentDetailDrawer paymentId={null} onClose={vi.fn()} />);
+    const { container } = renderWithQueryClient(
+      <PaymentDetailDrawer paymentId={null} onClose={vi.fn()} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it("opens drawer and shows details", async () => {
     mockFetchPayment.mockResolvedValue(payment);
-    render(<PaymentDetailDrawer paymentId="p1" onClose={vi.fn()} />);
+    renderWithQueryClient(<PaymentDetailDrawer paymentId="p1" onClose={vi.fn()} />);
     expect(await screen.findByText("Payment Details")).toBeInTheDocument();
     expect(await screen.findByText("p1")).toBeInTheDocument();
   });

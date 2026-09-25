@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { fetchPayments, retryPayment } from "@/services/paymentService";
-import type { PaginatedPayments, Payment } from "@/types/payment";
+import type { PaginatedPayments, Payment, PaymentStatus } from "@/types/payment";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const statusStyles: Record<string, string> = {
   failed: "bg-red-100 text-red-700",
+  pending: "bg-yellow-100 text-yellow-700",
 };
 
 const typeStyles: Record<string, string> = {
@@ -17,15 +18,24 @@ const typeStyles: Record<string, string> = {
   penalty: "bg-red-100 text-red-700",
 };
 
+/** Status a row shows while its retry request is in flight. */
+const OPTIMISTIC_PENDING_STATUS: PaymentStatus = "pending";
+
 export default function RetryQueueView() {
   const [data, setData] = useState<PaginatedPayments | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, PaymentStatus>>({});
+  const [retryError, setRetryError] = useState<string | null>(null);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Tracks in-flight retries synchronously so a double-click cannot issue a duplicate request
+  // (the disabled button state only lands after React re-renders).
+  const inFlightRef = useRef<Set<string>>(new Set());
 
   // Calculate date 7 days ago for default filter
   const getSevenDaysAgo = () => {
@@ -51,21 +61,50 @@ export default function RetryQueueView() {
     return () => { isMounted = false; };
   }, [refreshKey, dateFrom]);
 
+  /** Overlay a status on rows without touching the fetched payload. Passing null reverts. */
+  const applyOptimisticStatus = useCallback((ids: string[], status: PaymentStatus | null) => {
+    setOptimisticStatus((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        if (status === null) {
+          delete next[id];
+        } else {
+          next[id] = status;
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const rowStatus = (payment: Payment) => optimisticStatus[payment.id] ?? payment.status;
+
   const handleRetry = async (id: string) => {
-    setRetryingIds(prev => new Set(prev).add(id));
+    if (inFlightRef.current.has(id)) return;
+
+    inFlightRef.current.add(id);
+    setRetryError(null);
+    setRetryingIds((prev) => new Set(prev).add(id));
+    // Flip the row to pending immediately, before the request resolves.
+    applyOptimisticStatus([id], OPTIMISTIC_PENDING_STATUS);
+
     try {
-      await retryPayment(id);
-      // Remove from selected and refresh
-      setSelectedIds(prev => {
+      const updated = await retryPayment(id);
+      // Reconcile with the server response, falling back to the optimistic status.
+      applyOptimisticStatus([id], updated?.status ?? OPTIMISTIC_PENDING_STATUS);
+      setSelectedIds((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
-      setRefreshKey(prev => prev + 1);
+      setRefreshKey((prev) => prev + 1);
     } catch (err) {
+      // Retry-error fallback: drop the optimistic state so the row reverts to failed.
+      applyOptimisticStatus([id], null);
+      setRetryError(`Could not retry payment ${id}. Please try again.`);
       console.error("Failed to retry payment:", err);
     } finally {
-      setRetryingIds(prev => {
+      inFlightRef.current.delete(id);
+      setRetryingIds((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
@@ -74,17 +113,44 @@ export default function RetryQueueView() {
   };
 
   const handleBulkRetry = async () => {
-    setBulkRetrying(true);
-    const ids = Array.from(selectedIds);
-    try {
-      await Promise.all(ids.map(id => retryPayment(id)));
-      setSelectedIds(new Set());
-      setRefreshKey(prev => prev + 1);
+    const ids = Array.from(selectedIds).filter((id) => !inFlightRef.current.has(id));
+    if (ids.length === 0) {
       setShowConfirmDialog(false);
-    } catch (err) {
-      console.error("Failed to retry some payments:", err);
+      return;
+    }
+
+    ids.forEach((id) => inFlightRef.current.add(id));
+    setBulkRetrying(true);
+    setRetryError(null);
+    applyOptimisticStatus(ids, OPTIMISTIC_PENDING_STATUS);
+
+    try {
+      const results = await Promise.allSettled(ids.map((id) => retryPayment(id)));
+      const failedIds: string[] = [];
+
+      results.forEach((result, index) => {
+        const id = ids[index]!;
+        if (result.status === "fulfilled") {
+          applyOptimisticStatus([id], result.value?.status ?? OPTIMISTIC_PENDING_STATUS);
+        } else {
+          failedIds.push(id);
+        }
+      });
+
+      if (failedIds.length > 0) {
+        applyOptimisticStatus(failedIds, null);
+        setRetryError(
+          `Could not retry ${failedIds.length} of ${ids.length} payments. Please try again.`,
+        );
+      } else {
+        setSelectedIds(new Set());
+      }
+
+      setRefreshKey((prev) => prev + 1);
     } finally {
+      ids.forEach((id) => inFlightRef.current.delete(id));
       setBulkRetrying(false);
+      setShowConfirmDialog(false);
     }
   };
 
@@ -128,6 +194,15 @@ export default function RetryQueueView() {
         )}
       </div>
 
+      {retryError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {retryError}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <table className="w-full text-left">
           <thead className="bg-gray-50">
@@ -162,10 +237,15 @@ export default function RetryQueueView() {
               <tr><td colSpan={8} className="p-0">
                 <RouteEmptyState title="No failed payments" description="There are no failed payments from the last 7 days." />
               </td></tr>
-            ) : data.items.map((payment: Payment) => (
+            ) : data.items.map((payment: Payment) => {
+              const status = rowStatus(payment);
+              const isRetrying = retryingIds.has(payment.id);
+
+              return (
               <tr
                 key={payment.id}
                 className="border-t transition-colors hover:bg-gray-50"
+                aria-busy={isRetrying}
               >
                 <td className={cell}>
                   <input 
@@ -200,21 +280,22 @@ export default function RetryQueueView() {
                 </td>
                 <td className={`${cell} font-mono text-gray-500`}>{payment.asset_code}</td>
                 <td className={cell}>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[payment.status] ?? "bg-gray-100 text-gray-500"}`}>
-                    {payment.status}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${statusStyles[status] ?? "bg-gray-100 text-gray-500"}`}>
+                    {status}
                   </span>
                 </td>
                 <td className={cell}>
                   <Button
                     size="sm"
                     onClick={() => handleRetry(payment.id)}
-                    disabled={retryingIds.has(payment.id)}
+                    disabled={isRetrying}
                   >
-                    {retryingIds.has(payment.id) ? "Retrying..." : "Retry"}
+                    {isRetrying ? "Retrying..." : "Retry"}
                   </Button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
