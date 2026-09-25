@@ -9,6 +9,15 @@
  * successful fetch. When the backend is unreachable the operator still
  * sees the last-known list of outages.
  *
+ * Issue #563 — Schema versioning: cache keys now include a version prefix
+ * (e.g. `cache:v2:outages:...`) so that backend response shape changes
+ * don't cause stale data to render. On version mismatch the old namespace
+ * is dropped during bootstrap.
+ *
+ * Issue #564 — Hydration failures are reported to Sentry with the operation
+ * name and cache key, and a one-time console warning is emitted. Recurring
+ * structured-clone errors trigger a targeted namespace purge.
+ *
  * API
  * ----
  *   import { persistedCache } from "@/lib/persisted-cache";
@@ -27,14 +36,82 @@
  */
 
 const DB_NAME = "apexchain-cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "query-cache";
+
+// Schema version - bump when backend response shapes change
+export const CACHE_SCHEMA_VERSION = 2;
 
 export interface CacheEntry<T = unknown> {
   key: string;
   data: T;
   expiresAt: number; // epoch ms — 0 means no expiry
   updatedAt: number; // epoch ms
+  schemaVersion: number;
+}
+
+let hydrationWarningEmitted = false;
+let structuredCloneErrorCount = 0;
+
+function reportHydrationFailure(operation: string, key: string, error: unknown): void {
+  const payload = {
+    operation,
+    cacheKey: key,
+    message: error instanceof Error ? error.message : String(error),
+    schemaVersion: CACHE_SCHEMA_VERSION,
+  };
+
+  // Report to Sentry if available
+  if (typeof window !== "undefined" && (window as { Sentry?: { captureException: (err: Error) => void } }).Sentry) {
+    const sentryError = new Error(`IndexedDB ${operation} failed for key: ${key}`);
+    sentryError.cause = error instanceof Error ? error : new Error(String(error));
+    (window as { Sentry: { captureException: (err: Error) => void } }).Sentry.captureException(sentryError);
+  }
+
+  // One-time console warning
+  if (!hydrationWarningEmitted) {
+    console.warn("[persisted-cache] Hydration failure detected. Falling back to network. Details:", payload);
+    hydrationWarningEmitted = true;
+  }
+
+  // Track structured-clone errors for targeted purge
+  if (error instanceof Error && error.name === "DataCloneError") {
+    structuredCloneErrorCount += 1;
+    if (structuredCloneErrorCount >= 3) {
+      // Purge the namespace after recurring structured-clone errors
+      void purgeNamespace(key.split(":")[1] ?? "unknown");
+    }
+  }
+}
+
+async function purgeNamespace(prefix: string): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const allKeys = await new Promise<string[]>((resolve, reject) => {
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+    for (const key of allKeys) {
+      if (typeof key === "string" && key.startsWith(`cache:v${CACHE_SCHEMA_VERSION}:${prefix}:`)) {
+        store.delete(key);
+      }
+    }
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    structuredCloneErrorCount = 0;
+  } catch {
+    // Best effort purge
+  }
+}
+
+function buildKey(key: string): string {
+  return `cache:v${CACHE_SCHEMA_VERSION}:${key}`;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -58,22 +135,50 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+// Clear old schema versions on bootstrap
+export async function clearOldSchemaVersions(): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const allKeys = await new Promise<string[]>((resolve, reject) => {
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+    for (const key of allKeys) {
+      if (typeof key === "string" && key.startsWith("cache:v") && !key.startsWith(`cache:v${CACHE_SCHEMA_VERSION}:`)) {
+        store.delete(key);
+      }
+    }
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // Best effort cleanup
+  }
+}
+
 export const persistedCache = {
   /**
    * Store a value. Overwrites any existing entry with the same key.
    * Pass ttlMs = 0 for no expiration.
    */
   async set<T>(key: string, data: T, ttlMs = 1000 * 60 * 30): Promise<void> {
+    const fullKey = buildKey(key);
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
 
       const entry: CacheEntry<T> = {
-        key,
+        key: fullKey,
         data,
         expiresAt: ttlMs > 0 ? Date.now() + ttlMs : 0,
         updatedAt: Date.now(),
+        schemaVersion: CACHE_SCHEMA_VERSION,
       };
 
       store.put(entry);
@@ -83,7 +188,7 @@ export const persistedCache = {
       });
       db.close();
     } catch (err) {
-      console.warn("[persisted-cache] set failed:", err);
+      reportHydrationFailure("set", fullKey, err);
     }
   },
 
@@ -92,14 +197,16 @@ export const persistedCache = {
    *  - The key does not exist
    *  - The entry has expired (ttl elapsed)
    *  - IndexedDB is unavailable
+   *  - Schema version mismatch
    */
   async get<T>(key: string): Promise<T | null> {
+    const fullKey = buildKey(key);
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
 
-      const request = store.get(key);
+      const request = store.get(fullKey);
       const entry = await new Promise<CacheEntry<T> | undefined>(
         (resolve, reject) => {
           request.onsuccess = () => resolve(request.result);
@@ -110,6 +217,11 @@ export const persistedCache = {
 
       if (!entry) return null;
 
+      // Check schema version mismatch
+      if (entry.schemaVersion !== CACHE_SCHEMA_VERSION) {
+        return null;
+      }
+
       // Check expiration
       if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
         // Expired — remove it in the background
@@ -119,7 +231,7 @@ export const persistedCache = {
 
       return entry.data;
     } catch (err) {
-      console.warn("[persisted-cache] get failed:", err);
+      reportHydrationFailure("get", fullKey, err);
       return null;
     }
   },
@@ -128,18 +240,19 @@ export const persistedCache = {
    * Delete a single key from the cache.
    */
   async del(key: string): Promise<void> {
+    const fullKey = buildKey(key);
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      store.delete(key);
+      store.delete(fullKey);
       await new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
       db.close();
     } catch (err) {
-      console.warn("[persisted-cache] del failed:", err);
+      reportHydrationFailure("del", fullKey, err);
     }
   },
 
@@ -158,7 +271,7 @@ export const persistedCache = {
       });
       db.close();
     } catch (err) {
-      console.warn("[persisted-cache] clear failed:", err);
+      reportHydrationFailure("clear", "all", err);
     }
   },
 };
