@@ -5,6 +5,7 @@ import { Locale, defaultLocale, localeNames, locales } from './config';
 import en from './messages/en.json';
 import es from './messages/es.json';
 import pt from './messages/pt.json';
+import * as Sentry from '@sentry/nextjs';
 
 const messages = {
   en,
@@ -26,6 +27,8 @@ interface I18nContextType {
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
+
+const missingKeyCache = new Set<string>();
 
 function resolveValue(tree: unknown, keys: string[]): unknown {
   let value = tree;
@@ -71,6 +74,26 @@ function interpolate(template: string, params?: TParams): string {
   });
 }
 
+function reportMissingKey(key: string, locale: Locale) {
+  // Only report once per key per session
+  const cacheKey = `${locale}:${key}`;
+  if (missingKeyCache.has(cacheKey)) {
+    return;
+  }
+  missingKeyCache.add(cacheKey);
+
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+    // eslint-disable-next-line no-console
+    console.warn(`[i18n] Missing translation key: ${key}`);
+  } else {
+    // Report to Sentry in production
+    Sentry.captureMessage(`Missing i18n translation key: ${key}`, {
+      level: 'warning',
+      tags: { locale, key },
+    });
+  }
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => {
     if (typeof window !== 'undefined') {
@@ -94,6 +117,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLocale = (newLocale: Locale) => {
     setLocaleState(newLocale);
+    // Also set a cookie for server-side access (manifest, metadata)
+    if (typeof document !== 'undefined') {
+      document.cookie = `preferred-locale=${newLocale}; path=/; max-age=31536000; SameSite=Lax`;
+    }
   };
 
   const t = (key: string, params?: TParams): string => {
@@ -101,10 +128,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (value !== undefined) {
       return interpolate(value, params);
     }
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
-      console.warn(`[i18n] Missing translation key: ${key}`);
-    }
+    reportMissingKey(key, locale);
     return key;
   };
 

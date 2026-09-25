@@ -10,56 +10,98 @@ import { env } from "@/lib/config/env";
 import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
 import { SessionProvider } from "@/providers/session";
+import { headers } from "next/headers";
+import { locales, localeNames, defaultLocale } from "@/i18n/config";
 import "./globals.css";
 
-export const metadata = {
-  title: {
-    default: "ApexChain — Network Operations Intelligence",
-    template: "%s | ApexChain",
-  },
-  description:
-    "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, automated blockchain payments, and advanced analytics.",
-  keywords: [
-    "ApexChain",
-    "network operations",
-    "outage management",
-    "SLA",
-    "blockchain payments",
-    "Stellar",
-    "telecom",
-  ],
-  authors: [{ name: "ApexChain" }],
-  creator: "ApexChain",
-  publisher: "ApexChain",
-  metadataBase: new URL(env.APP_URL),
-  openGraph: {
-    title: "ApexChain — Network Operations Intelligence",
-    description:
-      "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, and automated blockchain payments.",
-    url: env.APP_URL,
-    siteName: "ApexChain",
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "ApexChain — Network Operations Intelligence",
-    description:
-      "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, and automated blockchain payments.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+interface MetadataProps {
+  params: Promise<{}>;
+}
+
+async function getLocaleFromCookie(): Promise<string> {
+  const cookieStore = await headers();
+  const localeCookie = cookieStore.get("preferred-locale");
+  if (localeCookie && locales.includes(localeCookie as any)) {
+    return localeCookie;
+  }
+  return defaultLocale;
+}
+
+export async function generateMetadata({ params }: MetadataProps) {
+  const locale = await getLocaleFromCookie();
+  const localeName = localeNames[locale as keyof typeof localeNames] || "English";
+  const isEnglish = locale === "en";
+
+  const titleDefault = isEnglish
+    ? "ApexChain — Network Operations Intelligence"
+    : locale === "es"
+    ? "ApexChain — Inteligencia de Operaciones de Red"
+    : "ApexChain — Inteligência de Operações de Rede";
+
+  const description = isEnglish
+    ? "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, automated blockchain payments, and advanced analytics."
+    : locale === "es"
+    ? "Plataforma de inteligencia de operaciones de red empresarial. Gestión de interrupciones en tiempo real, cumplimiento de SLA, pagos automatizados en blockchain y análisis avanzados."
+    : "Plataforma de inteligência de operações de rede empresarial. Gestão de interrupções em tempo real, aplicação de SLA, pagamentos automatizados em blockchain e análises avançadas.";
+
+  const ogTitle = isEnglish
+    ? "ApexChain — Network Operations Intelligence"
+    : locale === "es"
+    ? "ApexChain — Inteligencia de Operaciones de Red"
+    : "ApexChain — Inteligência de Operações de Rede";
+
+  const ogDescription = isEnglish
+    ? "Enterprise network operations intelligence platform. Real-time outage management, SLA enforcement, and automated blockchain payments."
+    : locale === "es"
+    ? "Plataforma de inteligencia de operaciones de red empresarial. Gestión de interrupciones en tiempo real, cumplimiento de SLA y pagos automatizados en blockchain."
+    : "Plataforma de inteligência de operações de rede empresarial. Gestão de interrupções em tempo real, aplicação de SLA e pagamentos automatizados em blockchain.";
+
+  return {
+    title: {
+      default: titleDefault,
+      template: "%s | ApexChain",
+    },
+    description,
+    keywords: [
+      "ApexChain",
+      "network operations",
+      "outage management",
+      "SLA",
+      "blockchain payments",
+      "Stellar",
+      "telecom",
     ],
-    apple: [
-      { url: "/apple-icon.svg", type: "image/svg+xml" },
-    ],
-  },
-};
+    authors: [{ name: "ApexChain" }],
+    creator: "ApexChain",
+    publisher: "ApexChain",
+    metadataBase: new URL(env.APP_URL),
+    openGraph: {
+      title: ogTitle,
+      description: ogDescription,
+      url: env.APP_URL,
+      siteName: "ApexChain",
+      locale: locale === "en" ? "en_US" : locale === "es" ? "es_ES" : "pt_BR",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description: ogDescription,
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+    icons: {
+      icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
+      ],
+      apple: [
+        { url: "/apple-icon.svg", type: "image/svg+xml" },
+      ],
+    },
+  };
+}
 
 interface RootLayoutProps {
   children: ReactNode;
@@ -85,7 +127,7 @@ const contentSecurityPolicy = [
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en">
+    <html>
       <head>
         <meta
           httpEquiv="Content-Security-Policy"
