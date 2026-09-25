@@ -4,26 +4,26 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createOutage } from "@/services/outages";
-import type { OutageCreate, Severity, OutageStatus } from "@/types/outages";
+import {
+  buildOutageCreatePayload,
+  type NewOutageFormState,
+} from "@/features/outages/outage-create-payload";
+import type { Severity, OutageStatus } from "@/types/outages";
 import {
   isFormDirty,
   useUnsavedChangesGuard,
 } from "@/hooks/useUnsavedChangesGuard";
-
-function generateId() {
-  return `OUT-${Date.now()}`;
-}
 
 export default function NewOutagePage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<NewOutageFormState>({
     site_name: "",
     site_id: "",
-    severity: "medium" as Severity,
-    status: "open" as OutageStatus,
+    severity: "medium",
+    status: "open",
     detected_at: new Date().toISOString().slice(0, 16),
     description: "",
     affected_services: "",
@@ -48,22 +48,10 @@ export default function NewOutagePage() {
     setSubmitting(true);
     setError(null);
 
-    const payload: OutageCreate = {
-      id: generateId(),
-      site_name: form.site_name.trim(),
-      site_id: form.site_id.trim() || undefined,
-      severity: form.severity,
-      status: form.status,
-      detected_at: new Date(form.detected_at).toISOString(),
-      description: form.description.trim(),
-      affected_services: form.affected_services
-        ? form.affected_services.split(",").map((s) => s.trim()).filter(Boolean)
-        : [],
-      affected_subscribers: form.affected_subscribers
-        ? parseInt(form.affected_subscribers, 10)
-        : undefined,
-      assigned_to: form.assigned_to.trim() || undefined,
-    };
+    // Issue #569 — no client-minted id. `createOutage` returns the canonical
+    // server-assigned `OUT-` id, and that is what we navigate with and what
+    // the detail query cache is keyed by.
+    const payload = buildOutageCreatePayload(form);
 
     try {
       const outage = await createOutage(payload);

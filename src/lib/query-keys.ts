@@ -39,6 +39,15 @@ export const slaEventKeys = {
   /** Outages list & detail */
   outages: {
     all: ["sla-events", "outages"] as const,
+    /**
+     * Issue #571 — params-independent prefix covering *every* cached list
+     * page. `list()` with no argument yields
+     * `["sla-events", "outages", "list", undefined]`, and React Query's
+     * prefix matcher compares segment-by-segment, so that trailing
+     * `undefined` fails to match any real `list(params)` entry. Invalidate
+     * this instead when the goal is "all list pages, whatever the filters".
+     */
+    lists: ["sla-events", "outages", "list"] as const,
     list: (params?: Record<string, unknown>) =>
       ["sla-events", "outages", "list", params] as const,
     detail: (id: string) => ["sla-events", "outages", id] as const,

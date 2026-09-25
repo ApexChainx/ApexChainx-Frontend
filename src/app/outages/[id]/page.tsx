@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { SLADisputesPanel } from "@/components/outages/SLADisputesPanel";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +12,18 @@ import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/component
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
 import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageModal";
+import {
+  invalidateOutageListCaches,
+  removeOutageFromCache,
+  setOutageDetailCache,
+} from "@/features/outages/hooks/outage-cache";
+import { useDocumentVisibility } from "@/hooks/useDocumentVisibility";
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
 import { explorerLink } from "@/lib/explorer";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
+
+/** How often an unresolved outage is re-fetched while the tab is in front. */
+const DETAIL_POLL_INTERVAL_MS = 15_000;
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Failed to load outage";
@@ -40,7 +50,11 @@ export default function OutageDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const id = params?.id;
+
+  // Issue #570 — the poll loop below suspends itself while this is false.
+  const isDocumentVisible = useDocumentVisibility();
 
   const [outage, setOutage] = useState<Outage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,11 +90,24 @@ export default function OutageDetailsPage() {
       .then((data) => {
         if (!mounted) return;
         setOutage(data);
+        // Issue #571 — seed the shared detail cache from the authoritative
+        // fetch so a back-navigation to this route renders immediately and
+        // any other consumer of `slaEventKeys.outages.detail(id)` sees the
+        // same object.
+        setOutageDetailCache(queryClient, data);
         setLoading(false);
       })
       .catch((err: unknown) => {
         if ((err as { name?: string }).name === "CanceledError") return;
         if (!mounted) return;
+        // Issue #572 — a 404 is authoritative: make sure no previously cached
+        // copy of this outage survives, so the not-found state below is what
+        // renders rather than a resurrected incident.
+        if (
+          (err as { response?: { status?: number } })?.response?.status === 404
+        ) {
+          removeOutageFromCache(queryClient, id);
+        }
         setError(getErrorMessage(err));
         setLoading(false);
       });
@@ -89,9 +116,9 @@ export default function OutageDetailsPage() {
       mounted = false;
       controller.abort();
     };
-  }, [id]);
+  }, [id, queryClient]);
 
-  // Poll for updates while outage is open
+  // Command palette shortcut for "resolve this outage".
   useEffect(() => {
     const handlePaletteResolve = () => {
       if (!outage || outage.status !== "resolved" && !resolving) {
@@ -105,8 +132,18 @@ export default function OutageDetailsPage() {
     };
   }, [outage, resolving]);
 
+  // Poll for updates while the outage is open.
+  //
+  // Issue #570 — a backgrounded tab has no operator reading it, so the
+  // 15-second cadence was pure waste: on a device without OS-level
+  // background throttling this route, the heartbeat and the health checks
+  // stack up into a continuous request stream. The loop is torn down
+  // entirely while `document.hidden` is true and rebuilt on
+  // `visibilitychange`, so the last response the operator saw is the one
+  // they come back to — no burst of catch-up fetches either.
   useEffect(() => {
     if (!id || !outage || outage.status === "resolved") return;
+    if (!isDocumentVisible) return;
 
     let mounted = true;
     const controller = new AbortController();
@@ -120,14 +157,24 @@ export default function OutageDetailsPage() {
             console.error("Poll error:", err);
           }
         });
-    }, 15_000);
+    }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {
       mounted = false;
       controller.abort();
       clearInterval(intervalId);
     };
-  }, [id, outage?.status]);
+  }, [id, outage?.status, isDocumentVisible]);
+
+  /**
+   * Issue #571 — after any successful mutation the cached list pages are
+   * marked stale. Fired without awaiting so the operator sees their own
+   * edit/resolve land immediately instead of waiting on a refetch, while
+   * the next visit to /outages still reconciles against the server.
+   */
+  function markOutageListsStale() {
+    void invalidateOutageListCaches(queryClient);
+  }
 
   function startEdit() {
     if (!outage) return;
@@ -151,7 +198,10 @@ export default function OutageDetailsPage() {
     setError(null);
     try {
       const updated = await updateOutage(id, editForm);
-      setOutage({ ...outage, ...updated });
+      const next = { ...outage, ...updated };
+      setOutage(next);
+      setOutageDetailCache(queryClient, next);
+      markOutageListsStale();
       setEditing(false);
       toast("Outage updated.", "success");
     } catch (err) {
@@ -167,8 +217,11 @@ export default function OutageDetailsPage() {
     setError(null);
     try {
       const updated = await resolveOutage(id, { mttr_minutes: mttrMinutes });
-      setOutage({ ...updated.outage, sla_status: updated.sla });
+      const next: Outage = { ...updated.outage, sla_status: updated.sla };
+      setOutage(next);
       setResolutionPayment(updated.payment);
+      setOutageDetailCache(queryClient, next);
+      markOutageListsStale();
       setIsResolveModalOpen(false);
       toast("Outage resolved successfully.", "success");
     } catch (err) {
@@ -186,6 +239,13 @@ export default function OutageDetailsPage() {
     setDeleteError(null);
     try {
       await deleteOutage(id);
+      // Issue #572 — drop the detail entry *before* navigating away.
+      // Invalidation alone is not enough: with no observer left once the
+      // route changes, React Query would happily serve the deleted outage
+      // from cache on a back-navigation until gcTime expired, showing an
+      // incident that no longer exists.
+      removeOutageFromCache(queryClient, id);
+      markOutageListsStale();
       router.push("/outages");
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Deletion failed. Please try again.");
