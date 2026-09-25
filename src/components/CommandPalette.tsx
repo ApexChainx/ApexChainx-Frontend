@@ -181,6 +181,8 @@ export default function CommandPalette() {
       <button
         type="button"
         onClick={openPalette}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className="fixed bottom-4 right-4 z-50 rounded-full border border-slate-300 bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg backdrop-blur hover:bg-white"
       >
         ⌘K
@@ -195,8 +197,22 @@ export default function CommandPalette() {
             className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="border-b border-slate-200 p-3 dark:border-slate-700">
+              {/* Issue #539 — combobox pattern: the input owns aria-expanded,
+                  controls the option listbox, and announces the highlighted
+                  option via aria-activedescendant. */}
               <input
                 ref={inputRef}
+                role="combobox"
+                aria-label="Search commands"
+                aria-expanded="true"
+                aria-haspopup="listbox"
+                aria-autocomplete="list"
+                aria-controls={filteredActions.length > 0 ? "command-palette-listbox" : undefined}
+                aria-activedescendant={
+                  filteredActions[selectedIndex]
+                    ? `command-option-${filteredActions[selectedIndex]!.id}`
+                    : undefined
+                }
                 value={query}
                 onChange={(event) => {
                   setQuery(event.target.value);
@@ -207,14 +223,28 @@ export default function CommandPalette() {
               />
             </div>
 
-            <div className="max-h-80 overflow-y-auto p-2">
-              {filteredActions.length === 0 ? (
-                <div className="px-3 py-4 text-sm text-slate-500">No commands found.</div>
-              ) : (
-                filteredActions.map((action, index) => (
+            {filteredActions.length === 0 ? (
+              <div
+                id="command-palette-empty"
+                role="status"
+                className="max-h-80 overflow-y-auto p-2 px-3 py-4 text-sm text-slate-500"
+              >
+                No commands found.
+              </div>
+            ) : (
+              <div
+                id="command-palette-listbox"
+                role="listbox"
+                aria-label="Commands"
+                className="max-h-80 overflow-y-auto p-2"
+              >
+                {filteredActions.map((action, index) => (
                   <button
                     key={action.id}
+                    id={`command-option-${action.id}`}
                     type="button"
+                    role="option"
+                    aria-selected={index === selectedIndex}
                     onClick={() => handleSelect(action)}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
                       index === selectedIndex
@@ -238,9 +268,9 @@ export default function CommandPalette() {
                       )}
                     </span>
                   </button>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
