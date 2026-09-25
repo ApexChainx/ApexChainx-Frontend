@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
 import type { SessionUser } from "@/types/session";
 
@@ -14,6 +15,7 @@ export const dynamic = "force-static";
 export default function RegisterPage() {
   const router = useRouter();
   const { storeSession } = useSession();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -25,11 +27,11 @@ export default function RegisterPage() {
     setError(null);
 
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("auth.passwordMismatch"));
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError(t("auth.passwordTooShort"));
       return;
     }
 
@@ -49,7 +51,7 @@ export default function RegisterPage() {
       router.push("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
+      setError(err instanceof Error ? err.message : t("auth.registrationFailed"));
     } finally {
       setLoading(false);
     }
@@ -58,14 +60,14 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-gray-800">Create account</h1>
-        <p className="text-sm text-gray-500">Register to access the ApexChain platform.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{t("auth.createAccount")}</h1>
+        <p className="text-sm text-gray-500">{t("auth.createAccountSubtitle")}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1">
           <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
+            {t("auth.email")}
           </label>
           <input
             id="email"
@@ -80,7 +82,7 @@ export default function RegisterPage() {
 
         <div className="space-y-1">
           <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Password
+            {t("auth.password")}
           </label>
           <input
             id="password"
@@ -95,7 +97,7 @@ export default function RegisterPage() {
 
         <div className="space-y-1">
           <label htmlFor="confirm" className="block text-sm font-medium text-gray-700">
-            Confirm password
+            {t("auth.confirmPassword")}
           </label>
           <input
             id="confirm"
@@ -117,14 +119,14 @@ export default function RegisterPage() {
           disabled={loading}
           className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {loading ? "Creating account…" : "Create account"}
+          {loading ? t("auth.creatingAccount") : t("auth.createAccount")}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500">
-        Already have an account?{" "}
+        {t("auth.alreadyHaveAccount")}{" "}
         <Link href="/login" className="text-blue-600 hover:underline">
-          Sign in
+          {t("auth.signIn")}
         </Link>
       </p>
     </div>
