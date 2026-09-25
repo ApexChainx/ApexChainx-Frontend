@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { ApiError, normalizeApiError } from "@/lib/errors";
 import type {
   Outage,
   OutageCreate,
@@ -30,21 +31,12 @@ interface ApiErrorResponse {
 const OUTAGES_ENDPOINT = ENDPOINTS.outages.base;
 
 function handleApiError(error: unknown, fallbackMessage: string): never {
-  if (error instanceof AxiosError) {
-    const apiError = error.response?.data as ApiErrorResponse | undefined;
-
-    throw new Error(
-      apiError?.message ||
-        error.message ||
-        fallbackMessage,
-    );
+  const apiError = ApiError.fromError(error);
+  // Preserve the original error as cause for debugging
+  if (apiError.originalError instanceof Error) {
+    throw new Error(apiError.message, { cause: apiError.originalError });
   }
-
-  if (error instanceof Error) {
-    throw new Error(error.message);
-  }
-
-  throw new Error(fallbackMessage);
+  throw apiError;
 }
 
 /**

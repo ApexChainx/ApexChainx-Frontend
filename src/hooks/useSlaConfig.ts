@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, dedupeByKey } from "@/lib/api";
+import { slaEventKeys } from "@/lib/query-keys";
 
 type Severity = "critical" | "high" | "medium" | "low";
 
@@ -24,11 +25,11 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 };
 
 /**
- * Query key for the SLA configuration read path. Exported so consumers (and tests)
- * can assert the cache shape and drive invalidation without duplicating the literal.
+ * Query key for the SLA configuration read path. Uses the centralized
+ * slaEventKeys factory (Issue #575).
  */
 export function slaConfigQueryKey() {
-  return ["sla", "config"] as const;
+  return slaEventKeys.config;
 }
 
 export const SLA_CONFIG_KEY = slaConfigQueryKey();

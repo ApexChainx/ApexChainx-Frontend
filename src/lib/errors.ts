@@ -68,4 +68,34 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
   return { message, kind, status, correlationId };
 }
 
+/**
+ * ApiError - preserves correlationId and metadata for error reporting
+ * Issue #576 — Service error handlers strip correlation IDs
+ */
+export class ApiError extends Error {
+  public readonly kind: ApiErrorKind;
+  public readonly status: number | undefined;
+  public readonly correlationId: string | undefined;
+  public readonly originalError: unknown;
+
+  constructor(normalized: NormalizedApiError, originalError?: unknown) {
+    super(normalized.message);
+    this.name = "ApiError";
+    this.kind = normalized.kind;
+    this.status = normalized.status;
+    this.correlationId = normalized.correlationId;
+    this.originalError = originalError;
+
+    // Maintains proper stack trace in V8 environments
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ApiError);
+    }
+  }
+
+  static fromError(err: unknown): ApiError {
+    const normalized = normalizeApiError(err);
+    return new ApiError(normalized, err);
+  }
+}
+
 // aligned api errors schema
