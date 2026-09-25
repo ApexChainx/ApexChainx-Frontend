@@ -7,11 +7,14 @@
  * (rather than mocking the module's internals), and simulate an
  * IndexedDB-unavailable environment by leaving `globalThis.indexedDB`
  * undefined, which is what jsdom does by default without fake-indexeddb.
+ *
+ * Issue #563 — Schema versioning tests.
+ * Issue #564 — Hydration failure telemetry tests.
  */
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { persistedCache } from "@/lib/persisted-cache";
+import { persistedCache, clearOldSchemaVersions, CACHE_SCHEMA_VERSION } from "@/lib/persisted-cache";
 
 /** Give the background (fire-and-forget) IndexedDB transaction time to settle. */
 async function flushMicrotasks() {
@@ -171,6 +174,135 @@ describe("persistedCache", () => {
         "[persisted-cache] clear failed:",
         expect.any(Error),
       );
+    });
+  });
+
+  describe("schema versioning (Issue #563)", () => {
+    it("writes entries with the current schema version", async () => {
+      await persistedCache.set("outages:v1", { items: [1] });
+      // Read directly from the store to verify schema version is stored
+      const db = (globalThis as { indexedDB: IDBFactory }).indexedDB;
+      const request = db.open("apexchain-cache", 2);
+      await new Promise<void>((resolve, reject) => {
+        request.onsuccess = () => {
+          const dbInstance = request.result;
+          const tx = dbInstance.transaction("query-cache", "readonly");
+          const store = tx.objectStore("query-cache");
+          const getRequest = store.get("cache:v2:outages:v1");
+          getRequest.onsuccess = () => {
+            const entry = getRequest.result;
+            expect(entry).toBeDefined();
+            expect(entry?.schemaVersion).toBe(CACHE_SCHEMA_VERSION);
+            dbInstance.close();
+            resolve();
+          };
+          getRequest.onerror = () => reject(getRequest.error);
+        };
+        request.onerror = () => reject(request.error);
+      });
+    });
+
+    it("isolates v1 keys from v2 readers", async () => {
+      // Simulate a v1 entry by writing directly with old schema version
+      const db = (globalThis as { indexedDB: IDBFactory }).indexedDB;
+      const request = db.open("apexchain-cache", 2);
+      await new Promise<void>((resolve, reject) => {
+        request.onsuccess = () => {
+          const dbInstance = request.result;
+          const tx = dbInstance.transaction("query-cache", "readwrite");
+          const store = tx.objectStore("query-cache");
+          store.put({
+            key: "cache:v1:outages:test",
+            data: { items: ["v1-data"] },
+            expiresAt: 0,
+            updatedAt: Date.now(),
+            schemaVersion: 1,
+          });
+          tx.oncomplete = () => {
+            dbInstance.close();
+            resolve();
+          };
+        };
+        request.onerror = () => reject(request.error);
+      });
+
+      // v2 reader should not see v1 data
+      const result = await persistedCache.get<{ items: string[] }>("outages:test");
+      expect(result).toBeNull();
+    });
+
+    it("clearOldSchemaVersions removes old version entries", async () => {
+      // Write v1 and v2 entries
+      const db = (globalThis as { indexedDB: IDBFactory }).indexedDB;
+      const request = db.open("apexchain-cache", 2);
+      await new Promise<void>((resolve, reject) => {
+        request.onsuccess = () => {
+          const dbInstance = request.result;
+          const tx = dbInstance.transaction("query-cache", "readwrite");
+          const store = tx.objectStore("query-cache");
+          store.put({
+            key: "cache:v1:outages:old",
+            data: { items: ["old"] },
+            expiresAt: 0,
+            updatedAt: Date.now(),
+            schemaVersion: 1,
+          });
+          store.put({
+            key: "cache:v2:outages:new",
+            data: { items: ["new"] },
+            expiresAt: 0,
+            updatedAt: Date.now(),
+            schemaVersion: 2,
+          });
+          tx.oncomplete = () => {
+            dbInstance.close();
+            resolve();
+          };
+        };
+        request.onerror = () => reject(request.error);
+      });
+
+      await clearOldSchemaVersions();
+
+      // v1 entry should be gone, v2 entry should remain
+      const v1Result = await persistedCache.get("outages:old");
+      const v2Result = await persistedCache.get("outages:new");
+      expect(v1Result).toBeNull();
+      expect(v2Result).toEqual({ items: ["new"] });
+    });
+  });
+
+  describe("hydration failure telemetry (Issue #564)", () => {
+    it("reports get failure with operation name and cache key", async () => {
+      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const sentryCaptureSpy = vi.fn();
+      (globalThis as { Sentry?: { captureException: typeof sentryCaptureSpy } }).Sentry = {
+        captureException: sentryCaptureSpy,
+      };
+
+      (globalThis as unknown as { indexedDB: undefined }).indexedDB = undefined;
+
+      await persistedCache.get("test-key");
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        "[persisted-cache] Hydration failure detected. Falling back to network. Details:",
+        expect.objectContaining({
+          operation: "get",
+          cacheKey: expect.stringContaining("test-key"),
+        }),
+      );
+      expect(sentryCaptureSpy).toHaveBeenCalled();
+    });
+
+    it("emits one-time console warning only once per session", async () => {
+      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      (globalThis as unknown as { indexedDB: undefined }).indexedDB = undefined;
+
+      await persistedCache.get("key-1");
+      await persistedCache.get("key-2");
+
+      // Should only warn once
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

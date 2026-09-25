@@ -6,6 +6,7 @@ import CommandPalette from "@/components/CommandPalette";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
+import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { env } from "@/lib/config/env";
 import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
@@ -171,6 +172,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   </main>
                   <CommandPalette />
                   <OnboardingTour />
+                  <OfflineBanner />
                 </RouteGuard>
               </I18nProvider>
             </ToastProvider>
