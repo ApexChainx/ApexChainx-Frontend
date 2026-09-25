@@ -301,36 +301,88 @@ export default function OutagesPageClient({ data = [], isFetching, searchTerm = 
     logger.info("Export outages requested", { count: sortedData.length });
   }
 
-  // Bulk resolve handler
+  // Bulk resolve handler with optimistic update
   async function handleBulkResolve(mttrMinutes: number) {
     setIsProcessing(true);
     setError(null);
+
+    const idsToResolve = [...selectedIds];
+
+    await queryClient.cancelQueries({ queryKey: outageKeys.lists });
+
+    const previousData = queryClient.getQueriesData<{ items: Outage[] }>({
+      queryKey: outageKeys.lists,
+    });
+
+    // Optimistically update the cache
+    previousData.forEach(([queryKey, data]) => {
+      if (data) {
+        queryClient.setQueryData(queryKey, {
+          ...data,
+          items: data.items.map((outage) =>
+            idsToResolve.includes(outage.id) ? { ...outage, status: "resolved" } : outage
+          ),
+        });
+      }
+    });
+
     try {
       await Promise.all(
-        selectedIds.map(id => resolveOutage(id, { mttr_minutes: mttrMinutes }))
+        idsToResolve.map((id) => resolveOutage(id, { mttr_minutes: mttrMinutes }))
       );
-      await queryClient.invalidateQueries({ queryKey: outageKeys.all });
+      // Narrow invalidation - only the current list page
+      await queryClient.invalidateQueries({ queryKey: outageKeys.lists, exact: false });
       setSelectedIds([]);
       setBulkResolveOpen(false);
     } catch (err) {
+      // Rollback on error
+      previousData.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       setError(err instanceof Error ? err.message : "Failed to resolve outages. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   }
 
-  // Bulk assign handler
+  // Bulk assign handler with optimistic update
   async function handleBulkAssign(assignee: string) {
     setIsProcessing(true);
     setError(null);
+
+    const idsToAssign = [...selectedIds];
+
+    await queryClient.cancelQueries({ queryKey: outageKeys.lists });
+
+    const previousData = queryClient.getQueriesData<{ items: Outage[] }>({
+      queryKey: outageKeys.lists,
+    });
+
+    // Optimistically update the cache
+    previousData.forEach(([queryKey, data]) => {
+      if (data) {
+        queryClient.setQueryData(queryKey, {
+          ...data,
+          items: data.items.map((outage) =>
+            idsToAssign.includes(outage.id) ? { ...outage, assigned_to: assignee } : outage
+          ),
+        });
+      }
+    });
+
     try {
       await Promise.all(
-        selectedIds.map(id => updateOutage(id, { assigned_to: assignee }))
+        idsToAssign.map((id) => updateOutage(id, { assigned_to: assignee }))
       );
-      await queryClient.invalidateQueries({ queryKey: outageKeys.all });
+      // Narrow invalidation - only the current list page
+      await queryClient.invalidateQueries({ queryKey: outageKeys.lists, exact: false });
       setSelectedIds([]);
       setBulkAssignOpen(false);
     } catch (err) {
+      // Rollback on error
+      previousData.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       setError(err instanceof Error ? err.message : "Failed to assign outages. Please try again.");
     } finally {
       setIsProcessing(false);
