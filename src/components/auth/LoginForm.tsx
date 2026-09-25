@@ -1,12 +1,17 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { useSession } from "@/hooks/useSession";
+import {
+  checkThrottle,
+  noteThrottleFailure,
+  resetThrottle,
+} from "@/lib/rate-limit";
 import {
   completeTwoFactorLogin,
   type AuthSessionResponse,
@@ -18,6 +23,11 @@ type LoginStep = "credentials" | "challenge";
 
 /** Max consecutive failed TOTP challenge attempts before the submit is locked. */
 const MAX_CHALLENGE_ATTEMPTS = 5;
+
+/** Issue #528 — minimum gap between two /auth/login submits. */
+const LOGIN_MIN_INTERVAL_MS = 500;
+/** Issue #528 — base exponential backoff applied after a failed submit. */
+const LOGIN_FAILURE_BACKOFF_MS = 2_000;
 
 /**
  * Determine whether a login outcome means a second factor is required.
@@ -82,6 +92,37 @@ export default function LoginForm() {
   // Client-side throttle for the TOTP challenge submission path.
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [throttleMessage, setThrottleMessage] = useState<string | null>(null);
+  // Issue #528 — remaining time (ms) until the credentials submit re-enables.
+  const [loginCooldown, setLoginCooldown] = useState(0);
+  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear the cooldown ticker on unmount.
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
+
+  function scheduleLoginCooldown(durationMs: number) {
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    setLoginCooldown(durationMs);
+
+    if (durationMs <= 0) {
+      setThrottleMessage(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    cooldownTimerRef.current = setInterval(() => {
+      const remaining = Math.max(0, durationMs - (Date.now() - startedAt));
+      setLoginCooldown(remaining);
+      if (remaining <= 0) {
+        if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+        setThrottleMessage(null);
+      }
+    }, 250);
+  }
 
   function backToCredentials() {
     setStep("credentials");
@@ -94,6 +135,18 @@ export default function LoginForm() {
   async function handleCredentialsSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Issue #528 — enforce a minimum interval between submits and surface a
+    // brief disabled state instead of firing another request.
+    const decision = checkThrottle("auth:login", LOGIN_MIN_INTERVAL_MS);
+    if (!decision.allowed) {
+      setThrottleMessage(
+        `Please wait ${Math.ceil(decision.retryAfterMs / 1000)}s before trying again.`
+      );
+      scheduleLoginCooldown(decision.retryAfterMs);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await api.post<{
@@ -102,6 +155,9 @@ export default function LoginForm() {
         user?: SessionUser;
         two_factor_required?: boolean;
       }>(ENDPOINTS.auth.login, { email, password });
+
+      // A successful submit clears any accumulated backoff.
+      resetThrottle("auth:login");
 
       // Branch 1 — a second factor is required: advance to the challenge step.
       if (isTwoFactorRequired(response.data)) {
@@ -121,6 +177,11 @@ export default function LoginForm() {
         setError("Unexpected login response. Please try again.");
       }
     } catch (err) {
+      // Backend failure — grow the client-side backoff so a flaky client or
+      // password-manager loop cannot pound /auth/login.
+      const delayMs = noteThrottleFailure("auth:login", LOGIN_FAILURE_BACKOFF_MS);
+      scheduleLoginCooldown(delayMs);
+
       // The backend may enforce 2FA as a rejection rather than a 2xx marker.
       if (isTwoFactorRequired(undefined, err)) {
         setStep("challenge");
@@ -281,12 +342,22 @@ export default function LoginForm() {
           <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
         )}
 
+        {throttleMessage && loginCooldown === 0 && (
+          <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-700">
+            {throttleMessage}
+          </p>
+        )}
+
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || loginCooldown > 0}
           className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading
+            ? "Signing in…"
+            : loginCooldown > 0
+              ? `Sign in again in ${Math.ceil(loginCooldown / 1000)}s`
+              : "Sign in"}
         </button>
       </form>
 
