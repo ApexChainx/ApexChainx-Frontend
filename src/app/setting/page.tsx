@@ -924,7 +924,7 @@ export default function SettingsPage() {
                   user_id: event.target.value,
                 }))
               }
-              placeholder="User ID"
+              placeholder={t('settings.userId')}
             />
             <input
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -935,7 +935,7 @@ export default function SettingsPage() {
                   public_key: event.target.value,
                 }))
               }
-              placeholder="Public key"
+              placeholder={t('settings.publicKey')}
             />
             <div className="flex flex-wrap gap-4 text-sm text-slate-600">
               <label className="inline-flex items-center gap-2">
@@ -949,7 +949,7 @@ export default function SettingsPage() {
                     }))
                   }
                 />
-                Funded
+                {t('settings.funded')}
               </label>
               <label className="inline-flex items-center gap-2">
                 <input
@@ -962,7 +962,7 @@ export default function SettingsPage() {
                     }))
                   }
                 />
-                Trustline ready
+                {t('settings.trustlineReady')}
               </label>
             </div>
           </div>
@@ -972,43 +972,43 @@ export default function SettingsPage() {
               onClick={handleCreateWallet}
               disabled={loadingAction === "create-wallet" || isHorizonUnreachable}
               className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Create wallet"}
+              title={isHorizonUnreachable ? t('settings.horizonUnreachableTooltip') : t('settings.createWallet')}
             >
-              {loadingAction === "create-wallet" ? "Creating..." : "Create wallet"}
+              {loadingAction === "create-wallet" ? t('settings.creatingWallet') : t('settings.createWallet')}
             </button>
             <button
               onClick={handleLinkWallet}
               disabled={loadingAction === "link-wallet" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Link wallet"}
+              title={isHorizonUnreachable ? t('settings.horizonUnreachableTooltip') : t('settings.linkWallet')}
             >
-              {loadingAction === "link-wallet" ? "Linking..." : "Link wallet"}
+              {loadingAction === "link-wallet" ? t('settings.linkingWallet') : t('settings.linkWallet')}
             </button>
             <button
               onClick={handleLoadWalletDetails}
               disabled={loadingAction === "wallet-details" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load wallet details"}
+              title={isHorizonUnreachable ? t('settings.horizonUnreachableTooltip') : t('settings.loadWalletDetailsAction')}
             >
-              {loadingAction === "wallet-details" ? "Loading..." : "Load wallet details"}
+              {loadingAction === "wallet-details" ? t('common.loading') : t('settings.loadWalletDetailsAction')}
             </button>
             <button
               onClick={handleLoadBalance}
               disabled={loadingAction === "wallet-balance" || isHorizonUnreachable}
               className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load balance"}
+              title={isHorizonUnreachable ? t('settings.horizonUnreachableTooltip') : t('settings.loadBalance')}
             >
-              {loadingAction === "wallet-balance" ? "Loading..." : "Load balance"}
+              {loadingAction === "wallet-balance" ? t('common.loading') : t('settings.loadBalance')}
             </button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-              <h3 className="font-medium text-slate-900">Wallet details</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.walletDetailsTitle')}</h3>
               {wallet ? (
                 <dl className="mt-3 grid gap-2 text-slate-600">
                   <div className="flex justify-between gap-4">
-                    <dt>Address</dt>
+                    <dt>{t('settings.address')}</dt>
                     <dd className="break-all text-right font-medium text-slate-900">
                       {explorerLink("account", wallet.public_key) ? (
                         <a href={explorerLink("account", wallet.public_key)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
@@ -1018,54 +1018,54 @@ export default function SettingsPage() {
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Funded</dt>
+                    <dt>{t('settings.funded')}</dt>
                     <dd className="font-medium text-slate-900">
-                      {wallet.funded ? "Yes" : "No"}
+                      {wallet.funded ? t('settings.yes') : t('settings.no')}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Trustline</dt>
+                    <dt>{t('settings.trustline')}</dt>
                     <dd className="font-medium text-slate-900">
-                      {wallet.trustline_ready ? "Ready" : "Missing"}
+                      {wallet.trustline_ready ? t('settings.ready') : t('settings.missing')}
                     </dd>
                   </div>
                 </dl>
               ) : (
-                <p className="mt-3 text-slate-600">No wallet loaded yet.</p>
+                <p className="mt-3 text-slate-600">{t('settings.noWalletLoaded')}</p>
               )}
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-              <h3 className="font-medium text-slate-900">Wallet readiness</h3>
+              <h3 className="font-medium text-slate-900">{t('settings.walletReadinessTitle')}</h3>
               {walletStatus ? (
                 <dl className="mt-3 grid gap-2 text-slate-600">
                   <div className="flex justify-between gap-4">
-                    <dt>Active</dt>
+                    <dt>{t('settings.active')}</dt>
                     <dd className="font-medium text-slate-900">
-                      {walletStatus.active ? "Yes" : "No"}
+                      {walletStatus.active ? t('settings.yes') : t('settings.no')}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Usable</dt>
+                    <dt>{t('settings.usable')}</dt>
                     <dd className="font-medium text-slate-900">
-                      {walletStatus.usable ? "Ready" : "Not ready"}
+                      {walletStatus.usable ? t('settings.ready') : t('settings.notReady')}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt>Last updated</dt>
+                    <dt>{t('settings.lastUpdated')}</dt>
                     <dd className="font-medium text-slate-900">
                       {new Date(walletStatus.last_updated).toLocaleString()}
                     </dd>
                   </div>
                 </dl>
               ) : (
-                <p className="mt-3 text-slate-600">Load wallet details to inspect readiness.</p>
+                <p className="mt-3 text-slate-600">{t('settings.loadWalletDetails')}</p>
               )}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <h3 className="font-medium text-slate-900">Balances</h3>
+            <h3 className="font-medium text-slate-900">{t('settings.balancesTitle')}</h3>
             {walletBalance ? (
               <div className="mt-3 grid gap-2">
                 {Object.entries(walletBalance.balances).map(([asset, balance]) => {
@@ -1087,7 +1087,7 @@ export default function SettingsPage() {
                 })}
               </div>
             ) : (
-              <p className="mt-3 text-slate-600">No balance data loaded yet.</p>
+              <p className="mt-3 text-slate-600">{t('settings.noBalanceData')}</p>
             )}
           </div>
         </section>
@@ -1096,27 +1096,27 @@ export default function SettingsPage() {
       {/* FE-022: Wallet readiness guidance */}
       {walletStatus && !walletStatus.usable && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-amber-900">Wallet Not Ready — Next Steps</h2>
+          <h2 className="text-lg font-semibold text-amber-900">{t('settings.walletNotReadyTitle')}</h2>
           <p className="mt-1 text-sm text-amber-700">
-            Your wallet must be funded and have a trustline set up before payments can be processed.
+            {t('settings.walletNotReadyIntro')}
           </p>
           <ul className="mt-4 space-y-3">
             {!walletStatus.active && (
               <li className="flex items-start gap-3 text-sm text-amber-800">
                 <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-amber-200 text-center text-xs font-bold leading-5 text-amber-900">1</span>
-                <span><strong>Activate your wallet.</strong> The wallet is currently inactive. Contact your administrator or re-link the wallet via the Wallet Status panel above.</span>
+                <span><strong>{t('settings.activateWalletStepTitle')}</strong> {t('settings.activateWalletStepBody')}</span>
               </li>
             )}
             {walletStatus.active && !walletStatus.funded && (
               <li className="flex items-start gap-3 text-sm text-amber-800">
                 <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-amber-200 text-center text-xs font-bold leading-5 text-amber-900">2</span>
-                <span><strong>Fund your wallet.</strong> Send at least 1 XLM to <code className="rounded bg-amber-100 px-1 font-mono text-xs">{walletStatus.public_key}</code> on the Stellar network to activate the account.</span>
+                <span><strong>{t('settings.fundWalletStepTitle')}</strong> {t('settings.fundWalletStepBodyPrefix')} <code className="rounded bg-amber-100 px-1 font-mono text-xs">{walletStatus.public_key}</code> {t('settings.fundWalletStepBodySuffix')}</span>
               </li>
             )}
             {walletStatus.active && walletStatus.funded && !walletStatus.trustline_ready && (
               <li className="flex items-start gap-3 text-sm text-amber-800">
                 <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-amber-200 text-center text-xs font-bold leading-5 text-amber-900">3</span>
-                <span><strong>Set up a trustline.</strong> Your wallet is funded but missing a trustline for the payment asset. Use the Stellar Laboratory or your wallet app to add a trustline for the required asset.</span>
+                <span><strong>{t('settings.trustlineStepTitle')}</strong> {t('settings.trustlineStepBody')}</span>
               </li>
             )}
           </ul>
@@ -1126,7 +1126,7 @@ export default function SettingsPage() {
       {walletStatus?.usable && (
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
           <p className="text-sm font-medium text-emerald-800">
-            ✓ Wallet is fully ready — funded, trustline active, and usable for payments.
+            ✓ {t('settings.walletFullyReady')}
           </p>
         </section>
       )}
@@ -1147,6 +1147,7 @@ function StellarHealthCard({
   latencyMs: number | null;
   network: string;
 }) {
+  const { t } = useI18n();
   const isReachable = horizonStatus === "reachable";
   const isChecking = horizonStatus === "checking";
 
@@ -1159,20 +1160,20 @@ function StellarHealthCard({
   );
 
   const statusLabel = isChecking
-    ? "Checking..."
+    ? t('settings.checking')
     : isReachable
-    ? "Reachable"
-    : "Unreachable";
+    ? t('settings.reachable')
+    : t('settings.unreachable');
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">
-            Stellar Network Status
+            {t('settings.stellarNetworkStatus')}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Horizon endpoint health check for the {network} network
+            {t('settings.horizonHealthCheck', { network })}
           </p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -1184,19 +1185,19 @@ function StellarHealthCard({
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-            Latency
+            {t('settings.latency')}
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-900">
             {isChecking
               ? "—"
               : latencyMs !== null
               ? `${latencyMs} ms`
-              : "N/A"}
+              : t('settings.notAvailable')}
           </p>
         </div>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-            Network
+            {t('settings.network')}
           </p>
           <p className="mt-1 text-lg font-semibold text-slate-900 capitalize">
             {network}
@@ -1206,11 +1207,9 @@ function StellarHealthCard({
 
       {!isReachable && !isChecking && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <p className="font-medium">Horizon is unreachable</p>
+          <p className="font-medium">{t('settings.horizonUnreachableTitle')}</p>
           <p className="mt-1 text-red-700">
-            Stellar network actions (wallet creation, payments) are currently
-            unavailable. Please check your network connection or the Horizon
-            endpoint configuration.
+            {t('settings.horizonUnreachableBody')}
           </p>
         </div>
       )}
@@ -1237,6 +1236,7 @@ function SLAContractIdCard({
   contractId?: string | undefined;
   network: string;
 }) {
+  const { t } = useI18n();
   const canonicalId = CANONICAL_SLA_CONTRACT_IDS[network];
   const isConfigured = Boolean(contractId?.trim());
   const isMismatch =
@@ -1264,10 +1264,10 @@ function SLAContractIdCard({
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">
-            SLA Contract ID
+            {t('settings.slaContractId')}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Resolved smart contract identifier used for SLA calculation calls
+            {t('settings.slaContractIdSubtitle')}
           </p>
         </div>
         {isVerified && (
@@ -1275,7 +1275,7 @@ function SLAContractIdCard({
             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            Verified
+            {t('settings.verified')}
           </span>
         )}
         {isMismatch && (
@@ -1283,7 +1283,7 @@ function SLAContractIdCard({
             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Mismatch
+            {t('settings.mismatch')}
           </span>
         )}
         {!isConfigured && (
@@ -1291,7 +1291,7 @@ function SLAContractIdCard({
             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11v4m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18zm-1 4h2v6h-2z" />
             </svg>
-            Not configured
+            {t('settings.notConfigured')}
           </span>
         )}
       </div>
@@ -1299,16 +1299,16 @@ function SLAContractIdCard({
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-            Resolved Contract ID
+            {t('settings.resolvedContractId')}
           </p>
           <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
-            {isConfigured ? truncatedId : "Not configured"}
+            {isConfigured ? truncatedId : t('settings.notConfigured')}
           </p>
         </div>
         {isConfigured && canonicalId && (
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-              Expected ({network})
+              {t('settings.expectedNetwork', { network })}
             </p>
             <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
               {canonicalTruncated}
@@ -1319,23 +1319,18 @@ function SLAContractIdCard({
 
       {!isConfigured && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <p className="font-medium">Contract not configured</p>
+          <p className="font-medium">{t('settings.contractNotConfiguredTitle')}</p>
           <p className="mt-1">
-            No SLA contract is configured for this deployment. Set the
-            NEXT_PUBLIC_SLA_CONTRACT_ID environment variable to display the real
-            contract address on this card.
+            {t('settings.contractNotConfiguredBody')}
           </p>
         </div>
       )}
 
       {isMismatch && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <p className="font-medium">Contract ID Mismatch</p>
+          <p className="font-medium">{t('settings.contractMismatchTitle')}</p>
           <p className="mt-1 text-red-600">
-            The configured SLA contract ID does not match the canonical published
-            contract ID for the {network} network. Double-check your
-            NEXT_PUBLIC_SLA_CONTRACT_ID environment variable to ensure it points
-            to the correct contract.
+            {t('settings.contractMismatchBody', { network })}
           </p>
         </div>
       )}

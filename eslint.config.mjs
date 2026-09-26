@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import noHardcodedJsxText from "./eslint-rules/no-hardcoded-jsx-text.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -37,6 +38,21 @@ const eslintConfig = defineConfig([
       // flagged components have been refactored, so both rules are enforced.
       "react-hooks/set-state-in-effect": "error",
       "react-hooks/refs": "error",
+    },
+  },
+  {
+    // #548 — flag new hardcoded copy in JSX so localized sections (login,
+    // register, settings/wallet/health/SLA) don't regress and new inline
+    // strings don't creep back in. `warn`, not `error`: most of src/app and
+    // src/components still has untranslated copy outside the areas fixed
+    // in #545-#548, and erroring repo-wide would fail the build on
+    // pre-existing, out-of-scope strings.
+    files: ["src/app/**/*.tsx", "src/components/**/*.tsx"],
+    plugins: {
+      local: { rules: { "no-hardcoded-jsx-text": noHardcodedJsxText } },
+    },
+    rules: {
+      "local/no-hardcoded-jsx-text": "warn",
     },
   },
 ]);
