@@ -19,6 +19,7 @@ import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { getThemePreference, setThemePreference } from "@/lib/theme-storage";
+import { getUsdValue } from "@/lib/usd-value";
 import { useRouter } from "next/navigation";
 
 type AuthUser = {
@@ -240,14 +241,7 @@ export default function SettingsPage() {
   const walletAddress = wallet?.public_key ?? walletStatus?.public_key ?? walletForm.public_key;
 
   // USD rates for balance conversion (mainnet only)
-  const { rates: usdRates, loading: usdRatesLoading } = useUsdRates();
-
-  function getUsdValue(assetCode: string, balance: string): string | null {
-    if (!usdRates || !usdRates[assetCode]) return null;
-    const numBalance = parseFloat(balance);
-    if (isNaN(numBalance)) return null;
-    return (numBalance * usdRates[assetCode]).toFixed(2);
-  }
+  const { rates: usdRates, error: usdRatesError } = useUsdRates();
 
   async function handleRegister() {
     setLoadingAction("register");
@@ -1065,10 +1059,18 @@ export default function SettingsPage() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
             <h3 className="font-medium text-slate-900">Balances</h3>
+            {/* Issue #617 — a failed rate service is reported separately from a
+                per-asset missing rate so operators are not left wondering why
+                USD lines are absent. */}
+            {walletBalance && usdRatesError ? (
+              <p className="mt-3 text-xs text-amber-600">
+                USD rates unavailable — showing balances only
+              </p>
+            ) : null}
             {walletBalance ? (
               <div className="mt-3 grid gap-2">
                 {Object.entries(walletBalance.balances).map(([asset, balance]) => {
-                  const usdValue = getUsdValue(asset, balance.balance);
+                  const usdValue = getUsdValue(usdRates, usdRatesError, asset, balance.balance);
                   return (
                   <div
                     key={asset}
@@ -1076,8 +1078,11 @@ export default function SettingsPage() {
                   >
                     <div className="flex flex-col">
                       <span className="font-medium text-slate-900">{asset}</span>
-                      {usdValue && (
-                        <span className="text-xs text-emerald-600">≈ ${usdValue} USD</span>
+                      {usdValue.kind === "value" && (
+                        <span className="text-xs text-emerald-600">≈ ${usdValue.usd} USD</span>
+                      )}
+                      {usdValue.kind === "no-rate" && (
+                        <span className="text-xs text-slate-400">rate unavailable</span>
                       )}
                     </div>
                     <span className="text-slate-600">{balance.balance}</span>

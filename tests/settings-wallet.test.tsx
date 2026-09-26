@@ -39,8 +39,9 @@ vi.mock("@/hooks/useStellarHealth", () => ({
   // Health polling is out of scope here; return the initial state shape.
   useStellarHealth: () => ({ status: "checking", latencyMs: null, lastChecked: null }),
 }));
+const mockUseUsdRates = vi.fn();
 vi.mock("@/hooks/useUsdRates", () => ({
-  useUsdRates: () => ({ rates: null, loading: false, error: null, isMainnet: false }),
+  useUsdRates: () => mockUseUsdRates(),
 }));
 
 // SettingsPage reads theme via matchMedia (jsdom does not implement it).
@@ -59,7 +60,17 @@ const wallet = { user_id: "u1", public_key: "GABC", funded: true, trustline_read
 const walletStatus = { user_id: "u1", public_key: "GABC", funded: true, trustline_ready: true, usable: true, active: true, last_updated: "2026-01-01T00:00:00Z" };
 
 describe("SettingsPage", () => {
-  beforeEach(() => { mockGet.mockReset(); mockPost.mockReset(); });
+  beforeEach(() => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    mockUseUsdRates.mockReset();
+    mockUseUsdRates.mockReturnValue({
+      rates: null,
+      loading: false,
+      error: null,
+      isMainnet: false,
+    });
+  });
 
   it("renders with unauthenticated state and no wallet", () => {
     renderSettings();
@@ -113,6 +124,77 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
     fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
     expect(await screen.findByText("Wallet Not Ready — Next Steps")).toBeInTheDocument();
+  });
+
+  it("shows a rate-unavailable placeholder for assets without a published rate (Issue #617)", async () => {
+    mockUseUsdRates.mockReturnValue({
+      rates: { XLM: 0.1 },
+      loading: false,
+      error: null,
+      isMainnet: true,
+    });
+    mockGet
+      .mockResolvedValueOnce({ data: wallet })
+      .mockResolvedValueOnce({ data: walletStatus })
+      .mockResolvedValueOnce({
+        data: {
+          address: "GABC",
+          balances: {
+            XLM: { balance: "100", asset_type: "native" },
+            USDC: { balance: "50", asset_type: "credit_alphanum4" },
+          },
+          last_updated: "2026-01-01T00:00:00Z",
+        },
+      });
+
+    renderSettings();
+    fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
+    expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /load balance/i }));
+
+    // XLM has a published rate; USDC does not — its row stays visible with a
+    // placeholder instead of silently dropping the USD line.
+    expect(await screen.findByText("≈ $10.00 USD")).toBeInTheDocument();
+    expect(screen.getByText("rate unavailable")).toBeInTheDocument();
+    expect(screen.getByText("USDC")).toBeInTheDocument();
+  });
+
+  it("shows a rate-health note when the rate service fails (Issue #617)", async () => {
+    mockUseUsdRates.mockReturnValue({
+      rates: null,
+      loading: false,
+      error: "CoinGecko API error: 500",
+      isMainnet: true,
+    });
+    mockGet
+      .mockResolvedValueOnce({ data: wallet })
+      .mockResolvedValueOnce({ data: walletStatus })
+      .mockResolvedValueOnce({
+        data: {
+          address: "GABC",
+          balances: {
+            XLM: { balance: "100", asset_type: "native" },
+          },
+          last_updated: "2026-01-01T00:00:00Z",
+        },
+      });
+
+    renderSettings();
+    fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
+    expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /load balance/i }));
+
+    // The failure is distinguished from a missing rate: one health note, no
+    // per-asset USD lines and no per-asset placeholders.
+    expect(
+      await screen.findByText(/USD rates unavailable — showing balances only/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/rate unavailable/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/≈ \$/)).not.toBeInTheDocument();
   });
 
   it("funds a testnet wallet through the backend proxy and refreshes balance", async () => {
