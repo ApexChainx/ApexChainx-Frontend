@@ -27,6 +27,53 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const REQUIRED_FIELDS = ["service_id", "start_time", "end_time"] as const;
 
+// Field-level shape checks shared by the CSV and JSON validators (issue #610):
+// missing site, invalid severity, and malformed timestamps are flagged in the
+// preview so operators fix rows before spending an import cycle, instead of
+// reacting to a failed batch. Values are optional; empties are only reported
+// when the field is required.
+const VALID_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+const OPTIONAL_ENUM_FIELDS = ["severity"] as const;
+const TIMESTAMP_FIELDS = ["start_time", "end_time", "detected_at", "resolved_at"] as const;
+const SITE_FIELDS = ["site_name"] as const;
+
+function isValidTimestamp(value: string): boolean {
+  return !Number.isNaN(new Date(value).getTime());
+}
+
+/**
+ * Field-level shape checks for a single row's values, keyed by column name.
+ * Only fields present in the row's headers/keys are checked, so optional
+ * columns that are simply absent never produce noise.
+ */
+function validateRowFields(values: Record<string, string>): ImportValidationError[] {
+  const errors: ImportValidationError[] = [];
+
+  for (const field of SITE_FIELDS) {
+    if (field in values && values[field]?.trim() === "") {
+      errors.push({ field, message: `Field "${field}" is present but empty` });
+    }
+  }
+
+  for (const field of OPTIONAL_ENUM_FIELDS) {
+    const value = values[field]?.trim() ?? "";
+    if (field in values && value !== "" && !VALID_SEVERITIES.includes(value.toLowerCase() as typeof VALID_SEVERITIES[number])) {
+      errors.push({
+        field,
+        message: `Invalid ${field} "${value}" (expected one of: ${VALID_SEVERITIES.join(", ")})`,
+      });
+    }
+  }
+
+  for (const field of TIMESTAMP_FIELDS) {
+    if (field in values && values[field]?.trim() !== "" && !isValidTimestamp(values[field]?.trim() ?? "")) {
+      errors.push({ field, message: `Malformed timestamp in "${field}"` });
+    }
+  }
+
+  return errors;
+}
+
 // Optional columns the backend accepts for bulk outage import. Columns outside
 // this set (plus REQUIRED_FIELDS) are treated as unrecognized and surface a
 // non-blocking warning so the user can still proceed with the upload.
@@ -184,6 +231,14 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
         });
       }
     });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const present = headers
+      .map((h, colIndex) => [h, row[colIndex] ?? ""] as const)
+      .filter(([h]) => KNOWN_FIELDS.has(h));
+    validateRowFields(Object.fromEntries(present)).forEach((e) => {
+      errors.push({ row: i + 2, ...e });
+    });
   });
 
   if (rows.length > MAX_VALIDATED_ROWS) {
@@ -236,6 +291,17 @@ function validateJSON(text: string): { errors: ImportValidationError[]; parsed?:
         });
       }
     });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(item)) {
+      if (KNOWN_FIELDS.has(key)) {
+        values[key] = String(item[key] ?? "");
+      }
+    }
+    validateRowFields(values).forEach((e) => {
+      errors.push({ row: i + 1, ...e });
+    });
   });
 
   return { errors, parsed: records };
@@ -274,7 +340,10 @@ async function buildPreview(file: File): Promise<PreviewState> {
   // JSON
   const { errors, parsed } = validateJSON(text);
   
-  if (errors.length > 0 || !parsed) {
+  // Only structural failures (invalid JSON, non-array, empty array) suppress
+  // the preview entirely; row-level errors still preview with inline chips
+  // so operators can see which records are affected (issue #610).
+  if (!parsed) {
     return { headers: [], rows: [], errors, warnings: [], totalRows: 0, rowErrors: collectRowErrors(errors), rowNumberOffset: 1 };
   }
 
@@ -537,6 +606,7 @@ export default function BulkImportView() {
   const pageCount = preview ? Math.max(1, Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE)) : 1;
   const safePreviewPage = Math.min(previewPage, pageCount - 1);
   const pageRows = preview ? preview.rows.slice(safePreviewPage * PREVIEW_PAGE_SIZE, (safePreviewPage + 1) * PREVIEW_PAGE_SIZE) : [];
+  const invalidRowCount = preview ? Object.keys(preview.rowErrors).length : 0;
 
   // Mainnet bulk safety gate — early return with disabled message
   if (BULK_DISABLED) {
@@ -697,9 +767,16 @@ export default function BulkImportView() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Preview
                 </p>
-                <p className="text-xs text-gray-400">
-                  {preview.totalRows} row{preview.totalRows > 1 ? "s" : ""}
-                </p>
+                <div className="flex items-center gap-2">
+                  {invalidRowCount > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      {invalidRowCount} row{invalidRowCount > 1 ? "s" : ""} invalid
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {preview.totalRows} row{preview.totalRows > 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -743,6 +820,59 @@ export default function BulkImportView() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Per-row error chips — issue #610 */}
+              {(() => {
+                const pageErrorEntries = Object.entries(preview.rowErrors)
+                  .map(([rowStr, messages]) => ({
+                    row: Number(rowStr),
+                    messages,
+                  }))
+                  .filter(({ row }) => {
+                    const zeroBased = row - preview.rowNumberOffset;
+                    return (
+                      zeroBased >= safePreviewPage * PREVIEW_PAGE_SIZE &&
+                      zeroBased < (safePreviewPage + 1) * PREVIEW_PAGE_SIZE
+                    );
+                  })
+                  .sort((a, b) => a.row - b.row);
+
+                if (pageErrorEntries.length === 0) return null;
+
+                return (
+                  <div className="border-t bg-red-50 px-4 py-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {pageErrorEntries.map(({ row, messages }) =>
+                        messages.map((message) => (
+                          <span
+                            key={`${row}-${message}`}
+                            title={message}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                          >
+                            <svg
+                              className="h-3 w-3 flex-shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                              />
+                            </svg>
+                            <span className="truncate">
+                              Row {row}: {message}
+                            </span>
+                          </span>
+                        )),
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Pagination controls */}
               {pageCount > 1 && (

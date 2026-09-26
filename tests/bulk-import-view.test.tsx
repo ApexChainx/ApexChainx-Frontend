@@ -78,7 +78,10 @@ describe("BulkImportView", () => {
     fireEvent.change(input, {
       target: { files: [file("deep-error.csv", rows.join("\n"))] },
     });
-    expect(await screen.findByText(/Required field "end_time" is empty/)).toBeInTheDocument();
+    // The error appears both in the blocking-error list and as an inline
+    // preview chip (issue #610).
+    const matches = await screen.findAllByText(/Required field "end_time" is empty/);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
   });
 
@@ -180,6 +183,152 @@ describe("BulkImportView", () => {
       await renderWithFile(largeCsv(8));
       expect(screen.getByText("8 rows")).toBeInTheDocument();
       expect(screen.queryByRole("navigation", { name: /preview pagination/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Issue #610: preview diagnostics for row-level validation ──
+  describe("preview diagnostics (#610)", () => {
+    it("marks a malformed row inline without submitting", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: { files: [file("bad-row.csv", "service_id,start_time,end_time\ns1,2026-01-01,\n")] },
+      });
+
+      // Blocking error list flags the row (the inline chip duplicates the
+      // message by design)...
+      expect((await screen.findAllByText(/Required field "end_time" is empty/)).length).toBeGreaterThanOrEqual(2);
+      // ...the preview marks the offending row...
+      const badRow = screen.getByText("s1").closest("tr");
+      expect(badRow?.className).toContain("bg-red-50");
+      // ...with an inline error chip...
+      expect(screen.getByText(/Row 2: Required field "end_time" is empty/)).toBeInTheDocument();
+      // ...and an invalid-row readout in the header.
+      expect(screen.getByText(/1 row invalid/)).toBeInTheDocument();
+      // Submit stays disabled until resolved.
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
+    });
+
+    it("flags a malformed timestamp in a row", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [file("bad-ts.csv", "service_id,start_time,end_time\ns1,not-a-date,2026-01-02")],
+        },
+      });
+      // Message appears in the blocking list and the inline chip.
+      expect((await screen.findAllByText(/Malformed timestamp in "start_time"/)).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
+    });
+
+    it("flags an invalid severity value", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            file(
+              "bad-severity.csv",
+              "service_id,start_time,end_time,severity\ns1,2026-01-01,2026-01-02,catastrophic"
+            ),
+          ],
+        },
+      });
+      expect((await screen.findAllByText(/Invalid severity "catastrophic"/)).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
+    });
+
+    it("accepts all valid severity values", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            file(
+              "severities.csv",
+              "service_id,start_time,end_time,severity\ns1,2026-01-01,2026-01-02,critical\ns2,2026-01-01,2026-01-02,HIGH\ns3,2026-01-01,2026-01-02,medium\ns4,2026-01-01,2026-01-02,low"
+            ),
+          ],
+        },
+      });
+      await screen.findByText("severities.csv");
+      expect(screen.queryByText(/Invalid severity/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeEnabled();
+    });
+
+    it("flags an empty site_name column that is present but blank", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            file(
+              "bad-site.csv",
+              "service_id,start_time,end_time,site_name\ns1,2026-01-01,2026-01-02,"
+            ),
+          ],
+        },
+      });
+      expect((await screen.findAllByText(/Field "site_name" is present but empty/)).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
+    });
+
+    it("keeps missing optional columns silent", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file("minimal.csv", validCsv)] } });
+      await screen.findByText("minimal.csv");
+      expect(screen.queryByText(/is present but empty/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Malformed timestamp/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeEnabled();
+    });
+
+    it("chips appear per page while paging through a multi-page invalid file", async () => {
+      const lines = ["service_id,start_time,end_time,severity"];
+      for (let i = 1; i <= 25; i++) {
+        lines.push(`s${i},2026-01-01,2026-01-02,${i % 2 === 0 ? "bogus" : "high"}`);
+      }
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file("multi-bad.csv", lines.join("\n"))] } });
+
+      expect(await screen.findByText(/rows invalid/)).toBeInTheDocument();
+      // Page 1 chips only cover file rows 2–11 (the first 10 data rows); row
+      // 4 of the file is data row 3. Chips live in a nested span, so match on
+      // the wrapping chip element.
+      const pageChip = (text: RegExp) => screen.getByText(text).closest("span.rounded-full");
+      expect(pageChip(/Row 3: Invalid severity/)).not.toBeNull();
+      expect(screen.queryByText(/Row 13: Invalid severity/)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /next/i }));
+      expect(screen.getByText(/Row 13: Invalid severity/)).toBeInTheDocument();
+      expect(screen.queryByText(/Row 3: Invalid severity/)).not.toBeInTheDocument();
+    });
+
+    it("marks a malformed JSON record inline", async () => {
+      render(<BulkImportView />);
+      const input = document.querySelector("input[type='file']") as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            new File(
+              [
+                JSON.stringify([
+                  { service_id: "s1", start_time: "2026-01-01", end_time: "2026-01-02" },
+                  { service_id: "s2", start_time: "nope", end_time: "2026-01-02" },
+                ]),
+              ],
+              "bad.json",
+              { type: "application/json" }
+            ),
+          ],
+        },
+      });
+      expect((await screen.findAllByText(/Malformed timestamp in "start_time"/)).length).toBeGreaterThanOrEqual(2);
+      const badRow = screen.getByText("s2").closest("tr");
+      expect(badRow?.className).toContain("bg-red-50");
+      expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
     });
   });
 });
