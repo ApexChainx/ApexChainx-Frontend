@@ -36,6 +36,41 @@ async function login(page: Page) {
 }
 
 test.describe("Bulk import journey", () => {
+  // Issue #609: a larger fixture must be page-able in the preview before
+  // submission, with the row-count readout tracking the visible window.
+  test("pages through a large preview before submission", async ({ page }) => {
+    await mockApi(page);
+    await login(page);
+
+    await page.goto("/bulk-import");
+    await expect(page.getByRole("heading", { name: "Bulk Outage Import" })).toBeVisible();
+
+    const lines = [VALID_HEADERS];
+    for (let i = 1; i <= 30; i++) {
+      lines.push(`s${i},2026-01-01T00:00:00Z,2026-01-02T00:00:00Z`);
+    }
+
+    await page.getByLabel("Choose file").setInputFiles({
+      name: `large-preview-${Date.now()}.csv`,
+      mimeType: "text/csv",
+      buffer: Buffer.from(lines.join("\n")),
+    });
+
+    // Row-count readout reflects the full file, only the first page renders.
+    await expect(page.getByText("30 rows")).toBeVisible();
+    await expect(page.getByText("s1")).toBeVisible();
+    await expect(page.getByText("s11")).toBeHidden();
+
+    // Previous/next paging works...
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByText("s11")).toBeVisible();
+    await expect(page.getByText("s1")).toBeHidden();
+
+    // ...and the upload itself still succeeds from a later page.
+    await page.getByRole("button", { name: /upload file/i }).click();
+    await expect(page.getByText("Import Summary")).toBeVisible();
+  });
+
   test("uploads a valid CSV, shows the result, and lists it in history", async ({ page }) => {
     await mockApi(page);
     await login(page);
