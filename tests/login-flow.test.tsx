@@ -3,6 +3,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LoginForm from "@/components/auth/LoginForm";
+import { I18nProvider } from "@/i18n/i18n";
+
+function renderLoginForm() {
+  return render(
+    <I18nProvider>
+      <LoginForm />
+    </I18nProvider>,
+  );
+}
 
 const mockPost = vi.fn();
 const mockCompleteTwoFactorLogin = vi.fn();
@@ -62,7 +71,7 @@ describe("LoginForm", () => {
     it("advances to the challenge step when the login response requires a second factor", async () => {
       mockPost.mockResolvedValue({ data: { two_factor_required: true } });
 
-      render(<LoginForm />);
+      renderLoginForm();
       await submitCredentials();
 
       await waitFor(() => {
@@ -86,7 +95,7 @@ describe("LoginForm", () => {
       });
       mockPost.mockRejectedValue(err);
 
-      render(<LoginForm />);
+      renderLoginForm();
       await submitCredentials();
 
       await waitFor(() => {
@@ -100,7 +109,7 @@ describe("LoginForm", () => {
       mockPost.mockResolvedValue({ data: { two_factor_required: true } });
       mockCompleteTwoFactorLogin.mockResolvedValue(fullSession);
 
-      render(<LoginForm />);
+      renderLoginForm();
       await submitCredentials();
 
       await userEvent.type(
@@ -126,7 +135,7 @@ describe("LoginForm", () => {
       mockPost.mockResolvedValue({ data: { two_factor_required: true } });
       mockCompleteTwoFactorLogin.mockRejectedValue(new Error("Invalid code"));
 
-      render(<LoginForm />);
+      renderLoginForm();
       await submitCredentials();
 
       for (let i = 0; i < 5; i += 1) {

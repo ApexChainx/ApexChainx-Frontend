@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
 import {
   checkThrottle,
@@ -82,6 +83,7 @@ function hasFullSession(data: unknown): data is AuthSessionResponse {
 export default function LoginForm() {
   const router = useRouter();
   const { storeSession } = useSession();
+  const { t } = useI18n();
 
   const [step, setStep] = useState<LoginStep>("credentials");
   const [email, setEmail] = useState("");
@@ -141,7 +143,7 @@ export default function LoginForm() {
     const decision = checkThrottle("auth:login", LOGIN_MIN_INTERVAL_MS);
     if (!decision.allowed) {
       setThrottleMessage(
-        `Please wait ${Math.ceil(decision.retryAfterMs / 1000)}s before trying again.`
+        t("auth.throttleWait", { seconds: Math.ceil(decision.retryAfterMs / 1000) })
       );
       scheduleLoginCooldown(decision.retryAfterMs);
       return;
@@ -174,7 +176,7 @@ export default function LoginForm() {
         router.push("/");
         router.refresh();
       } else {
-        setError("Unexpected login response. Please try again.");
+        setError(t("auth.unexpectedLoginResponse"));
       }
     } catch (err) {
       // Backend failure — grow the client-side backoff so a flaky client or
@@ -187,7 +189,7 @@ export default function LoginForm() {
         setStep("challenge");
         return;
       }
-      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      setError(err instanceof Error ? err.message : t("auth.loginFailed"));
     } finally {
       setLoading(false);
     }
@@ -199,9 +201,7 @@ export default function LoginForm() {
     setThrottleMessage(null);
 
     if (failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
-      setThrottleMessage(
-        "Too many failed attempts. The verification button has been disabled."
-      );
+      setThrottleMessage(t("auth.tooManyAttempts"));
       return;
     }
 
@@ -220,12 +220,10 @@ export default function LoginForm() {
     } catch (err) {
       const next = failedAttempts + 1;
       setFailedAttempts(next);
-      setError(err instanceof Error ? err.message : "Invalid code. Please try again.");
+      setError(err instanceof Error ? err.message : t("auth.invalidCode"));
 
       if (next >= MAX_CHALLENGE_ATTEMPTS) {
-        setThrottleMessage(
-          "Too many failed attempts. The verification button has been disabled for security."
-        );
+        setThrottleMessage(t("auth.tooManyAttemptsSecurity"));
       }
     } finally {
       setLoading(false);
@@ -238,16 +236,14 @@ export default function LoginForm() {
     return (
       <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-gray-800">Two-factor authentication</h1>
-          <p className="text-sm text-gray-500">
-            Enter the 6-digit code from your authenticator app to continue.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-800">{t("auth.twoFactorTitle")}</h1>
+          <p className="text-sm text-gray-500">{t("auth.twoFactorSubtitle")}</p>
         </div>
 
         <form onSubmit={handleChallengeSubmit} className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="totp" className="block text-sm font-medium text-gray-700">
-              Authentication code
+              {t("auth.authCode")}
             </label>
             <input
               id="totp"
@@ -280,10 +276,10 @@ export default function LoginForm() {
             className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {locked
-              ? "Verification locked"
+              ? t("auth.verificationLocked")
               : loading
-                ? "Verifying…"
-                : "Verify and sign in"}
+                ? t("auth.verifying")
+                : t("auth.verifyAndSignIn")}
           </button>
 
           {!locked && (
@@ -292,7 +288,7 @@ export default function LoginForm() {
               onClick={backToCredentials}
               className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
             >
-              Back to sign in
+              {t("auth.backToSignIn")}
             </button>
           )}
         </form>
@@ -303,14 +299,14 @@ export default function LoginForm() {
   return (
     <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-gray-800">Sign in</h1>
-        <p className="text-sm text-gray-500">Enter your credentials to continue.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{t("auth.signIn")}</h1>
+        <p className="text-sm text-gray-500">{t("auth.signInSubtitle")}</p>
       </div>
 
       <form onSubmit={handleCredentialsSubmit} className="space-y-4">
         <div className="space-y-1">
           <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
+            {t("auth.email")}
           </label>
           <input
             id="email"
@@ -325,7 +321,7 @@ export default function LoginForm() {
 
         <div className="space-y-1">
           <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Password
+            {t("auth.password")}
           </label>
           <input
             id="password"
@@ -354,17 +350,17 @@ export default function LoginForm() {
           className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {loading
-            ? "Signing in…"
+            ? t("auth.signingIn")
             : loginCooldown > 0
-              ? `Sign in again in ${Math.ceil(loginCooldown / 1000)}s`
-              : "Sign in"}
+              ? t("auth.signInAgainIn", { seconds: Math.ceil(loginCooldown / 1000) })
+              : t("auth.signIn")}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500">
-        No account?{" "}
+        {t("auth.noAccount")}{" "}
         <Link href="/register" className="text-blue-600 underline underline-offset-2">
-          Register
+          {t("auth.register")}
         </Link>
       </p>
     </div>

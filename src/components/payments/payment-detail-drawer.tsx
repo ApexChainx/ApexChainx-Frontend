@@ -72,7 +72,7 @@ function ExplorerLink({
   value: string | null; 
   label?: string 
 }) {
-  if (!value) return <span className="font-mono text-xs text-slate-400">—</span>;
+  if (!value) return <span className="font-mono text-xs text-slate-600">—</span>;
   
   const link = explorerLink(type, value);
   const display = label ?? value;
@@ -99,7 +99,7 @@ function ExplorerLink({
 function DetailRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-1.5 border-b border-slate-100 pb-3 last:border-0">
-      <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wider text-slate-600">{label}</dt>
       <dd className={`break-all text-slate-900 leading-relaxed ${mono ? "font-mono text-xs" : "text-sm"}`}>
         {value}
       </dd>
@@ -260,7 +260,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
           </h2>
           <button 
             onClick={onClose} 
-            className="rounded-lg p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="rounded-lg p-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             aria-label="Close drawer"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -304,7 +304,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
                         </svg>
                       </Link>
                     ) : (
-                      <span className="italic text-slate-400">No linked outage</span>
+                      <span className="italic text-slate-600">No linked outage</span>
                     )
                   }
                 />
@@ -366,7 +366,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
               {/* Actions */}
               <div className="space-y-3 border-t border-slate-200 pt-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
                   Actions
                 </p>
                 

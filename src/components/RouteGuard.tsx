@@ -28,7 +28,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   // Loading — don't flash protected content
   if (state === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-600">
         Loading…
       </div>
     );
@@ -44,7 +44,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-center">
         <p className="text-lg font-semibold text-slate-800">Access denied</p>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-600">
           This page is restricted to administrators. Contact your admin if you need access.
         </p>
         <Link href="/" className="mt-2 text-sm text-blue-600 underline">
