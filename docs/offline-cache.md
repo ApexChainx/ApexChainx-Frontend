@@ -25,7 +25,10 @@ Source: `src/lib/persisted-cache.ts`
 - **What's stored:** arbitrary JSON-serializable payloads written by callers.
   Today the only caller is `useOutages` (see below), which writes under keys
   like `outages:{"page":1,"page_size":10,...}` — one entry per distinct
-  params combination.
+  params combination. `useUsdRates` (Issue #618) also writes a last-good
+  snapshot under the key `usd-rates-snapshot` (a `{ rates, fetchedAt }`
+  payload, 7-day TTL) so an unreachable rate source can be survived offline;
+  on fetch failure the hook serves that snapshot with an `isStale` flag.
 - **Entry shape:**
   ```ts
   interface CacheEntry<T> {
@@ -186,6 +189,9 @@ call `persistedCache.clear()` from the console.
 
 - `src/lib/persisted-cache.ts` — IndexedDB layer implementation.
 - `src/features/outages/hooks/useOutages.ts` — hydration + write-through.
+- `src/hooks/useUsdRates.ts` — writes the `usd-rates-snapshot` last-good entry
+  (Issue #618); its endpoint is externalized via `NEXT_PUBLIC_USD_RATE_URL`
+  with the CoinGecko simple-price URL as the documented default.
 - `public/sw.js` — service worker precache and runtime strategy.
 - `src/lib/query-keys.ts` — `slaEventKeys` query-key factory used by
   `useOutages`.
