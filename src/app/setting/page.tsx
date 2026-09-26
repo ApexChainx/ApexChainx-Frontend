@@ -20,23 +20,6 @@ import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { useRouter } from "next/navigation";
 
-type AuthUser = {
-  id: string;
-  email: string;
-  full_name?: string | null;
-  role: string;
-  stellar_wallet?: string | null;
-  created_at: string;
-};
-
-type AuthSessionResponse = {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  user: AuthUser;
-};
-
 type Wallet = {
   user_id: string;
   public_key: string;
@@ -152,39 +135,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleLogoutAll() {
-    setSessionActionLoading("logout-all");
-    setSessionActionFeedback(null);
-    setSessionActionError(null);
-    try {
-      await api.post(ENDPOINTS.auth.logoutAll);
-      await logout();
-      router.replace("/login");
-    } catch (err) {
-      const status = (err as { response?: { status?: number } }).response?.status;
-
-      // Issue #529 — a 404 means the all-session revocation endpoint is not
-      // deployed yet. This is NOT a server fault: signing out every session
-      // is a single-vendor convenience, and the backend may not support it.
-      // Sign out locally and stay on the page instead of silently navigating
-      // (the server-side token may still be valid on other devices).
-      if (status === 404) {
-        setSessionActionLoading(null);
-        await logout().catch(() => undefined);
-        setSessionActionError(
-          "All-session revocation isn't available on this server yet — you've been signed out of this session only. Other sessions will expire on their own."
-        );
-        return;
-      }
-
-      // Any other failure (5xx, network) — keep the session intact and let
-      // the user retry rather than destroying local state for a failed call.
-      setSessionActionError("Could not revoke all sessions. Please try again.");
-      setSessionActionLoading(null);
-    }
-  }
-  const [session, setSession] = useState<AuthSessionResponse | null>(null);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
   const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
@@ -192,16 +142,6 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const [registerForm, setRegisterForm] = useState({
-    email: "operator@example.com",
-    password: "secure123",
-    full_name: "NOC Operator",
-    role: "engineer",
-  });
-  const [loginForm, setLoginForm] = useState({
-    email: "operator@example.com",
-    password: "secure123",
-  });
   const [walletForm, setWalletForm] = useState({
     user_id: "",
     public_key: "",
@@ -210,8 +150,8 @@ export default function SettingsPage() {
   });
 
   const activeUserId = useMemo(
-    () => currentUser?.id ?? walletForm.user_id.trim(),
-    [currentUser?.id, walletForm.user_id],
+    () => walletForm.user_id.trim(),
+    [walletForm.user_id],
   );
   const walletAssetCount = useMemo(
     () => Object.keys(walletBalance?.balances ?? {}).length,
@@ -248,104 +188,6 @@ export default function SettingsPage() {
     const numBalance = parseFloat(balance);
     if (isNaN(numBalance)) return null;
     return (numBalance * usdRates[assetCode]).toFixed(2);
-  }
-
-  async function handleRegister() {
-    setLoadingAction("register");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.post<AuthUser>(ENDPOINTS.auth.register, registerForm);
-      setCurrentUser(response.data);
-      setWalletForm((current) => ({
-        ...current,
-        user_id: response.data.id,
-      }));
-      setFeedback("Account registered successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLogin() {
-    setLoadingAction("login");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.post<AuthSessionResponse>(ENDPOINTS.auth.login, loginForm);
-      setSession(response.data);
-      setCurrentUser(response.data.user);
-      setWalletForm((current) => ({
-        ...current,
-        user_id: response.data.user.id,
-      }));
-      setFeedback("Signed in successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLoadSession() {
-    if (!session?.access_token) {
-      setError("Login first to load the current session.");
-      return;
-    }
-
-    setLoadingAction("session");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.get<AuthUser>(ENDPOINTS.auth.me, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      setCurrentUser(response.data);
-      setFeedback("Session refreshed from the backend.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLogout() {
-    if (!session?.access_token) {
-      setSession(null);
-      setCurrentUser(null);
-      setFeedback("Local session cleared.");
-      return;
-    }
-
-    setLoadingAction("logout");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      await api.post(
-        ENDPOINTS.auth.logout,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
-      setSession(null);
-      setCurrentUser(null);
-      setFeedback("Logged out successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
   }
 
   async function handleCreateWallet() {
@@ -647,20 +489,6 @@ export default function SettingsPage() {
               {sessionActionLoading === "signout" ? `${t('common.loading')}` : t('common.signOut')}
             </button>
           </div>
-
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">{t('settings.revokeAllSessions')}</h3>
-            <p className="text-slate-500">
-              {t('settings.invalidateAllTokens')}
-            </p>
-            <button
-              onClick={() => void handleLogoutAll()}
-              disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
-              className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-            >
-              {sessionActionLoading === "logout-all" ? `${t('common.loading')}` : t('settings.revokeAllSessions')}
-            </button>
-          </div>
         </div>
 
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1">
@@ -713,10 +541,10 @@ export default function SettingsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">
-            {currentUser ? t('settings.authenticated') : t('settings.notSignedIn')}
+            {sessionUser ? t('settings.authenticated') : t('settings.notSignedIn')}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {currentUser?.email ?? t('settings.loadCreateAccount')}
+            {sessionUser?.email ?? t('settings.loadCreateAccount')}
           </p>
         </div>
 
@@ -786,124 +614,38 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">{t('settings.register')}</h3>
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={registerForm.full_name}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    full_name: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.fullName')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={registerForm.email}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.email')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                value={registerForm.password}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    password: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.password')}
-              />
+          {/*
+            Issue #616 — account access routes through the shared session
+            provider and the real /login and /register flows. The duplicate
+            embedded auth stack (register/login/refresh/logout handlers and
+            this identity card) was removed so the session provider stays
+            the single source of truth for auth transitions.
+          */}
+          {sessionState === "unauthenticated" && (
+            <div className="flex flex-wrap gap-3">
               <button
-                onClick={handleRegister}
-                disabled={loadingAction === "register"}
-                className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                type="button"
+                onClick={() => router.push("/login")}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
-                {loadingAction === "register" ? `${t('common.loading')}` : t('settings.registerAccount')}
+                {t('settings.signIn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                {t('settings.registerAccount')}
               </button>
             </div>
-
-            <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">{t('settings.login')}</h3>
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={loginForm.email}
-                onChange={(event) =>
-                  setLoginForm((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.email')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                value={loginForm.password}
-                onChange={(event) =>
-                  setLoginForm((current) => ({
-                    ...current,
-                    password: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.password')}
-              />
-              <button
-                onClick={handleLogin}
-                disabled={loadingAction === "login"}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                {loadingAction === "login" ? `${t('common.loading')}` : t('settings.signIn')}
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleLoadSession}
-                  disabled={loadingAction === "session"}
-                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {t('settings.refreshSession')}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  disabled={loadingAction === "logout"}
-                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {t('settings.logout')}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <h3 className="font-medium text-slate-900">{t('settings.currentUser')}</h3>
-            {currentUser ? (
-              <dl className="mt-3 grid gap-2 text-slate-600">
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.userId')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.id}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.email')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.email}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.role')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.role}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="mt-3 text-slate-500">{t('settings.noActiveUser')}</p>
-            )}
-          </div>
+          )}
+          {sessionState === "authenticated" && sessionUser && (
+            <p className="text-sm text-slate-600">
+              Signed in as{" "}
+              <span className="font-medium text-slate-900">{sessionUser.email}</span>{" "}
+              — manage your session below.
+            </p>
+          )}
         </section>
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
