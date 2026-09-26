@@ -10,6 +10,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 import { useSession } from "@/hooks/useSession";
 import { useStellarHealth } from "@/hooks/useStellarHealth";
 import { useUsdRates } from "@/hooks/useUsdRates";
@@ -19,6 +20,9 @@ import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { useRouter } from "next/navigation";
+
+/** Issue #620 — the friendbot confirm dialog requires typing this phrase. */
+const FUND_CONFIRM_PHRASE = "FUND";
 
 type AuthUser = {
   id: string;
@@ -74,6 +78,32 @@ type WalletBalance = {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong";
+}
+
+/**
+ * Issue #620 — translate known faucet rate-limit responses (HTTP 429, or a
+ * friendbot error body that reports rate limiting) into an actionable
+ * message; anything else falls back to the generic error text.
+ */
+function getFundingErrorMessage(
+  issue: unknown,
+  t: (key: string) => string,
+): string {
+  const response = (issue as { response?: { status?: number; data?: unknown } }).response;
+  if (response?.status === 429) {
+    return t('settings.friendbotRateLimited');
+  }
+
+  // Some proxies answer with a 200/400 and a rate-limit body instead of
+  // HTTP 429 — flag those too rather than showing a generic failure.
+  if (response?.data && typeof response.data === "object") {
+    const bodyText = JSON.stringify(response.data).toLowerCase();
+    if (bodyText.includes("rate limit") || bodyText.includes("rate_limit")) {
+      return t('settings.friendbotRateLimited');
+    }
+  }
+
+  return getErrorMessage(issue);
 }
 
 export default function SettingsPage() {
@@ -191,6 +221,12 @@ export default function SettingsPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  // Issue #620 — friendbot funding is a rate-limited one-shot resource: the
+  // request fires only after an explicit confirm, and this flag disables the
+  // fund button while it is in flight so a double-click cannot waste a
+  // second funding allotment.
+  const [isFunding, setIsFunding] = useState(false);
+  const [confirmFundOpen, setConfirmFundOpen] = useState(false);
 
   const [registerForm, setRegisterForm] = useState({
     email: "operator@example.com",
@@ -458,14 +494,27 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleFundTestnetWallet() {
+  // Issue #620 — clicking "Fund testnet wallet" opens a confirm dialog that
+  // names the target address; the friendbot request only fires on confirm.
+  function handleRequestFund() {
     const address = wallet?.public_key ?? walletForm.public_key.trim();
     if (!address) {
       setError("Load or link a wallet before funding the wallet.");
       return;
     }
 
-    setLoadingAction("fund-testnet-wallet");
+    setConfirmFundOpen(true);
+  }
+
+  async function handleConfirmFund() {
+    const address = wallet?.public_key ?? walletForm.public_key.trim();
+    setConfirmFundOpen(false);
+    if (!address) {
+      setError("Load or link a wallet before funding the wallet.");
+      return;
+    }
+
+    setIsFunding(true);
     setError(null);
     setFeedback(null);
 
@@ -485,15 +534,15 @@ export default function SettingsPage() {
         funded: true,
       }));
 
-      const successMessage = "Wallet funded successfully.";
+      const successMessage = t('settings.walletFunded');
       setFeedback(successMessage);
       toast(successMessage, "success");
     } catch (issue) {
-      const errorMessage = getErrorMessage(issue);
+      const errorMessage = getFundingErrorMessage(issue, t);
       setError(errorMessage);
       toast(errorMessage, "error");
     } finally {
-      setLoadingAction(null);
+      setIsFunding(false);
     }
   }
 
@@ -731,11 +780,11 @@ export default function SettingsPage() {
           {env.STELLAR_NETWORK === "testnet" && walletAddress ? (
             <button
               type="button"
-              onClick={() => void handleFundTestnetWallet()}
-              disabled={loadingAction === "fund-testnet-wallet" || isHorizonUnreachable}
+              onClick={handleRequestFund}
+              disabled={isFunding || isHorizonUnreachable}
               className="mt-3 w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
             >
-              {loadingAction === "fund-testnet-wallet" ? "Funding..." : "Fund testnet wallet"}
+              {isFunding ? t('settings.funding') : t('settings.fundTestnetWallet')}
             </button>
           ) : null}
         </div>
@@ -1130,6 +1179,21 @@ export default function SettingsPage() {
           </p>
         </section>
       )}
+
+      {/* Issue #620 — explicit confirm naming the target address before the
+          rate-limited friendbot request fires. */}
+      <ConfirmDialog
+        isOpen={confirmFundOpen}
+        title={t('settings.fundConfirmTitle')}
+        message={t('settings.fundConfirmMessage', {
+          address: wallet?.public_key ?? walletForm.public_key.trim(),
+        })}
+        confirmPhrase={FUND_CONFIRM_PHRASE}
+        confirmLabel={t('settings.fundConfirmLabel')}
+        loading={isFunding}
+        onConfirm={handleConfirmFund}
+        onCancel={() => setConfirmFundOpen(false)}
+      />
     </div>
   );
 }

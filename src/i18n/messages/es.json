@@ -106,7 +106,14 @@
     "walletBackendBridge": "Crea, vincula e inspecciona la billetera del operador a través del puente del backend.",
     "funded": "Financiada",
     "unfunded": "Sin financiación",
-    "trustlineReady": "Línea de confianza lista"
+    "trustlineReady": "Línea de confianza lista",
+    "fundTestnetWallet": "Financiar billetera testnet",
+    "funding": "Financiando...",
+    "walletFunded": "Billetera financiada con éxito.",
+    "friendbotRateLimited": "Límite de frecuencia de Friendbot alcanzado — espera un momento e inténtalo de nuevo.",
+    "fundConfirmTitle": "¿Financiar billetera testnet?",
+    "fundConfirmMessage": "Esto solicita fondos de testnet del Stellar Friendbot para {address}. Friendbot tiene un límite de frecuencia, así que un repetido accidental puede desperdiciar una asignación de fondos. Escribe \"FUND\" para continuar.",
+    "fundConfirmLabel": "Confirmar financiación"
   },
   "errors": {
     "somethingWentWrong": "Algo salió mal",

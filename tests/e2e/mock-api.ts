@@ -52,6 +52,15 @@ interface BulkImportHistoryRecord {
 /** Records created via POST /outages/bulk; read back by the history page. */
 const bulkImportHistory: BulkImportHistoryRecord[] = [];
 
+/**
+ * Wallets linked via POST /wallets/link, keyed by user id. The settings page
+ * reads status/balance back through these entries after funding.
+ */
+const linkedWallets = new Map<
+  string,
+  { public_key: string; funded: boolean; trustline_ready: boolean }
+>();
+
 interface SlaRecord {
   status: "met" | "violated";
   mttr_minutes: number;
@@ -452,6 +461,62 @@ export async function mockApi(
       const [retried] = failedPayments.splice(index, 1);
       const completed = { ...retried, status: "completed" };
       return json(200, completed);
+    }
+
+    /* ---------------------------- Wallets ---------------------------- */
+    // Friendbot faucet — must be matched before the /wallets/:id patterns
+    // below, since "friendbot" would otherwise parse as an id.
+    if (method === "GET" && path === "/api/v1/wallets/friendbot") {
+      return json(200, { ok: true });
+    }
+
+    if (method === "POST" && path === "/api/v1/wallets/link") {
+      const body = request.postDataJSON() as {
+        user_id?: string;
+        public_key?: string;
+        funded?: boolean;
+        trustline_ready?: boolean;
+      };
+      const userId = body.user_id ?? "user-1";
+      const publicKey = body.public_key ?? "GABC";
+      linkedWallets.set(userId, {
+        public_key: publicKey,
+        funded: body.funded ?? false,
+        trustline_ready: body.trustline_ready ?? false,
+      });
+      return json(200, {
+        user_id: userId,
+        public_key: publicKey,
+        funded: body.funded ?? false,
+        trustline_ready: body.trustline_ready ?? false,
+        active: true,
+        created_at: new Date().toISOString(),
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    const walletStatusMatch = path.match(/^\/api\/v1\/wallets\/([^/]+)\/status$/);
+    if (walletStatusMatch && method === "GET") {
+      const linked = linkedWallets.get(walletStatusMatch[1]!);
+      if (!linked) return json(404, { message: "Not found" });
+      return json(200, {
+        user_id: walletStatusMatch[1],
+        public_key: linked.public_key,
+        funded: linked.funded,
+        trustline_ready: linked.trustline_ready,
+        usable: linked.funded && linked.trustline_ready,
+        active: true,
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    const walletBalanceMatch = path.match(/^\/api\/v1\/wallets\/([^/]+)\/balance$/);
+    if (walletBalanceMatch && method === "GET") {
+      return json(200, {
+        address: walletBalanceMatch[1],
+        balances: { XLM: "1000" },
+        last_updated: new Date().toISOString(),
+      });
     }
 
     /* ------------------------------ SLA ------------------------------ */
