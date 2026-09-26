@@ -5,7 +5,8 @@ import { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
-import { slaConfigQueryKey, useSlaConfig, useUpdateSlaConfig } from "@/hooks/useSlaConfig";
+import { slaEventKeys } from "@/lib/query-keys";
+import { useSlaConfig, useUpdateSlaConfig } from "@/hooks/useSlaConfig";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -36,7 +37,7 @@ describe("useSlaConfig cache invalidation", () => {
   });
 
   it("exposes a stable query key shape", () => {
-    expect(slaConfigQueryKey()).toEqual(["sla", "config"]);
+    expect(slaEventKeys.config).toEqual(["sla-events", "config"]);
   });
 
   it("populates cache after successful fetch", async () => {
@@ -51,14 +52,14 @@ describe("useSlaConfig cache invalidation", () => {
     expect(result.current.data?.[0]?.severity).toBe("critical");
     expect(mockedApi.get).toHaveBeenCalledWith("/sla/config");
     // The payload is readable through the documented query key.
-    expect(client.getQueryData(slaConfigQueryKey())).toHaveLength(1);
+    expect(client.getQueryData(slaEventKeys.config)).toHaveLength(1);
   });
 
   it("updates cache entry after mutation without refetch", async () => {
     const initial = [
       { severity: "high" as const, threshold_minutes: 60, penalty_per_minute: 2, reward_base: 50 },
     ];
-    client.setQueryData(slaConfigQueryKey(), initial);
+    client.setQueryData(slaEventKeys.config, initial);
 
     mockedApi.put.mockResolvedValueOnce({
       data: { threshold_minutes: 45, penalty_per_minute: 3, reward_base: 50 },
@@ -74,7 +75,7 @@ describe("useSlaConfig cache invalidation", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    const cached = client.getQueryData<typeof initial>(slaConfigQueryKey());
+    const cached = client.getQueryData<typeof initial>(slaEventKeys.config);
     expect(cached?.[0]?.threshold_minutes).toBe(45);
     expect(mockedApi.get).not.toHaveBeenCalled();
   });

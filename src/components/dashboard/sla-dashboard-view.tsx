@@ -12,6 +12,7 @@ import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
@@ -96,7 +97,7 @@ export default function SLADashboardView() {
   }
 
   const primary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics", filters],
+    queryKey: slaEventKeys.dashboard(filters),
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
     structuralSharing: (oldData: unknown, newData: unknown) => {
@@ -126,7 +127,7 @@ export default function SLADashboardView() {
   const compareModeActive = compareMode && hasDateRange;
 
   const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare", comparisonFilters],
+    queryKey: slaEventKeys.dashboardCompare(comparisonFilters),
     queryFn: () => fetchDashboardMetrics(comparisonFilters),
     staleTime: 30_000,
     enabled: compareModeActive,
