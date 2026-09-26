@@ -5,9 +5,18 @@ import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 
 import type {
+  BulkImportProgress,
   BulkImportRecord,
   BulkImportResult,
+  BulkImportStage,
 } from "@/types/bulkImport";
+
+export type {
+  BulkImportProgress,
+  BulkImportRecord,
+  BulkImportResult,
+  BulkImportStage,
+};
 
 const BULK_IMPORT_ENDPOINT = ENDPOINTS.outages.bulk;
 const BULK_IMPORT_HISTORY_ENDPOINT = ENDPOINTS.outages.bulkHistory;
@@ -18,10 +27,31 @@ const MAGIC_BYTES: Record<string, number[]> = {
   "text/plain": [], // No magic bytes requirement
 };
 
-interface BulkImportOptions {
+export interface BulkImportOptions {
   signal?: AbortSignal;
-  onProgress?: (progress: number) => void;
+  /**
+   * Issue #614 — staged progress callback. The import runs as a single
+   * request, so progress is emitted at the real phase boundaries (file
+   * inspection → content validation → upload → server apply → done), with
+   * the axios upload byte ratio mapped onto the submitting stage.
+   */
+  onProgress?: (progress: BulkImportProgress) => void;
 }
+
+/**
+ * Issue #614 — overall-percent anchors for each import stage. The upload
+ * itself is one shot, so the byte ratio is scaled into the submitting band
+ * and the later stages land at fixed anchors, keeping `percent`
+ * monotonically increasing for the progress strip.
+ */
+const STAGE_PERCENT = {
+  parsing: 0,
+  validating: 10,
+  submittingStart: 15,
+  submittingEnd: 90,
+  applying: 95,
+  done: 100,
+} as const;
 
 interface APIError {
   response?: {
@@ -40,17 +70,6 @@ function createFormData(file: File): FormData {
   return formData;
 }
 
-function calculateProgress(event: AxiosProgressEvent): number {
-  if (!event.total) {
-    return 0;
-  }
-
-  return Math.min(
-    100,
-    Math.round((event.loaded * 100) / event.total)
-  );
-}
-
 function extractErrorMessage(error: unknown): string {
   const apiError = error as APIError;
 
@@ -62,7 +81,8 @@ function extractErrorMessage(error: unknown): string {
 }
 
 function buildUploadConfig(
-  options?: BulkImportOptions
+  options?: BulkImportOptions,
+  fileSize = 0
 ): AxiosRequestConfig<FormData> {
   const config: AxiosRequestConfig<FormData> = {
     headers: {
@@ -76,7 +96,23 @@ function buildUploadConfig(
 
   if (options?.onProgress) {
     config.onUploadProgress = (event: AxiosProgressEvent) => {
-      options.onProgress?.(calculateProgress(event));
+      // Issue #614 — map the raw upload byte ratio onto the submitting
+      // stage band so the strip shows per-upload progress instead of a
+      // single frozen percentage.
+      const total = event.total || fileSize;
+      const ratio =
+        total > 0 ? Math.min(1, Math.max(0, event.loaded / total)) : 0;
+      options.onProgress?.({
+        stage: "submitting",
+        processed: event.loaded,
+        total,
+        percent:
+          STAGE_PERCENT.submittingStart +
+          Math.round(
+            (STAGE_PERCENT.submittingEnd - STAGE_PERCENT.submittingStart) *
+              ratio
+          ),
+      });
     };
   }
 
@@ -111,6 +147,12 @@ async function validateMagicBytes(file: File): Promise<void> {
 
 /**
  * Upload outages file for bulk import.
+ *
+ * Issue #614 — emits staged progress at the real phase boundaries: parsing
+ * (file inspection), validating (magic-byte check), submitting (upload,
+ * driven by axios byte progress), applying (server accepted the batch) and
+ * done (result in hand). The return value is unchanged; progress is
+ * additive for consumers that want it.
  */
 export async function bulkImportOutages(
   file: File,
@@ -120,7 +162,21 @@ export async function bulkImportOutages(
     throw new Error("No file provided for upload.");
   }
 
+  options?.onProgress?.({
+    stage: "parsing",
+    processed: 0,
+    total: 0,
+    percent: STAGE_PERCENT.parsing,
+  });
+
   await validateMagicBytes(file);
+
+  options?.onProgress?.({
+    stage: "validating",
+    processed: 0,
+    total: 0,
+    percent: STAGE_PERCENT.validating,
+  });
 
   try {
     const formData = createFormData(file);
@@ -128,8 +184,21 @@ export async function bulkImportOutages(
     const response = await api.post<BulkImportResult>(
       BULK_IMPORT_ENDPOINT,
       formData,
-      buildUploadConfig(options)
+      buildUploadConfig(options, file.size)
     );
+
+    options?.onProgress?.({
+      stage: "applying",
+      processed: file.size,
+      total: file.size,
+      percent: STAGE_PERCENT.applying,
+    });
+    options?.onProgress?.({
+      stage: "done",
+      processed: file.size,
+      total: file.size,
+      percent: STAGE_PERCENT.done,
+    });
 
     return response.data;
   } catch (error: unknown) {

@@ -1,10 +1,11 @@
 /** ApexChain Frontend Test Suite */
 /** ApexChain Network Operations Intelligence Platform */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BulkImportView from "@/components/bulk-import/bulk-import-view";
+import type { BulkImportProgress, BulkImportStage } from "@/types/bulkImport";
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
@@ -17,6 +18,30 @@ vi.mock("@/services/bulkImportService", () => ({
 
 const validCsv = "service_id,start_time,end_time\ns1,2026-01-01,2026-01-02";
 const file = (name: string, content: string) => new File([content], name, { type: "text/csv" });
+
+/** Issue #614 — one fake staged progress event per import stage. */
+const stagedProgress: BulkImportProgress[] = [
+  { stage: "parsing", processed: 0, total: 0, percent: 0 },
+  { stage: "validating", processed: 0, total: 0, percent: 10 },
+  { stage: "submitting", processed: 512, total: 1024, percent: 50 },
+  { stage: "applying", processed: 1024, total: 1024, percent: 95 },
+  { stage: "done", processed: 1024, total: 1024, percent: 100 },
+];
+
+const tick = (ms = 120) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Drives the fake service through the staged events with a small delay so
+ * each render is observable, then resolves with the import result. */
+function mockStagedImport(recorded: BulkImportProgress[]) {
+  mockBulkImport.mockImplementation(async (_file: File, options?: { onProgress?: (p: BulkImportProgress) => void }) => {
+    for (const event of stagedProgress) {
+      options?.onProgress?.(event);
+      recorded.push(event);
+      await tick();
+    }
+    return { imported: 2, skipped: 0, errors: [] };
+  });
+}
 
 describe("BulkImportView", () => {
   beforeEach(() => mockBulkImport.mockReset());
@@ -101,5 +126,87 @@ describe("BulkImportView", () => {
     await screen.findByText("data.csv");
     fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
     expect(await screen.findByText("Invalid date")).toBeInTheDocument();
+  });
+
+  // Issue #614 — staged progress strip.
+  it("drives the progress strip through every stage to completion", async () => {
+    const recorded: BulkImportProgress[] = [];
+    mockStagedImport(recorded);
+    render(<BulkImportView />);
+    const input = document.querySelector("input[type='file']") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file("data.csv", validCsv)] } });
+    await screen.findByText("data.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+
+    // The strip appears and transitions through the stages.
+    expect(await screen.findByText("Parsing file…")).toBeInTheDocument();
+    expect(await screen.findByText("Validating file…")).toBeInTheDocument();
+    expect(await screen.findByText("Uploading file…")).toBeInTheDocument();
+    expect(await screen.findByText("Applying import…")).toBeInTheDocument();
+
+    // The bar tracks the overall percent up to completion.
+    const bar = screen.getByRole("progressbar", { name: "Import progress" });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "100"));
+    expect(screen.getByText("Done")).toBeInTheDocument();
+
+    // The service saw the full stage sequence, ending at 100%.
+    expect(recorded.map((p) => p.stage)).toEqual([
+      "parsing",
+      "validating",
+      "submitting",
+      "applying",
+      "done",
+    ] satisfies BulkImportStage[]);
+    expect(recorded[recorded.length - 1]?.percent).toBe(100);
+
+    // Completion hands off to the result panel.
+    expect(await screen.findByText("Import Summary")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("replaces the submit button with the strip while an import is in flight", async () => {
+    mockStagedImport([]);
+    render(<BulkImportView />);
+    const input = document.querySelector("input[type='file']") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file("data.csv", validCsv)] } });
+    await screen.findByText("data.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    await screen.findByText("Uploading file…");
+
+    // No resubmit affordance exists mid-import; the file input is disabled.
+    expect(screen.queryByRole("button", { name: /upload file/i })).not.toBeInTheDocument();
+    expect(document.querySelector("input[type='file']")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeEnabled();
+  });
+
+  it("cancels an in-flight import from the strip and restores the submit button", async () => {
+    let observedSignal: AbortSignal | null = null;
+    mockBulkImport.mockImplementation(
+      async (_file: File, options?: { signal?: AbortSignal }) => {
+        observedSignal = options?.signal ?? null;
+        options?.onProgress?.({ stage: "submitting", processed: 10, total: 100, percent: 50 });
+        await new Promise((_, reject) => {
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError"))
+          );
+        });
+        return { imported: 0, skipped: 0, errors: [] };
+      }
+    );
+    render(<BulkImportView />);
+    const input = document.querySelector("input[type='file']") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file("data.csv", validCsv)] } });
+    await screen.findByText("data.csv");
+
+    fireEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    await screen.findByText("Uploading file…");
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => expect(observedSignal?.aborted).toBe(true));
+    expect(screen.queryByRole("button", { name: /cancel/i })).not.toBeInTheDocument();
+    // The file is retained, so the operator can resubmit after cancelling.
+    expect(await screen.findByRole("button", { name: /upload file/i })).toBeEnabled();
   });
 });

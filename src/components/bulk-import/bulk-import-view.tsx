@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useRef, useState, useCallback, useId } from "react";
 
 import { bulkImportOutages } from "@/services/bulkImportService";
-import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
+import type {
+  BulkImportProgress,
+  BulkImportResult,
+  BulkImportStage,
+  ImportValidationError,
+} from "@/types/bulkImport";
 import { STELLAR_NETWORK } from "@/lib/explorer";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -48,6 +53,22 @@ const MAX_VALIDATED_ROWS = 1000;
 
 type AcceptedExtension = (typeof ACCEPTED_EXTENSIONS)[number];
 type AcceptedMimeType = (typeof ACCEPTED_TYPES)[number];
+
+// Issue #614 — human-readable label for each import stage, shown in the
+// progress strip so operators can tell parsing/validating/submitting/
+// applying apart instead of staring at a frozen busy state.
+const STAGE_LABELS: Record<BulkImportStage, string> = {
+  parsing: "Parsing file…",
+  validating: "Validating file…",
+  submitting: "Uploading file…",
+  applying: "Applying import…",
+  done: "Done",
+};
+
+function formatProgressBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PreviewState {
@@ -352,7 +373,8 @@ export default function BulkImportView() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
-  const [progress, setProgress] = useState(0);
+  // Issue #614 — latest staged progress event; null when no import is running.
+  const [progress, setProgress] = useState<BulkImportProgress | null>(null);
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -451,7 +473,9 @@ export default function BulkImportView() {
     const controller = new AbortController();
     abortRef.current = controller;
     setStatus("uploading");
-    setProgress(0);
+    // Issue #614 — seed the strip with the opening stage so it renders
+    // immediately, then let the service's staged events drive it.
+    setProgress({ stage: "parsing", processed: 0, total: 0, percent: 0 });
     setSubmitError(null);
     setResult(null);
 
@@ -460,12 +484,13 @@ export default function BulkImportView() {
         signal: controller.signal,
         onProgress: setProgress,
       });
-      
+
       setResult(response);
       setFile(null);
       setPreview(null);
       setStatus("success");
-      
+      setProgress(null);
+
       if (inputRef.current) inputRef.current.value = "";
     } catch (err: unknown) {
       if ((err as { name?: string }).name === "CanceledError" || (err as { name?: string }).name === "AbortError") {
@@ -477,18 +502,16 @@ export default function BulkImportView() {
         setSubmitError("Upload failed. Please try again.");
         setStatus("error");
       }
+      setProgress(null);
     } finally {
       abortRef.current = null;
-      if (status !== "cancelled") {
-        setProgress(0);
-      }
     }
-  }, [file, preview, status]);
+  }, [file, preview]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
     setStatus("cancelled");
-    setProgress(0);
+    setProgress(null);
   }, []);
 
   const handleReset = useCallback(() => {
@@ -498,7 +521,7 @@ export default function BulkImportView() {
     setResult(null);
     setSubmitError(null);
     setStatus("idle");
-    setProgress(0);
+    setProgress(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -711,24 +734,50 @@ export default function BulkImportView() {
 
       {/* Actions */}
       <div className="space-y-2">
-        {status === "uploading" ? (
-          <>
-            <div className="w-full rounded-full bg-gray-200 h-2 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+        {status === "uploading" && progress ? (
+          // Issue #614 — progress strip: stage label + overall percent + bar
+          // + byte counter + cancel. Replaces the submit button while the
+          // import is in flight, so a resubmit can't duplicate the batch.
+          <div
+            className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-blue-800">
+                {STAGE_LABELS[progress.stage]}
+              </span>
+              <span className="text-xs font-semibold tabular-nums text-blue-700">
+                {progress.percent}%
+              </span>
+            </div>
+            <div
+              className="w-full rounded-full bg-blue-100 h-2 overflow-hidden"
+              role="progressbar"
+              aria-label="Import progress"
+              aria-valuenow={progress.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className="h-2 rounded-full bg-blue-600 transition-all duration-200 ease-out"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress.percent}%` }}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">{progress}% uploaded</span>
+            {progress.total > 0 && (
+              <p className="text-xs tabular-nums text-blue-600">
+                {formatProgressBytes(progress.processed)} of {formatProgressBytes(progress.total)} uploaded
+              </p>
+            )}
+            <div className="flex justify-end">
               <button
                 onClick={handleCancel}
-                className="text-xs text-red-500 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
+                className="text-xs font-medium text-red-600 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
               >
                 Cancel
               </button>
             </div>
-          </>
+          </div>
         ) : (
           <button
             onClick={() => void handleSubmit()}

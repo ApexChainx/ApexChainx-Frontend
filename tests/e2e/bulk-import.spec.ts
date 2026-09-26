@@ -106,4 +106,45 @@ test.describe("Bulk import journey", () => {
     await expect(page.getByText(filename)).toBeVisible();
     await expect(page.getByText(/1 errors/i)).toBeVisible();
   });
+
+  // Issue #614 — a throttled import endpoint makes the staged progress
+  // strip's transition observable: the strip appears with an in-flight
+  // stage while the request is pending, and the result lands only after
+  // the (delayed) response.
+  test("shows a visible progress transition while a throttled import is in flight", async ({
+    page,
+  }) => {
+    await mockApi(page, { bulkImportDelayMs: 1500 });
+    await login(page);
+
+    const filename = `throttled-import-${Date.now()}.csv`;
+
+    await page.goto("/bulk-import");
+    await expect(page.getByRole("heading", { name: "Bulk Outage Import" })).toBeVisible();
+
+    await page.getByLabel("Choose file").setInputFiles({
+      name: filename,
+      mimeType: "text/csv",
+      buffer: Buffer.from(validCsv()),
+    });
+    await expect(page.getByText(filename)).toBeVisible();
+
+    const uploadButton = page.getByRole("button", { name: /upload file/i });
+    await expect(uploadButton).toBeEnabled();
+    await uploadButton.click();
+
+    // The progress strip is visible with a live stage label and bar while
+    // the throttled request is pending — not a frozen busy state.
+    const bar = page.getByRole("progressbar", { name: "Import progress" });
+    await expect(bar).toBeVisible();
+    await expect(page.getByText("Uploading file…")).toBeVisible();
+
+    // The submit button is gone for the duration of the import, so the
+    // batch cannot be re-submitted mid-flight.
+    await expect(page.getByRole("button", { name: /upload file/i })).toHaveCount(0);
+
+    // Once the throttled response lands, the import completes.
+    await expect(page.getByText("Import Summary")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Imported")).toBeVisible();
+  });
 });

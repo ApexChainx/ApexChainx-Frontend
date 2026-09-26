@@ -146,6 +146,14 @@ export interface MockApiOptions {
    * another regardless of execution order. Defaults to none.
    */
   failedPayments?: FailedPaymentSeed[];
+
+  /**
+   * Issue #614 — delay in milliseconds before the bulk import endpoint
+   * responds. Throttling the response lets e2e tests observe the client's
+   * staged progress strip transition from an in-flight stage to completion
+   * instead of a single fast busy flash. Defaults to no delay.
+   */
+  bulkImportDelayMs?: number;
 }
 
 /**
@@ -311,6 +319,12 @@ export async function mockApi(
     // Must be handled before the generic /outages/:id matcher below, since
     // "/outages/bulk" would otherwise be treated as a single-outage lookup.
     if (method === "POST" && path === "/api/v1/outages/bulk") {
+      // Issue #614 — optional throttle so the progress strip's staged
+      // transition is observable end to end.
+      if (options.bulkImportDelayMs && options.bulkImportDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, options.bulkImportDelayMs));
+      }
+
       const raw = request.postData() ?? "";
       const filenameMatch = raw.match(/filename="([^"]+)"/);
       const filename = filenameMatch?.[1] ?? "upload.csv";
