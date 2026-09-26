@@ -36,6 +36,86 @@ async function login(page: Page) {
 }
 
 test.describe("Bulk import journey", () => {
+  // Issue #609: a larger fixture must be page-able in the preview before
+  // submission, with the row-count readout tracking the visible window.
+  test("pages through a large preview before submission", async ({ page }) => {
+    await mockApi(page);
+    await login(page);
+
+    await page.goto("/bulk-import");
+    await expect(page.getByRole("heading", { name: "Bulk Outage Import" })).toBeVisible();
+
+    const lines = [VALID_HEADERS];
+    for (let i = 1; i <= 30; i++) {
+      lines.push(`s${i},2026-01-01T00:00:00Z,2026-01-02T00:00:00Z`);
+    }
+
+    await page.getByLabel("Choose file").setInputFiles({
+      name: `large-preview-${Date.now()}.csv`,
+      mimeType: "text/csv",
+      buffer: Buffer.from(lines.join("\n")),
+    });
+
+    // Row-count readout reflects the full file, only the first page renders.
+    await expect(page.getByText("30 rows")).toBeVisible();
+    await expect(page.getByText("s1")).toBeVisible();
+    await expect(page.getByText("s11")).toBeHidden();
+
+    // Previous/next paging works...
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByText("s11")).toBeVisible();
+    await expect(page.getByText("s1")).toBeHidden();
+
+    // ...and the upload itself still succeeds from a later page.
+    await page.getByRole("button", { name: /upload file/i }).click();
+    await expect(page.getByText("Import Summary")).toBeVisible();
+  });
+
+  // Issue #611: history renders a summary strip and per-run failure badges,
+  // and pagination keeps the DOM bounded for long histories.
+  test("history shows a summary strip, failure badges, and bounded pagination", async ({ page }) => {
+    await mockApi(page);
+    await login(page);
+
+    // Seed 12 runs by importing one file per run so the history spans two
+    // pages at 10 records per page.
+    await page.goto("/bulk-import");
+    const seed = Date.now();
+    const filenames = Array.from({ length: 12 }, (_, i) => `history-run-${i + 1}-${seed}.csv`);
+    for (const filename of filenames) {
+      await page.getByLabel("Choose file").setInputFiles({
+        name: filename,
+        mimeType: "text/csv",
+        buffer: Buffer.from(validCsv()),
+      });
+      await expect(page.getByText("Import Summary")).toBeVisible();
+      await page.getByRole("button", { name: /upload another file/i }).click();
+    }
+
+    await page.getByRole("link", { name: /view history/i }).click();
+    await expect(page.getByRole("heading", { name: "Import History" })).toBeVisible();
+
+    // Summary strip renders with a success-rate percentage.
+    const summary = page.getByTestId("history-summary");
+    await expect(summary).toBeVisible();
+    await expect(summary).toContainText(/\d+%/);
+
+    // Visible runs carry a failure-rate badge; page 1 shows 10 of the 12.
+    await expect(page.getByText(/0% failures/i).first()).toBeVisible();
+    expect(await page.getByText(/% failures/i).count()).toBeLessThanOrEqual(10);
+
+    // Pagination keeps the DOM bounded and slides to page 2.
+    await expect(page.getByRole("navigation", { name: /history pagination/i })).toBeVisible();
+    expect(await page.getByRole("button", { name: /^Page \d+$/ }).count()).toBeLessThanOrEqual(5);
+    await expect(page.getByText(filenames[11]!, { exact: true })).toBeVisible(); // newest first
+    await expect(page.getByText(filenames[2]!, { exact: true })).toBeVisible(); // 10th record
+    await expect(page.getByText(filenames[1]!, { exact: true })).toBeHidden();
+
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByText(filenames[1]!, { exact: true })).toBeVisible();
+  });
+
   test("uploads a valid CSV, shows the result, and lists it in history", async ({ page }) => {
     await mockApi(page);
     await login(page);
