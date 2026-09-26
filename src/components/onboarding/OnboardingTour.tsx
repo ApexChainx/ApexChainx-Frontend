@@ -26,6 +26,13 @@ import { TOUR_STEPS } from "@/lib/onboarding/steps";
 /** Custom event other parts of the app dispatch to (re)start the tour. */
 export const START_TOUR_EVENT = "apexchain:start-tour";
 
+/**
+ * Issue #621 — debounce window collapsing rapid START_TOUR_EVENT dispatches
+ * (e.g. a double-fired event) into a single tour start so a second event
+ * can't double-mount a driver while the first start is still pending.
+ */
+const START_DEBOUNCE_MS = 250;
+
 export default function OnboardingTour() {
   const router = useRouter();
   const pathname = usePathname();
@@ -41,6 +48,8 @@ export default function OnboardingTour() {
   // Set before an intentional teardown (restart/locale change) so onDestroyed
   // doesn't mistake it for the operator finishing or skipping the tour.
   const restartingRef = useRef(false);
+  // Issue #621 — pending debounced start so rapid event repeats collapse.
+  const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathnameRef = useRef(pathname);
   const routerRef = useRef(router);
   const tRef = useRef(t);
@@ -75,7 +84,18 @@ export default function OnboardingTour() {
       routerRef.current.push(firstStep.route);
     }
 
-    const steps = TOUR_STEPS.map((step) => ({
+    const steps = TOUR_STEPS.filter((step) => {
+      // Issue #621 — validate each step's selector still resolves before
+      // highlighting. A step on the current route whose target is gone (the
+      // page changed under us) is skipped and the tour falls back to the
+      // next valid step instead of leaving a popover on a missing node.
+      // Steps on other routes can't be validated yet — the target page
+      // isn't rendered — so they're kept and driver.js waitForElement
+      // covers the render delay when the tour navigates there.
+      if (step.route !== pathnameRef.current) return true;
+      if (typeof document === "undefined") return true;
+      return Boolean(document.querySelector(step.selector));
+    }).map((step) => ({
       element: step.selector,
       popover: {
         title: resolveCopy(`onboarding.steps.${step.id}.title`, step.title),
@@ -84,6 +104,12 @@ export default function OnboardingTour() {
         align: step.align as "start" | "center" | "end" | undefined,
       },
     })) as DriveStep[];
+
+    // Issue #621 — nothing left to show; don't mount an empty tour.
+    if (steps.length === 0) {
+      startedRef.current = false;
+      return;
+    }
 
     const config: Config = {
       steps,
@@ -184,15 +210,37 @@ export default function OnboardingTour() {
   // Manual restart (e.g. Settings → "Replay tour"), ignoring the persisted flag.
   useEffect(() => {
     const handler = () => {
+      // Issue #621 — idempotency guard. A live driver instance means a tour
+      // is already running; a second event must not double-mount. Tear the
+      // running tour down and restart it atomically (restartingRef keeps the
+      // teardown from being mistaken for a finish/skip in onDestroyed).
       if (driverRef.current) {
         restartingRef.current = true;
         driverRef.current.destroy();
+        driverRef.current = null;
+        startedRef.current = false;
+        start();
+        return;
       }
-      startedRef.current = false;
-      start();
+      // Issue #621 — no live driver: debounce rapid repeats (e.g. a
+      // double-fired event) into a single start instead of mounting two.
+      if (startTimerRef.current) {
+        window.clearTimeout(startTimerRef.current);
+      }
+      startTimerRef.current = window.setTimeout(() => {
+        startTimerRef.current = null;
+        start();
+      }, START_DEBOUNCE_MS);
     };
     window.addEventListener(START_TOUR_EVENT, handler);
-    return () => window.removeEventListener(START_TOUR_EVENT, handler);
+    return () => {
+      window.removeEventListener(START_TOUR_EVENT, handler);
+      // Issue #621 — don't let a pending debounced start fire after unmount.
+      if (startTimerRef.current) {
+        window.clearTimeout(startTimerRef.current);
+        startTimerRef.current = null;
+      }
+    };
   }, [start]);
 
   // Rebuild copy if the locale changes mid-session while the tour is open.
@@ -212,6 +260,11 @@ export default function OnboardingTour() {
       restartingRef.current = true;
       driverRef.current?.destroy();
       driverRef.current = null;
+      // Issue #621 — cancel any pending debounced start.
+      if (startTimerRef.current) {
+        window.clearTimeout(startTimerRef.current);
+        startTimerRef.current = null;
+      }
     };
   }, []);
 
