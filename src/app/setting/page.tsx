@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
+import { getThemePreference, setThemePreference } from "@/lib/theme-storage";
 import { useRouter } from "next/navigation";
 
 type AuthUser = {
@@ -90,12 +91,10 @@ export default function SettingsPage() {
   const stellarHealth = useStellarHealth();
   const isHorizonUnreachable = stellarHealth.status === "unreachable";
 
-  // Initialize theme from localStorage
+  // Initialize theme from storage (Issue #619 — namespaced key, migrates the
+  // legacy "theme" key once on read)
   useEffect(() => {
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme) {
-      setTheme(storedTheme);
-    }
+    setTheme(getThemePreference());
   }, []);
 
   // Update theme when it changes
@@ -119,7 +118,7 @@ export default function SettingsPage() {
     }
 
     applyTheme(theme);
-    localStorage.setItem('theme', theme);
+    setThemePreference(theme);
 
     // Listen for system preference changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

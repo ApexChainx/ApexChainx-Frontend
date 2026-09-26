@@ -138,7 +138,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
             __html: `
               (function() {
                 function getTheme() {
-                  const stored = localStorage.getItem('theme');
+                  // Issue #619 — read the namespaced key first, falling back
+                  // to the legacy bare "theme" key for pre-migration users.
+                  const stored = localStorage.getItem('apexchain.theme') || localStorage.getItem('theme');
                   if (stored) return stored;
                   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
