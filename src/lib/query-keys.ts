@@ -22,6 +22,10 @@
  * metrics/comparison, SLA disputes, webhooks, bulk-import history) now read
  * their keys from this factory, so invalidating `slaEventKeys.*` reaches
  * them as documented.
+ *
+ * Issue #624 — `stellarHealth` backs the settings page's Horizon health
+ * poller, which moved from a hand-rolled useState+useEffect loop onto
+ * React Query (`refetchInterval` replaces the bespoke setInterval).
  */
 
 export const slaEventKeys = {
@@ -105,6 +109,12 @@ export const slaEventKeys = {
     list: (params?: Record<string, unknown>) =>
       ["sla-events", "bulk-imports", "list", params] as const,
   },
+
+  /**
+   * Horizon network health probe (issue #624 — the settings page's stellar
+   * health poller moved onto React Query; no family existed for it).
+   */
+  stellarHealth: ["sla-events", "stellar-health"] as const,
 };
 
 /**

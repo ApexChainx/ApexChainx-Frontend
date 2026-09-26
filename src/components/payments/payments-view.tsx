@@ -4,13 +4,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { PaymentsTable, type SortDir, type SortKey } from "@/components/payments/payments-table";
 import type { TableDensity } from "@/components/data-table";
-import { exportPayments, fetchPayments } from "@/services/paymentService";
+import { exportPayments, fetchPayments, type PaymentFilters } from "@/services/paymentService";
+import { slaEventKeys } from "@/lib/query-keys";
 import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
-import type { PaginatedPayments } from "@/types/payment";
 
 /**
  * Pages larger than the table's virtualization threshold render as a windowed list
@@ -21,11 +22,8 @@ const ROWS_PER_PAGE_OPTIONS = [10, 100, 500] as const;
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<PaginatedPayments | null>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
     () => searchParams?.get("paymentId") ?? null
   );
@@ -78,15 +76,12 @@ export default function PaymentsView() {
     setPage(1);
   };
 
-  const requestKey = useMemo(
-    () => `${page}:${perPage}:${statusFilter}:${typeFilter}:${dateFrom}:${dateTo}:${sortKey}:${sortDir}`,
-    [page, perPage, statusFilter, typeFilter, dateFrom, dateTo, sortKey, sortDir]
-  );
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    fetchPayments({
+  // Issue #624 — the list read moved onto React Query: the factory key
+  // (slaEventKeys.payments.list) doubles as the cache key, so any mutation
+  // invalidating the payments family refetches this table. Only UI state
+  // (pagination, filters, sort, density) stays component-local.
+  const filters = useMemo<PaymentFilters>(
+    () => ({
       page,
       page_size: perPage,
       status: statusFilter || undefined,
@@ -95,12 +90,19 @@ export default function PaymentsView() {
       date_to: dateTo || undefined,
       sort_by: sortKey,
       sort_dir: sortDir,
-    })
-      .then((response) => { if (isMounted) { setData(response); setError(null); } })
-      .catch(() => { if (isMounted) setError("Failed to load payments."); })
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
-  }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }),
+    [page, perPage, statusFilter, typeFilter, dateFrom, dateTo, sortKey, sortDir]
+  );
+
+  const {
+    data,
+    isFetching,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: slaEventKeys.payments.list(filters),
+    queryFn: () => fetchPayments(filters),
+  });
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -239,9 +241,9 @@ export default function PaymentsView() {
         sortDir={sortDir}
         onSort={toggleSort}
         onRowClick={openDrawer}
-        loading={loading}
-        error={error}
-        onReload={() => window.location.reload()}
+        loading={isFetching}
+        error={isError ? "Failed to load payments." : null}
+        onReload={() => void refetch()}
       />
 
       {data && totalPages > 1 && (

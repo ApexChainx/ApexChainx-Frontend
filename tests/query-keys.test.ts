@@ -145,6 +145,7 @@ describe("slaEventKeys factory (issue #623)", () => {
       slaEventKeys.webhooks.detail("x"),
       slaEventKeys.bulkImports.all,
       slaEventKeys.bulkImports.list(),
+      slaEventKeys.stellarHealth,
     ];
     for (const key of keys) {
       expect(key[0]).toBe("sla-events");
