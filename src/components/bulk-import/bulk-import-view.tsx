@@ -468,7 +468,17 @@ export default function BulkImportView() {
       
       if (inputRef.current) inputRef.current.value = "";
     } catch (err: unknown) {
-      if ((err as { name?: string }).name === "CanceledError" || (err as { name?: string }).name === "AbortError") {
+      const errName = (err as { name?: string }).name;
+      const errCode = (err as { code?: string }).code;
+      // A user-initiated cancel (CanceledError/AbortError) and a network-level
+      // abort of the in-flight request (axios ECONNABORTED) both mean the
+      // upload did not complete — surface that as a distinct cancelled state
+      // (Issue #613) rather than a generic failure.
+      const isCancelled =
+        errName === "CanceledError" ||
+        errName === "AbortError" ||
+        errCode === "ECONNABORTED";
+      if (isCancelled) {
         setStatus("cancelled");
       } else if (err instanceof Error) {
         setSubmitError(err.message || "Upload failed. Please try again.");
@@ -504,6 +514,16 @@ export default function BulkImportView() {
 
   const hasBlockingErrors = (preview?.errors.length ?? 0) > 0;
   const isProcessing = status === "uploading" || status === "validating";
+
+  // Per-row outcome summary for the result card (Issue #613): distinguish a
+  // partial failure (some rows imported, some failed) from a full failure
+  // (every row failed) so operators can tell them apart at a glance.
+  const totalResultRows = result
+    ? result.imported + result.skipped + result.errors.length
+    : 0;
+  const failedResultRows = result?.errors.length ?? 0;
+  const isFullFailure = failedResultRows > 0 && failedResultRows === totalResultRows;
+  const isPartialFailure = failedResultRows > 0 && failedResultRows < totalResultRows;
 
   // Mainnet bulk safety gate — early return with disabled message
   if (BULK_DISABLED) {
@@ -747,14 +767,39 @@ export default function BulkImportView() {
         </Alert>
       )}
 
+      {/* Cancelled upload */}
+      {status === "cancelled" && (
+        <Alert type="warning" title="Upload cancelled" onDismiss={() => setStatus("idle")}>
+          The import was cancelled before it completed. No import result was recorded.
+        </Alert>
+      )}
+
       {/* Success Result */}
       {result && (
         <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-              <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <div
+              className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                isFullFailure
+                  ? "bg-red-100"
+                  : isPartialFailure
+                    ? "bg-yellow-100"
+                    : "bg-green-100"
+              }`}
+            >
+              {isFullFailure ? (
+                <svg className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : isPartialFailure ? (
+                <svg className="h-4 w-4 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </div>
             <h2 className="text-base font-semibold text-gray-700">Import Summary</h2>
           </div>
@@ -773,6 +818,29 @@ export default function BulkImportView() {
               <p className="text-xs text-red-600">Errors</p>
             </div>
           </div>
+
+          {/*
+            Per-row failure summary (Issue #613). A partial failure still lands
+            some rows, so it gets an amber "X of Y rows failed" banner; a full
+            failure (every row rejected) gets a red "All Y rows failed" banner
+            so operators can tell the two apart at a glance.
+          */}
+          {isPartialFailure && (
+            <div
+              role="alert"
+              className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm font-medium text-yellow-700"
+            >
+              {failedResultRows} of {totalResultRows} rows failed
+            </div>
+          )}
+          {isFullFailure && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+            >
+              All {totalResultRows} rows failed
+            </div>
+          )}
 
           {result.errors.length > 0 && (
             <div>
@@ -806,12 +874,15 @@ export default function BulkImportView() {
                   Download report
                 </button>
               </div>
-              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-red-50 p-3">
+              <ul className="flex flex-wrap gap-1.5">
                 {result.errors.map((error, index) => (
-                  <li key={`${error.message}-${index}`} className="text-xs text-red-700">
-                    {error.row != null && <span className="font-semibold">Row {error.row}: </span>}
-                    {error.field && <span className="font-semibold">[{error.field}] </span>}
-                    {error.message}
+                  <li
+                    key={`${error.row}-${error.message}-${index}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700"
+                  >
+                    {error.row != null && <span>Row {error.row}:</span>}
+                    {error.field && <span className="opacity-75">[{error.field}]</span>}
+                    <span>{error.message}</span>
                   </li>
                 ))}
               </ul>
