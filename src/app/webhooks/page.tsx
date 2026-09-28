@@ -111,6 +111,7 @@ export default function WebhooksPage() {
       qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       if (selectedWebhook) setSelectedWebhook(null);
     },
+    onSettled: () => setPendingDelete(null),
   });
 
   const retryMutation = useMutation({
@@ -300,7 +301,7 @@ export default function WebhooksPage() {
                     Edit
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(wh.id)}
+                    onClick={() => setPendingDelete(wh)}
                     disabled={deleteMutation.isPending}
                     className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
@@ -438,6 +439,23 @@ export default function WebhooksPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title="Delete webhook?"
+        message={
+          `Deleting ${pendingDelete?.url ?? "this webhook"} stops delivery for every subscribed ` +
+          "event immediately and cannot be undone."
+        }
+        confirmPhrase={DELETE_CONFIRM_PHRASE}
+        confirmLabel="Delete webhook"
+        loading={deleteMutation.isPending}
+        variant="danger"
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
