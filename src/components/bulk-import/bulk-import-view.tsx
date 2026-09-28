@@ -5,8 +5,14 @@ import Link from "next/link";
 import { useRef, useState, useCallback, useId } from "react";
 
 import { bulkImportOutages } from "@/services/bulkImportService";
-import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
+import type {
+  BulkImportProgress,
+  BulkImportResult,
+  BulkImportStage,
+  ImportValidationError,
+} from "@/types/bulkImport";
 import { STELLAR_NETWORK } from "@/lib/explorer";
+import { CSV_UNCLOSED_QUOTE, parseCSV, parseJSONRecords } from "@/lib/bulkImportParser";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -26,6 +32,53 @@ const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const REQUIRED_FIELDS = ["service_id", "start_time", "end_time"] as const;
+
+// Field-level shape checks shared by the CSV and JSON validators (issue #610):
+// missing site, invalid severity, and malformed timestamps are flagged in the
+// preview so operators fix rows before spending an import cycle, instead of
+// reacting to a failed batch. Values are optional; empties are only reported
+// when the field is required.
+const VALID_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+const OPTIONAL_ENUM_FIELDS = ["severity"] as const;
+const TIMESTAMP_FIELDS = ["start_time", "end_time", "detected_at", "resolved_at"] as const;
+const SITE_FIELDS = ["site_name"] as const;
+
+function isValidTimestamp(value: string): boolean {
+  return !Number.isNaN(new Date(value).getTime());
+}
+
+/**
+ * Field-level shape checks for a single row's values, keyed by column name.
+ * Only fields present in the row's headers/keys are checked, so optional
+ * columns that are simply absent never produce noise.
+ */
+function validateRowFields(values: Record<string, string>): ImportValidationError[] {
+  const errors: ImportValidationError[] = [];
+
+  for (const field of SITE_FIELDS) {
+    if (field in values && values[field]?.trim() === "") {
+      errors.push({ field, message: `Field "${field}" is present but empty` });
+    }
+  }
+
+  for (const field of OPTIONAL_ENUM_FIELDS) {
+    const value = values[field]?.trim() ?? "";
+    if (field in values && value !== "" && !VALID_SEVERITIES.includes(value.toLowerCase() as typeof VALID_SEVERITIES[number])) {
+      errors.push({
+        field,
+        message: `Invalid ${field} "${value}" (expected one of: ${VALID_SEVERITIES.join(", ")})`,
+      });
+    }
+  }
+
+  for (const field of TIMESTAMP_FIELDS) {
+    if (field in values && values[field]?.trim() !== "" && !isValidTimestamp(values[field]?.trim() ?? "")) {
+      errors.push({ field, message: `Malformed timestamp in "${field}"` });
+    }
+  }
+
+  return errors;
+}
 
 // Optional columns the backend accepts for bulk outage import. Columns outside
 // this set (plus REQUIRED_FIELDS) are treated as unrecognized and surface a
@@ -54,6 +107,22 @@ const MAX_VALIDATED_ROWS = 1000;
 type AcceptedExtension = (typeof ACCEPTED_EXTENSIONS)[number];
 type AcceptedMimeType = (typeof ACCEPTED_TYPES)[number];
 
+// Issue #614 — human-readable label for each import stage, shown in the
+// progress strip so operators can tell parsing/validating/submitting/
+// applying apart instead of staring at a frozen busy state.
+const STAGE_LABELS: Record<BulkImportStage, string> = {
+  parsing: "Parsing file…",
+  validating: "Validating file…",
+  submitting: "Uploading file…",
+  applying: "Applying import…",
+  done: "Done",
+};
+
+function formatProgressBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface PreviewState {
   headers: string[];
@@ -77,62 +146,6 @@ interface FileValidationResult {
 }
 
 type UploadStatus = "idle" | "validating" | "uploading" | "success" | "error" | "cancelled";
-
-// ─── CSV Parsing ─────────────────────────────────────────────────────────────
-interface ParsedCSV {
-  headers: string[];
-  rows: string[][];
-  totalRows: number;
-}
-
-function parseCSV(text: string): ParsedCSV {
-  const lines = text
-    .trim()
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
-  
-  if (lines.length === 0) {
-    return { headers: [], rows: [], totalRows: 0 };
-  }
-
-  // Robust CSV parsing: handles quoted fields containing commas
-  const parseLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
-      
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          current += '"';
-          i++; // Skip escaped quote
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
-  const firstLine = lines[0];
-  const headers = firstLine ? parseLine(firstLine).map((h) => h.replace(/^"|"$/g, "")) : [];
-  const rows = lines.slice(1).map(parseLine);
-  
-  return {
-    headers,
-    rows,
-    totalRows: rows.length,
-  };
-}
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 interface CSVValidationResult {
@@ -184,6 +197,14 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
         });
       }
     });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const present = headers
+      .map((h, colIndex) => [h, row[colIndex] ?? ""] as const)
+      .filter(([h]) => KNOWN_FIELDS.has(h));
+    validateRowFields(Object.fromEntries(present)).forEach((e) => {
+      errors.push({ row: i + 2, ...e });
+    });
   });
 
   if (rows.length > MAX_VALIDATED_ROWS) {
@@ -197,27 +218,14 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
 
 function validateJSON(text: string): { errors: ImportValidationError[]; parsed?: Record<string, unknown>[] } {
   const errors: ImportValidationError[] = [];
-  let parsed: unknown;
-  
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    const message = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : "Invalid JSON: could not parse file.";
-    errors.push({ message });
+  const result = parseJSONRecords(text);
+
+  if ("error" in result) {
+    errors.push({ message: result.error });
     return { errors };
   }
 
-  if (!Array.isArray(parsed)) {
-    errors.push({ message: "JSON must be an array of outage records." });
-    return { errors };
-  }
-
-  if (parsed.length === 0) {
-    errors.push({ message: "JSON array is empty." });
-    return { errors };
-  }
-
-  const records = parsed as Record<string, unknown>[];
+  const records = result.records;
   
   // Validate every record (capped for the 500ms budget) so problems in later
   // rows surface in the preview, not after the upload.
@@ -235,6 +243,17 @@ function validateJSON(text: string): { errors: ImportValidationError[]; parsed?:
           message: `Missing required field "${field}"`,
         });
       }
+    });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(item)) {
+      if (KNOWN_FIELDS.has(key)) {
+        values[key] = String(item[key] ?? "");
+      }
+    }
+    validateRowFields(values).forEach((e) => {
+      errors.push({ row: i + 1, ...e });
     });
   });
 
@@ -260,21 +279,32 @@ async function buildPreview(file: File): Promise<PreviewState> {
   const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase() as AcceptedExtension;
 
   if (ext === ".csv" || file.type === "text/csv") {
-    const { headers, rows, totalRows } = parseCSV(text);
+    const { headers, rows, totalRows, errors: parseErrors } = parseCSV(text);
     const { errors, warnings: schemaWarnings } = validateCSV(headers, rows);
     const warnings: ImportValidationError[] = [...schemaWarnings];
-    
+
     if (totalRows === 0 && errors.length === 0) {
       warnings.push({ message: "File has a header row but no data rows." });
     }
-    
+
+    // Structural parse failures (e.g. an unclosed quote) are blocking: the
+    // rows after the malformed line cannot be trusted.
+    if (parseErrors.includes(CSV_UNCLOSED_QUOTE)) {
+      errors.push({
+        message: "A quoted field is not closed. Fix the quotes and try again.",
+      });
+    }
+
     return { headers, rows, errors, warnings, totalRows, rowErrors: collectRowErrors(errors), rowNumberOffset: 2 };
   }
 
   // JSON
   const { errors, parsed } = validateJSON(text);
   
-  if (errors.length > 0 || !parsed) {
+  // Only structural failures (invalid JSON, non-array, empty array) suppress
+  // the preview entirely; row-level errors still preview with inline chips
+  // so operators can see which records are affected (issue #610).
+  if (!parsed) {
     return { headers: [], rows: [], errors, warnings: [], totalRows: 0, rowErrors: collectRowErrors(errors), rowNumberOffset: 1 };
   }
 
@@ -379,7 +409,8 @@ export default function BulkImportView() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
-  const [progress, setProgress] = useState(0);
+  // Issue #614 — latest staged progress event; null when no import is running.
+  const [progress, setProgress] = useState<BulkImportProgress | null>(null);
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -480,7 +511,9 @@ export default function BulkImportView() {
     const controller = new AbortController();
     abortRef.current = controller;
     setStatus("uploading");
-    setProgress(0);
+    // Issue #614 — seed the strip with the opening stage so it renders
+    // immediately, then let the service's staged events drive it.
+    setProgress({ stage: "parsing", processed: 0, total: 0, percent: 0 });
     setSubmitError(null);
     setResult(null);
 
@@ -489,15 +522,26 @@ export default function BulkImportView() {
         signal: controller.signal,
         onProgress: setProgress,
       });
-      
+
       setResult(response);
       setFile(null);
       setPreview(null);
       setStatus("success");
-      
+      setProgress(null);
+
       if (inputRef.current) inputRef.current.value = "";
     } catch (err: unknown) {
-      if ((err as { name?: string }).name === "CanceledError" || (err as { name?: string }).name === "AbortError") {
+      const errName = (err as { name?: string }).name;
+      const errCode = (err as { code?: string }).code;
+      // A user-initiated cancel (CanceledError/AbortError) and a network-level
+      // abort of the in-flight request (axios ECONNABORTED) both mean the
+      // upload did not complete — surface that as a distinct cancelled state
+      // (Issue #613) rather than a generic failure.
+      const isCancelled =
+        errName === "CanceledError" ||
+        errName === "AbortError" ||
+        errCode === "ECONNABORTED";
+      if (isCancelled) {
         setStatus("cancelled");
       } else if (err instanceof Error) {
         setSubmitError(err.message || "Upload failed. Please try again.");
@@ -506,18 +550,16 @@ export default function BulkImportView() {
         setSubmitError("Upload failed. Please try again.");
         setStatus("error");
       }
+      setProgress(null);
     } finally {
       abortRef.current = null;
-      if (status !== "cancelled") {
-        setProgress(0);
-      }
     }
-  }, [file, preview, status]);
+  }, [file, preview]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
     setStatus("cancelled");
-    setProgress(0);
+    setProgress(null);
   }, []);
 
   const handleReset = useCallback(() => {
@@ -527,8 +569,7 @@ export default function BulkImportView() {
     setResult(null);
     setSubmitError(null);
     setStatus("idle");
-    setProgress(0);
-    setPreviewPage(0);
+    setProgress(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -537,6 +578,17 @@ export default function BulkImportView() {
   const pageCount = preview ? Math.max(1, Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE)) : 1;
   const safePreviewPage = Math.min(previewPage, pageCount - 1);
   const pageRows = preview ? preview.rows.slice(safePreviewPage * PREVIEW_PAGE_SIZE, (safePreviewPage + 1) * PREVIEW_PAGE_SIZE) : [];
+  const invalidRowCount = preview ? Object.keys(preview.rowErrors).length : 0;
+
+  // Per-row outcome summary for the result card (Issue #613): distinguish a
+  // partial failure (some rows imported, some failed) from a full failure
+  // (every row failed) so operators can tell them apart at a glance.
+  const totalResultRows = result
+    ? result.imported + result.skipped + result.errors.length
+    : 0;
+  const failedResultRows = result?.errors.length ?? 0;
+  const isFullFailure = failedResultRows > 0 && failedResultRows === totalResultRows;
+  const isPartialFailure = failedResultRows > 0 && failedResultRows < totalResultRows;
 
   // Mainnet bulk safety gate — early return with disabled message
   if (BULK_DISABLED) {
@@ -697,9 +749,16 @@ export default function BulkImportView() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Preview
                 </p>
-                <p className="text-xs text-gray-400">
-                  {preview.totalRows} row{preview.totalRows > 1 ? "s" : ""}
-                </p>
+                <div className="flex items-center gap-2">
+                  {invalidRowCount > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      {invalidRowCount} row{invalidRowCount > 1 ? "s" : ""} invalid
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {preview.totalRows} row{preview.totalRows > 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -743,6 +802,59 @@ export default function BulkImportView() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Per-row error chips — issue #610 */}
+              {(() => {
+                const pageErrorEntries = Object.entries(preview.rowErrors)
+                  .map(([rowStr, messages]) => ({
+                    row: Number(rowStr),
+                    messages,
+                  }))
+                  .filter(({ row }) => {
+                    const zeroBased = row - preview.rowNumberOffset;
+                    return (
+                      zeroBased >= safePreviewPage * PREVIEW_PAGE_SIZE &&
+                      zeroBased < (safePreviewPage + 1) * PREVIEW_PAGE_SIZE
+                    );
+                  })
+                  .sort((a, b) => a.row - b.row);
+
+                if (pageErrorEntries.length === 0) return null;
+
+                return (
+                  <div className="border-t bg-red-50 px-4 py-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {pageErrorEntries.map(({ row, messages }) =>
+                        messages.map((message) => (
+                          <span
+                            key={`${row}-${message}`}
+                            title={message}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                          >
+                            <svg
+                              className="h-3 w-3 flex-shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                              />
+                            </svg>
+                            <span className="truncate">
+                              Row {row}: {message}
+                            </span>
+                          </span>
+                        )),
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Pagination controls */}
               {pageCount > 1 && (
@@ -793,24 +905,50 @@ export default function BulkImportView() {
 
       {/* Actions */}
       <div className="space-y-2">
-        {status === "uploading" ? (
-          <>
-            <div className="w-full rounded-full bg-gray-200 h-2 overflow-hidden" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+        {status === "uploading" && progress ? (
+          // Issue #614 — progress strip: stage label + overall percent + bar
+          // + byte counter + cancel. Replaces the submit button while the
+          // import is in flight, so a resubmit can't duplicate the batch.
+          <div
+            className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-blue-800">
+                {STAGE_LABELS[progress.stage]}
+              </span>
+              <span className="text-xs font-semibold tabular-nums text-blue-700">
+                {progress.percent}%
+              </span>
+            </div>
+            <div
+              className="w-full rounded-full bg-blue-100 h-2 overflow-hidden"
+              role="progressbar"
+              aria-label="Import progress"
+              aria-valuenow={progress.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className="h-2 rounded-full bg-blue-600 transition-all duration-200 ease-out"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress.percent}%` }}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">{progress}% uploaded</span>
+            {progress.total > 0 && (
+              <p className="text-xs tabular-nums text-blue-600">
+                {formatProgressBytes(progress.processed)} of {formatProgressBytes(progress.total)} uploaded
+              </p>
+            )}
+            <div className="flex justify-end">
               <button
                 onClick={handleCancel}
-                className="text-xs text-red-500 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
+                className="text-xs font-medium text-red-600 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-1"
               >
                 Cancel
               </button>
             </div>
-          </>
+          </div>
         ) : (
           <button
             onClick={() => void handleSubmit()}
@@ -829,14 +967,39 @@ export default function BulkImportView() {
         </Alert>
       )}
 
+      {/* Cancelled upload */}
+      {status === "cancelled" && (
+        <Alert type="warning" title="Upload cancelled" onDismiss={() => setStatus("idle")}>
+          The import was cancelled before it completed. No import result was recorded.
+        </Alert>
+      )}
+
       {/* Success Result */}
       {result && (
         <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-              <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <div
+              className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                isFullFailure
+                  ? "bg-red-100"
+                  : isPartialFailure
+                    ? "bg-yellow-100"
+                    : "bg-green-100"
+              }`}
+            >
+              {isFullFailure ? (
+                <svg className="h-4 w-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : isPartialFailure ? (
+                <svg className="h-4 w-4 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </div>
             <h2 className="text-base font-semibold text-gray-700">Import Summary</h2>
           </div>
@@ -855,6 +1018,29 @@ export default function BulkImportView() {
               <p className="text-xs text-red-600">Errors</p>
             </div>
           </div>
+
+          {/*
+            Per-row failure summary (Issue #613). A partial failure still lands
+            some rows, so it gets an amber "X of Y rows failed" banner; a full
+            failure (every row rejected) gets a red "All Y rows failed" banner
+            so operators can tell the two apart at a glance.
+          */}
+          {isPartialFailure && (
+            <div
+              role="alert"
+              className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm font-medium text-yellow-700"
+            >
+              {failedResultRows} of {totalResultRows} rows failed
+            </div>
+          )}
+          {isFullFailure && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+            >
+              All {totalResultRows} rows failed
+            </div>
+          )}
 
           {result.errors.length > 0 && (
             <div>
@@ -888,12 +1074,15 @@ export default function BulkImportView() {
                   Download report
                 </button>
               </div>
-              <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-red-50 p-3">
+              <ul className="flex flex-wrap gap-1.5">
                 {result.errors.map((error, index) => (
-                  <li key={`${error.message}-${index}`} className="text-xs text-red-700">
-                    {error.row != null && <span className="font-semibold">Row {error.row}: </span>}
-                    {error.field && <span className="font-semibold">[{error.field}] </span>}
-                    {error.message}
+                  <li
+                    key={`${error.row}-${error.message}-${index}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700"
+                  >
+                    {error.row != null && <span>Row {error.row}:</span>}
+                    {error.field && <span className="opacity-75">[{error.field}]</span>}
+                    <span>{error.message}</span>
                   </li>
                 ))}
               </ul>

@@ -10,8 +10,9 @@ import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart"
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { useDashboardMetrics } from "@/features/dashboard/hooks/useDashboardMetrics";
-import type { DashboardFilters, DashboardMetrics, TrendPoint } from "@/types/dashboard";
+import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
+import { slaEventKeys } from "@/lib/query-keys";
+import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
   const snapshot = {
@@ -94,7 +95,22 @@ export default function SLADashboardView() {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  const primary = useDashboardMetrics(filters);
+  const primary = useQuery<DashboardMetrics>({
+    queryKey: slaEventKeys.dashboard(filters),
+    queryFn: () => fetchDashboardMetrics(filters),
+    staleTime: 30_000,
+    structuralSharing: (oldData: unknown, newData: unknown) => {
+      if (!oldData || !newData) return newData as DashboardMetrics;
+      const o = oldData as DashboardMetrics;
+      const n = newData as DashboardMetrics;
+      if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
+          o.penalties.total === n.penalties.total &&
+          o.rewards.total === n.rewards.total) {
+        return o;
+      }
+      return n;
+    },
+  });
 
   const hasDateRange = useMemo(
     () => Boolean(filters.date_from || filters.date_to),
@@ -109,7 +125,12 @@ export default function SLADashboardView() {
   // (react-hooks/set-state-in-effect).
   const compareModeActive = compareMode && hasDateRange;
 
-  const secondary = useDashboardMetrics(comparisonFilters);
+  const secondary = useQuery<DashboardMetrics>({
+    queryKey: slaEventKeys.dashboardCompare(comparisonFilters),
+    queryFn: () => fetchDashboardMetrics(comparisonFilters),
+    staleTime: 30_000,
+    enabled: compareModeActive,
+  });
 
   const onTrendClick = useCallback((point: TrendPoint) => {
     const params = new URLSearchParams();

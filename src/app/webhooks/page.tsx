@@ -13,6 +13,7 @@ import {
   fetchWebhookDeliveries,
   retryDelivery,
 } from "@/services/webhookService";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
 import { slaEventKeys } from "@/lib/query-keys";
 
@@ -29,6 +30,8 @@ export default function WebhooksPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
 
+  // Issue #623 — webhook reads and invalidations go through the canonical
+  // factory keys so they participate in shared sla-events invalidation.
   const { data: webhooks = [], isLoading } = useQuery({
     queryKey: slaEventKeys.webhooks.list(),
     queryFn: fetchWebhooks,

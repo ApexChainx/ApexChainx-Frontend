@@ -58,8 +58,18 @@ export function SLADisputesPanel({
     {}
   );
 
+  // Issue #623 — the dispute list reads through the canonical factory key so
+  // the shared invalidation flows (useInvalidateOutages.ts invalidates
+  // `disputes.all`) actually reach this panel. The `outage_id` segment keeps
+  // invalidation scoped to this outage's list pages (React Query matches
+  // invalidation keys segment-by-segment, object segments by subset).
   const queryKey = useMemo(
-    () => slaEventKeys.disputes.list({ outageId, status: statusFilter, page }),
+    () =>
+      slaEventKeys.disputes.list({
+        outage_id: outageId,
+        status: statusFilter || undefined,
+        page,
+      }),
     [outageId, statusFilter, page]
   );
 
@@ -100,8 +110,10 @@ export function SLADisputesPanel({
   );
 
   const invalidateDisputes = async () => {
+    // Prefix-matches every cached list page for this outage (any status/page
+    // combination) without touching other outages' dispute lists.
     await queryClient.invalidateQueries({
-      queryKey: slaEventKeys.disputes.list({ outageId }),
+      queryKey: slaEventKeys.disputes.list({ outage_id: outageId }),
     });
   };
 
