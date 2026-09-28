@@ -4,14 +4,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { PaymentsTable, type SortDir, type SortKey } from "@/components/payments/payments-table";
 import type { TableDensity } from "@/components/data-table";
-import { exportPayments } from "@/services/paymentService";
+import { exportPayments, fetchPayments, type PaymentFilters } from "@/services/paymentService";
+import { slaEventKeys } from "@/lib/query-keys";
 import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
-import { usePayments } from "@/features/payments/hooks/usePayments";
-import type { PaginatedPayments } from "@/types/payment";
 
 /**
  * Pages larger than the table's virtualization threshold render as a windowed list
@@ -22,24 +22,8 @@ const ROWS_PER_PAGE_OPTIONS = [10, 100, 500] as const;
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // FE-069: filter state
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-
-  // FE-072: sort + density
-  const [sortKey, setSortKey] = useState<SortKey>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [density, setDensity] = useState<TableDensity>(() => {
-    const prefs = getPreferences();
-    return prefs.tableDensity || "default";
-  });
-
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
     () => searchParams?.get("paymentId") ?? null
   );
@@ -78,15 +62,32 @@ export default function PaymentsView() {
     setPage(1);
   };
 
-  const { data, isLoading, isError, error: queryError, refetch } = usePayments({
-    page,
-    page_size: perPage,
-    status: statusFilter || undefined,
-    type: typeFilter || undefined,
-    date_from: dateFrom || undefined,
-    date_to: dateTo || undefined,
-    sort_by: sortKey,
-    sort_dir: sortDir,
+  // Issue #624 — the list read moved onto React Query: the factory key
+  // (slaEventKeys.payments.list) doubles as the cache key, so any mutation
+  // invalidating the payments family refetches this table. Only UI state
+  // (pagination, filters, sort, density) stays component-local.
+  const filters = useMemo<PaymentFilters>(
+    () => ({
+      page,
+      page_size: perPage,
+      status: statusFilter || undefined,
+      type: typeFilter || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      sort_by: sortKey,
+      sort_dir: sortDir,
+    }),
+    [page, perPage, statusFilter, typeFilter, dateFrom, dateTo, sortKey, sortDir]
+  );
+
+  const {
+    data,
+    isFetching,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: slaEventKeys.payments.list(filters),
+    queryFn: () => fetchPayments(filters),
   });
 
   function toggleSort(key: SortKey) {
@@ -229,9 +230,9 @@ export default function PaymentsView() {
         sortDir={sortDir}
         onSort={toggleSort}
         onRowClick={openDrawer}
-        loading={loading}
-        error={error}
-        onReload={() => window.location.reload()}
+        loading={isFetching}
+        error={isError ? "Failed to load payments." : null}
+        onReload={() => void refetch()}
       />
 
       {data && totalPages > 1 && (

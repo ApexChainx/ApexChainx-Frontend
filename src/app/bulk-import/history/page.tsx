@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { fetchBulkImportHistory } from "@/services/bulkImportService";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { BulkImportRecord } from "@/types/bulkImport";
 
 // Records rendered per history page. The full list is fetched once; paging is
@@ -61,8 +62,10 @@ export default function BulkImportHistoryPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
+  // Issue #623 — canonical factory key (replaces the literal
+  // ["bulk-import-history"] array).
   const { data: records = [], isLoading, isError } = useQuery({
-    queryKey: ["bulk-import-history"],
+    queryKey: slaEventKeys.bulkImports.all,
     queryFn: fetchBulkImportHistory,
   });
 
