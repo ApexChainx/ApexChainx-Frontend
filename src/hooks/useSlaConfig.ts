@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, dedupeByKey } from "@/lib/api";
+import { slaEventKeys } from "@/lib/query-keys";
 
 type Severity = "critical" | "high" | "medium" | "low";
 
@@ -24,18 +25,14 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 };
 
 /**
- * Query key for the SLA configuration read path. Exported so consumers (and tests)
- * can assert the cache shape and drive invalidation without duplicating the literal.
+ * Issue #623 — the SLA configuration read path now uses the canonical factory
+ * key (`slaEventKeys.config`) instead of the literal ["sla", "config"] array,
+ * so invalidating `slaEventKeys.all` / `slaEventKeys.config` actually reaches
+ * this query.
  */
-export function slaConfigQueryKey() {
-  return ["sla", "config"] as const;
-}
-
-export const SLA_CONFIG_KEY = slaConfigQueryKey();
-
 export function useSlaConfig() {
   return useQuery({
-    queryKey: slaConfigQueryKey(),
+    queryKey: slaEventKeys.config,
     queryFn: async () => {
       const { data } = await dedupeByKey("/sla/config", () => api.get<SLAConfigMap>("/sla/config"));
       return Object.entries(data)
@@ -54,7 +51,7 @@ export function useUpdateSlaConfig() {
       return { severity, ...data } as EditableConfig;
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData<EditableConfig[]>(SLA_CONFIG_KEY, (prev) =>
+      queryClient.setQueryData<EditableConfig[]>(slaEventKeys.config, (prev) =>
         prev?.map((c) => (c.severity === updated.severity ? updated : c)) ?? [],
       );
     },

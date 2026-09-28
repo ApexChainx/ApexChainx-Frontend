@@ -52,6 +52,15 @@ interface BulkImportHistoryRecord {
 /** Records created via POST /outages/bulk; read back by the history page. */
 const bulkImportHistory: BulkImportHistoryRecord[] = [];
 
+/**
+ * Wallets linked via POST /wallets/link, keyed by user id. The settings page
+ * reads status/balance back through these entries after funding.
+ */
+const linkedWallets = new Map<
+  string,
+  { public_key: string; funded: boolean; trustline_ready: boolean }
+>();
+
 interface SlaRecord {
   status: "met" | "violated";
   mttr_minutes: number;
@@ -314,28 +323,40 @@ export async function mockApi(
       const raw = request.postData() ?? "";
       const filenameMatch = raw.match(/filename="([^"]+)"/);
       const filename = filenameMatch?.[1] ?? "upload.csv";
+      const lowerFilename = filename.toLowerCase();
 
-      // Fixtures named with "invalid" trigger a mocked server-side
-      // validation failure (e.g. a business-rule check the client can't
-      // perform), so the negative-case journey can be exercised without a
-      // real backend.
-      const isInvalidFixture = filename.toLowerCase().includes("invalid");
+      // Fixture filename conventions select the mocked outcome so the e2e
+      // suite can exercise each failure path without a real backend
+      // (Issue #613):
+      //   "partial"  -> a mix of valid and invalid rows (partial failure)
+      //   "fullfail" -> every row rejected (full failure)
+      //   "invalid"  -> a single server-side validation failure
+      // The default is a clean import.
+      const rowError = (row: number): BulkImportErrorRecord => ({
+        row,
+        field: "start_time",
+        message: "start_time must be before end_time.",
+      });
 
-      const errors: BulkImportErrorRecord[] = isInvalidFixture
-        ? [
-            {
-              row: 2,
-              field: "start_time",
-              message: "start_time must be before end_time.",
-            },
-          ]
-        : [];
+      let errors: BulkImportErrorRecord[] = [];
+      let imported = 2;
+      let skipped = 0;
 
-      const result = {
-        imported: isInvalidFixture ? 1 : 2,
-        skipped: isInvalidFixture ? 1 : 0,
-        errors,
-      };
+      if (lowerFilename.includes("partial")) {
+        imported = 2;
+        skipped = 0;
+        errors = [rowError(2), rowError(4)];
+      } else if (lowerFilename.includes("fullfail")) {
+        imported = 0;
+        skipped = 0;
+        errors = [rowError(2), rowError(3)];
+      } else if (lowerFilename.includes("invalid")) {
+        imported = 1;
+        skipped = 1;
+        errors = [rowError(2)];
+      }
+
+      const result = { imported, skipped, errors };
 
       bulkImportHistory.unshift({
         id: `BULK-${bulkImportHistory.length + 1}`,
@@ -452,6 +473,62 @@ export async function mockApi(
       const [retried] = failedPayments.splice(index, 1);
       const completed = { ...retried, status: "completed" };
       return json(200, completed);
+    }
+
+    /* ---------------------------- Wallets ---------------------------- */
+    // Friendbot faucet — must be matched before the /wallets/:id patterns
+    // below, since "friendbot" would otherwise parse as an id.
+    if (method === "GET" && path === "/api/v1/wallets/friendbot") {
+      return json(200, { ok: true });
+    }
+
+    if (method === "POST" && path === "/api/v1/wallets/link") {
+      const body = request.postDataJSON() as {
+        user_id?: string;
+        public_key?: string;
+        funded?: boolean;
+        trustline_ready?: boolean;
+      };
+      const userId = body.user_id ?? "user-1";
+      const publicKey = body.public_key ?? "GABC";
+      linkedWallets.set(userId, {
+        public_key: publicKey,
+        funded: body.funded ?? false,
+        trustline_ready: body.trustline_ready ?? false,
+      });
+      return json(200, {
+        user_id: userId,
+        public_key: publicKey,
+        funded: body.funded ?? false,
+        trustline_ready: body.trustline_ready ?? false,
+        active: true,
+        created_at: new Date().toISOString(),
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    const walletStatusMatch = path.match(/^\/api\/v1\/wallets\/([^/]+)\/status$/);
+    if (walletStatusMatch && method === "GET") {
+      const linked = linkedWallets.get(walletStatusMatch[1]!);
+      if (!linked) return json(404, { message: "Not found" });
+      return json(200, {
+        user_id: walletStatusMatch[1],
+        public_key: linked.public_key,
+        funded: linked.funded,
+        trustline_ready: linked.trustline_ready,
+        usable: linked.funded && linked.trustline_ready,
+        active: true,
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    const walletBalanceMatch = path.match(/^\/api\/v1\/wallets\/([^/]+)\/balance$/);
+    if (walletBalanceMatch && method === "GET") {
+      return json(200, {
+        address: walletBalanceMatch[1],
+        balances: { XLM: "1000" },
+        last_updated: new Date().toISOString(),
+      });
     }
 
     /* ------------------------------ SLA ------------------------------ */

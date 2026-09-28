@@ -1,20 +1,27 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
-
-import { useEffect, useMemo, useState } from "react";
-
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useToast } from "@/components/ui/toast";
-import { useSession } from "@/hooks/useSession";
-import { useStellarHealth } from "@/hooks/useStellarHealth";
-import { useUsdRates } from "@/hooks/useUsdRates";
+/**
+ * Settings page shell (Issue #615).
+ *
+ * The page used to be a single ~1400-line component mixing session control,
+ * account profile, theme, language, wallet forms, Stellar health, the SLA
+ * contract id, onboarding replay, and the dev auth toolset. It is now a thin
+ * shell: every concern lives in a feature module under `src/features/settings/`
+ * that owns its own data-fetching and state, and this file only nests the
+ * module providers and composes the sections in the original layout order so
+ * the rendered page — and therefore e2e behaviour — is identical.
+ *
+ * Module map:
+ *   - session.tsx    session control, account profile, dev auth toolset,
+ *                    session status card
+ *   - wallet.tsx     wallet form/details/balances, friendbot funding, wallet
+ *                    stats cards, readiness guidance
+ *   - appearance.tsx theme preference + onboarding tour replay
+ *   - language.tsx   language selector
+ *   - stellar.tsx    Stellar network health card + SLA contract id card
+ *   - notifications.tsx page-level feedback/error banners
+ */
 import { useI18n } from "@/i18n/i18n";
-import { api } from "@/lib/api";
 import { env } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
@@ -429,603 +436,76 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleLoadBalance() {
-    const address = wallet?.public_key ?? walletForm.public_key.trim();
-    if (!address) {
-      setError("Load or link a wallet before requesting balances.");
-      return;
-    }
-
-    setLoadingAction("wallet-balance");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.get<WalletBalance>(ENDPOINTS.wallets.balance(address));
-      setWalletBalance(response.data);
-      setFeedback("Wallet balance loaded.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
+  // Some proxies answer with a 200/400 and a rate-limit body instead of
+  // HTTP 429 — flag those too rather than showing a generic failure.
+  if (response?.data && typeof response.data === "object") {
+    const bodyText = JSON.stringify(response.data).toLowerCase();
+    if (bodyText.includes("rate limit") || bodyText.includes("rate_limit")) {
+      return t('settings.friendbotRateLimited');
     }
   }
 
-  async function handleFundTestnetWallet() {
-    const address = wallet?.public_key ?? walletForm.public_key.trim();
-    if (!address) {
-      setError("Load or link a wallet before funding the wallet.");
-      return;
-    }
+  return getErrorMessage(issue);
+}
 
-    setLoadingAction("fund-testnet-wallet");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      await api.get(ENDPOINTS.wallets.friendbot(address));
-
-      const statusUserId = wallet?.user_id ?? (activeUserId || address);
-      const [statusResponse, balanceResponse] = await Promise.all([
-        api.get<WalletStatus>(ENDPOINTS.wallets.status(statusUserId)),
-        api.get<WalletBalance>(ENDPOINTS.wallets.balance(address)),
-      ]);
-
-      setWalletStatus(statusResponse.data);
-      setWalletBalance(balanceResponse.data);
-      setWalletForm((current) => ({
-        ...current,
-        funded: true,
-      }));
-
-      const successMessage = "Wallet funded successfully.";
-      setFeedback(successMessage);
-      toast(successMessage, "success");
-    } catch (issue) {
-      const errorMessage = getErrorMessage(issue);
-      setError(errorMessage);
-      toast(errorMessage, "error");
-    } finally {
-      setLoadingAction(null);
-    }
-  }
+export default function SettingsPage() {
+  const { t } = useI18n();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          {t('settings.walletControl')}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t('settings.manageSessionWallet')}
-        </p>
-      </div>
-
-      {feedback ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {feedback}
-        </div>
-      ) : null}
-
-      {/* Theme Settings */}
-      <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Appearance Settings</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Customize your visual theme preference.</p>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <button
-            onClick={() => setTheme("light")}
-            className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
-              theme === "light"
-                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-            }`}
-          >
-            <svg className="h-8 w-8 text-slate-700 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-900 dark:text-white">Light</span>
-          </button>
-          <button
-            onClick={() => setTheme("dark")}
-            className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
-              theme === "dark"
-                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-            }`}
-          >
-            <svg className="h-8 w-8 text-slate-700 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-900 dark:text-white">Dark</span>
-          </button>
-          <button
-            onClick={() => setTheme("system")}
-            className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
-              theme === "system"
-                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-            }`}
-          >
-            <svg className="h-8 w-8 text-slate-700 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            <span className="text-sm font-medium text-slate-900 dark:text-white">System</span>
-          </button>
-        </div>
-      </section>
-
-      {/* Onboarding tour replay (Issue #159) — mirrors OnboardingTour's START_TOUR_EVENT */}
-      <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Onboarding</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Replay the guided tour of the dashboard, outages, and payments.
-        </p>
-        <button
-          onClick={() => window.dispatchEvent(new CustomEvent("apexchain:start-tour"))}
-          className="mt-4 rounded-md border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          Replay onboarding tour
-        </button>
-      </section>
-
-      {/* FE-056: Account profile section */}
-      <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Account Profile</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current session identity and metadata.</p>
-        {sessionState === "loading" && (
-          <p className="mt-4 text-sm text-slate-400">{t('settings.loadingSession')}</p>
-        )}
-        {sessionState === "unauthenticated" && (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Not signed in.</p>
-        )}
-        {sessionState === "authenticated" && sessionUser && (
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-            {[
-              { label: "Email", value: sessionUser.email },
-              { label: "Role", value: sessionUser.role },
-              { label: "Full name", value: sessionUser.full_name ?? "—" },
-              { label: "User ID", value: sessionUser.id },
-              { label: "Wallet", value: sessionUser.stellar_wallet ?? "Not linked" },
-              {
-                label: "Member since",
-                value: sessionUser.created_at
-                  ? new Date(sessionUser.created_at).toLocaleDateString()
-                  : "—",
-              },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-                <dd className="mt-1 truncate font-medium text-slate-900">{value}</dd>
+    <SettingsNotificationsProvider>
+      <SessionSettingsProvider>
+        <StellarHealthProvider>
+          <WalletSettingsProvider>
+            <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
+              <div className="space-y-1">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                  {t('settings.walletControl')}
+                </h1>
+                <p className="text-sm text-slate-500">
+                  {t('settings.manageSessionWallet')}
+                </p>
               </div>
-            ))}
-          </dl>
-        )}
-      </section>
 
-      {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+              <SettingsFeedbackBanner />
 
-      {/* FE-008: Session management */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">{t('settings.sessionManagement')}</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          {t('settings.controlActiveSession')}
-        </p>
+              {/* Appearance (theme) + onboarding tour replay */}
+              <AppearanceSettings />
+              <OnboardingReplay />
 
-        {sessionActionFeedback && (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {sessionActionFeedback}
-          </div>
-        )}
-        {sessionActionError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {sessionActionError}
-          </div>
-        )}
+              {/* Account profile (session module) */}
+              <AccountProfile />
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">{t('settings.signOutOfThisSession')}</h3>
-            <p className="text-slate-500">
-              {t('settings.endsCurrentSession')}
-            </p>
-            <button
-              onClick={() => void handleSignOut()}
-              disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-            >
-              {sessionActionLoading === "signout" ? `${t('common.loading')}` : t('common.signOut')}
-            </button>
-          </div>
+              <SettingsErrorBanner />
 
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
-            <h3 className="font-medium text-slate-900">{t('settings.revokeAllSessions')}</h3>
-            <p className="text-slate-500">
-              {t('settings.invalidateAllTokens')}
-            </p>
-            <button
-              onClick={() => void handleLogoutAll()}
-              disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
-              className="rounded-md border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-            >
-              {sessionActionLoading === "logout-all" ? `${t('common.loading')}` : t('settings.revokeAllSessions')}
-            </button>
-          </div>
-        </div>
+              {/* Session control (session module) */}
+              <SessionControl />
 
-        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1">
-          <p className="font-medium">{t('settings.howSessionRefreshWorks')}</p>
-          <p>
-            {t('settings.sessionRefreshExplanation')}
-          </p>
-          <p>
-            {t('settings.sessionExpiredMessage')}
-          </p>
-        </div>
-      </section>
+              {/* Language selector (language module) */}
+              <LanguageSettings />
 
-      {/* Language Settings */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">{t('settings.languageSettings')}</h2>
-        <p className="mt-1 text-sm text-slate-500">{t('settings.selectLanguage')}</p>
-        
-        <div className="mt-6 max-w-md">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center justify-between rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              {localeNames[locale]}
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-full min-w-[200px]">
-              {locales.map((loc) => (
-                <DropdownMenuItem
-                  key={loc}
-                  onClick={() => setLocale(loc)}
-                  className={`flex cursor-pointer items-center justify-between px-4 py-2 text-sm ${
-                    locale === loc ? "bg-slate-100 font-medium" : ""
-                  }`}
-                >
-                  {localeNames[loc]}
-                  {locale === loc && (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">
-            {currentUser ? t('settings.authenticated') : t('settings.notSignedIn')}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            {currentUser?.email ?? t('settings.loadCreateAccount')}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.wallet')}</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">
-            {walletAddress ? t('settings.connected') : t('settings.notLinked')}
-          </p>
-          <p className="mt-1 truncate text-sm text-slate-500">
-            {walletAddress || t('settings.createLinkWallet')}
-          </p>
-          {env.STELLAR_NETWORK === "testnet" && walletAddress ? (
-            <button
-              type="button"
-              onClick={() => void handleFundTestnetWallet()}
-              disabled={loadingAction === "fund-testnet-wallet" || isHorizonUnreachable}
-              className="mt-3 w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-            >
-              {loadingAction === "fund-testnet-wallet" ? "Funding..." : "Fund testnet wallet"}
-            </button>
-          ) : null}
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.readiness')}</p>
-          <p className={`mt-2 text-xl font-semibold ${walletReadinessTone}`}>
-            {walletReadinessLabel}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            {walletStatus
-              ? `${walletStatus.funded ? t('settings.funded') : t('settings.unfunded')} • ${
-                  walletStatus.trustline_ready ? t('settings.trustlineReady') : t('settings.trustlineMissing')
-                }`
-              : t('settings.loadWalletDetails')}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.balances')}</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{walletAssetCount}</p>
-          <p className="mt-1 text-sm text-slate-500">
-            {walletAssetCount > 0 ? t('settings.trackedAssetsLoaded') : t('settings.noBalanceData')}
-          </p>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Issue #128 / #129 — Stellar Network Status + SLA Contract ID      */}
-      {/* ------------------------------------------------------------------ */}
-      <StellarHealthCard
-        horizonStatus={stellarHealth.status}
-        latencyMs={stellarHealth.latencyMs}
-        network={env.STELLAR_NETWORK}
-      />
-
-      <SLAContractIdCard
-        contractId={env.SLA_CONTRACT_ID}
-        network={env.STELLAR_NETWORK}
-      />
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">{t('settings.accountSession')}</h2>
-            <p className="text-sm text-slate-500">
-              {t('settings.registerSignInValidate')}
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">{t('settings.register')}</h3>
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={registerForm.full_name}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    full_name: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.fullName')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={registerForm.email}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.email')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                value={registerForm.password}
-                onChange={(event) =>
-                  setRegisterForm((current) => ({
-                    ...current,
-                    password: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.password')}
-              />
-              <button
-                onClick={handleRegister}
-                disabled={loadingAction === "register"}
-                className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-              >
-                {loadingAction === "register" ? `${t('common.loading')}` : t('settings.registerAccount')}
-              </button>
-            </div>
-
-            <div className="space-y-3 rounded-xl bg-slate-50 p-4">
-              <h3 className="font-medium text-slate-900">{t('settings.login')}</h3>
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={loginForm.email}
-                onChange={(event) =>
-                  setLoginForm((current) => ({
-                    ...current,
-                    email: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.email')}
-              />
-              <input
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                value={loginForm.password}
-                onChange={(event) =>
-                  setLoginForm((current) => ({
-                    ...current,
-                    password: event.target.value,
-                  }))
-                }
-                placeholder={t('settings.password')}
-              />
-              <button
-                onClick={handleLogin}
-                disabled={loadingAction === "login"}
-                className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                {loadingAction === "login" ? `${t('common.loading')}` : t('settings.signIn')}
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleLoadSession}
-                  disabled={loadingAction === "session"}
-                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {t('settings.refreshSession')}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  disabled={loadingAction === "logout"}
-                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  {t('settings.logout')}
-                </button>
+              {/* Stats grid: session card (session module) + wallet cards (wallet module) */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <SessionStatusCard />
+                <WalletStatusCard />
+                <WalletReadinessCard />
+                <WalletBalancesCard />
               </div>
-            </div>
-          </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            <h3 className="font-medium text-slate-900">{t('settings.currentUser')}</h3>
-            {currentUser ? (
-              <dl className="mt-3 grid gap-2 text-slate-600">
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.userId')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.id}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.email')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.email}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>{t('settings.role')}</dt>
-                  <dd className="font-medium text-slate-900">{currentUser.role}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="mt-3 text-slate-500">{t('settings.noActiveUser')}</p>
-            )}
-          </div>
-        </section>
+              {/* Stellar network health + SLA contract id (stellar module) */}
+              <StellarHealthCard network={env.STELLAR_NETWORK} />
+              <SLAContractIdCard
+                contractId={env.SLA_CONTRACT_ID}
+                network={env.STELLAR_NETWORK}
+              />
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">{t('settings.walletStatus')}</h2>
-            <p className="text-sm text-slate-500">
-              {t('settings.walletBackendBridge')}
-            </p>
-          </div>
+              {/* Dev auth toolset (session module) + wallet status panel (wallet module) */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <DevAuthToolset />
+                <WalletStatusPanel />
+              </div>
 
-          <div className="grid gap-3">
-            <input
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={walletForm.user_id}
-              onChange={(event) =>
-                setWalletForm((current) => ({
-                  ...current,
-                  user_id: event.target.value,
-                }))
-              }
-              placeholder="User ID"
-            />
-            <input
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={walletForm.public_key}
-              onChange={(event) =>
-                setWalletForm((current) => ({
-                  ...current,
-                  public_key: event.target.value,
-                }))
-              }
-              placeholder="Public key"
-            />
-            <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={walletForm.funded}
-                  onChange={(event) =>
-                    setWalletForm((current) => ({
-                      ...current,
-                      funded: event.target.checked,
-                    }))
-                  }
-                />
-                Funded
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={walletForm.trustline_ready}
-                  onChange={(event) =>
-                    setWalletForm((current) => ({
-                      ...current,
-                      trustline_ready: event.target.checked,
-                    }))
-                  }
-                />
-                Trustline ready
-              </label>
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              onClick={handleCreateWallet}
-              disabled={loadingAction === "create-wallet" || isHorizonUnreachable}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Create wallet"}
-            >
-              {loadingAction === "create-wallet" ? "Creating..." : "Create wallet"}
-            </button>
-            <button
-              onClick={handleLinkWallet}
-              disabled={loadingAction === "link-wallet" || isHorizonUnreachable}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Link wallet"}
-            >
-              {loadingAction === "link-wallet" ? "Linking..." : "Link wallet"}
-            </button>
-            <button
-              onClick={handleLoadWalletDetails}
-              disabled={loadingAction === "wallet-details" || isHorizonUnreachable}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load wallet details"}
-            >
-              {loadingAction === "wallet-details" ? "Loading..." : "Load wallet details"}
-            </button>
-            <button
-              onClick={handleLoadBalance}
-              disabled={loadingAction === "wallet-balance" || isHorizonUnreachable}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load balance"}
-            >
-              {loadingAction === "wallet-balance" ? "Loading..." : "Load balance"}
-            </button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-              <h3 className="font-medium text-slate-900">Wallet details</h3>
-              {wallet ? (
-                <dl className="mt-3 grid gap-2 text-slate-600">
-                  <div className="flex justify-between gap-4">
-                    <dt>Address</dt>
-                    <dd className="break-all text-right font-medium text-slate-900">
-                      {explorerLink("account", wallet.public_key) ? (
-                        <a href={explorerLink("account", wallet.public_key)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                          {wallet.public_key}
-                        </a>
-                      ) : wallet.public_key}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt>Funded</dt>
-                    <dd className="font-medium text-slate-900">
-                      {wallet.funded ? "Yes" : "No"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt>Trustline</dt>
-                    <dd className="font-medium text-slate-900">
-                      {wallet.trustline_ready ? "Ready" : "Missing"}
-                    </dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="mt-3 text-slate-500">No wallet loaded yet.</p>
-              )}
+              {/* Wallet readiness guidance (wallet module) */}
+              <WalletReadinessGuidance />
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">

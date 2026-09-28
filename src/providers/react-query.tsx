@@ -2,7 +2,9 @@
 /** ApexChain Network Operations Intelligence Platform */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
+
+import { registerQueryClient } from "@/lib/session-snapshot";
 
 /**
  * Issue #622 — app-wide React Query defaults.

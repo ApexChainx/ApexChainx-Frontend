@@ -3,10 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
-import { fetchPayments, retryPayment } from "@/services/paymentService";
-import type { PaginatedPayments, Payment, PaymentStatus } from "@/types/payment";
+import { useRetryQueue } from "@/features/payments/hooks/useRetryQueue";
+import type { Payment, PaymentStatus } from "@/types/payment";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
 const statusStyles: Record<string, string> = {
   failed: "bg-red-100 text-red-700",
@@ -18,162 +18,29 @@ const typeStyles: Record<string, string> = {
   penalty: "bg-red-100 text-red-700",
 };
 
-/** Status a row shows while its retry request is in flight. */
 const OPTIMISTIC_PENDING_STATUS: PaymentStatus = "pending";
 
 export default function RetryQueueView() {
-  const [data, setData] = useState<PaginatedPayments | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
-  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, PaymentStatus>>({});
-  const [retryError, setRetryError] = useState<string | null>(null);
-  const [bulkRetrying, setBulkRetrying] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const {
+    query,
+    selectedIds,
+    retryingIds,
+    optimisticStatus,
+    retryError,
+    bulkRetrying,
+    showConfirmDialog,
+    setShowConfirmDialog,
+    rowStatus,
+    handleRetry,
+    handleBulkRetry,
+    toggleSelectAll,
+    toggleSelect,
+  } = useRetryQueue();
 
-  // Tracks in-flight retries synchronously so a double-click cannot issue a duplicate request
-  // (the disabled button state only lands after React re-renders).
-  const inFlightRef = useRef<Set<string>>(new Set());
+  const { data, isLoading, isError, error: queryError } = query;
 
-  // Calculate date 7 days ago for default filter
-  const getSevenDaysAgo = () => {
-    const date = new Date();
-    date.setDate(date.getDate() - 7);
-    return date.toISOString().split('T')[0];
-  };
-
-  const dateFrom = getSevenDaysAgo();
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    fetchPayments({
-      page: 1,
-      page_size: 100,
-      status: "failed",
-      date_from: dateFrom,
-    })
-      .then((response) => { if (isMounted) { setData(response); setError(null); } })
-      .catch(() => { if (isMounted) setError("Failed to load failed payments."); })
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
-  }, [refreshKey, dateFrom]);
-
-  /** Overlay a status on rows without touching the fetched payload. Passing null reverts. */
-  const applyOptimisticStatus = useCallback((ids: string[], status: PaymentStatus | null) => {
-    setOptimisticStatus((prev) => {
-      const next = { ...prev };
-      for (const id of ids) {
-        if (status === null) {
-          delete next[id];
-        } else {
-          next[id] = status;
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  const rowStatus = (payment: Payment) => optimisticStatus[payment.id] ?? payment.status;
-
-  const handleRetry = async (id: string) => {
-    if (inFlightRef.current.has(id)) return;
-
-    inFlightRef.current.add(id);
-    setRetryError(null);
-    setRetryingIds((prev) => new Set(prev).add(id));
-    // Flip the row to pending immediately, before the request resolves.
-    applyOptimisticStatus([id], OPTIMISTIC_PENDING_STATUS);
-
-    try {
-      const updated = await retryPayment(id);
-      // Reconcile with the server response, falling back to the optimistic status.
-      applyOptimisticStatus([id], updated?.status ?? OPTIMISTIC_PENDING_STATUS);
-      setSelectedIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-      setRefreshKey((prev) => prev + 1);
-    } catch (err) {
-      // Retry-error fallback: drop the optimistic state so the row reverts to failed.
-      applyOptimisticStatus([id], null);
-      setRetryError(`Could not retry payment ${id}. Please try again.`);
-      console.error("Failed to retry payment:", err);
-    } finally {
-      inFlightRef.current.delete(id);
-      setRetryingIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(id);
-        return newSet;
-      });
-    }
-  };
-
-  const handleBulkRetry = async () => {
-    const ids = Array.from(selectedIds).filter((id) => !inFlightRef.current.has(id));
-    if (ids.length === 0) {
-      setShowConfirmDialog(false);
-      return;
-    }
-
-    ids.forEach((id) => inFlightRef.current.add(id));
-    setBulkRetrying(true);
-    setRetryError(null);
-    applyOptimisticStatus(ids, OPTIMISTIC_PENDING_STATUS);
-
-    try {
-      const results = await Promise.allSettled(ids.map((id) => retryPayment(id)));
-      const failedIds: string[] = [];
-
-      results.forEach((result, index) => {
-        const id = ids[index]!;
-        if (result.status === "fulfilled") {
-          applyOptimisticStatus([id], result.value?.status ?? OPTIMISTIC_PENDING_STATUS);
-        } else {
-          failedIds.push(id);
-        }
-      });
-
-      if (failedIds.length > 0) {
-        applyOptimisticStatus(failedIds, null);
-        setRetryError(
-          `Could not retry ${failedIds.length} of ${ids.length} payments. Please try again.`,
-        );
-      } else {
-        setSelectedIds(new Set());
-      }
-
-      setRefreshKey((prev) => prev + 1);
-    } finally {
-      ids.forEach((id) => inFlightRef.current.delete(id));
-      setBulkRetrying(false);
-      setShowConfirmDialog(false);
-    }
-  };
-
-  const toggleSelectAll = () => {
-    if (!data) return;
-    if (selectedIds.size === data.items.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(data.items.map(item => item.id)));
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
+  const loading = isLoading;
+  const error = isError ? (queryError?.message ?? "Failed to load failed payments.") : null;
 
   const cell = "px-4 py-3 text-sm";
 

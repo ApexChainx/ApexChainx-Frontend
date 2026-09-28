@@ -210,10 +210,80 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
     expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
 
+    // Issue #620 — clicking fund opens the confirm dialog naming the target
+    // address; no friendbot request fires until the explicit confirm.
     fireEvent.click(screen.getByRole("button", { name: /fund testnet wallet/i }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    // The confirm dialog names the target address.
+    expect(screen.getByText(/Stellar Friendbot for GABC/)).toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalledWith("/wallets/friendbot?address=GABC");
+
+    fireEvent.change(screen.getByPlaceholderText("FUND"), { target: { value: "FUND" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm funding/i }));
 
     expect(await screen.findByText("Wallet funded successfully.")).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledTimes(5);
     expect(mockGet).toHaveBeenCalledWith("/wallets/friendbot?address=GABC");
     expect(mockToast).toHaveBeenCalledWith("Wallet funded successfully.", "success");
+  });
+
+  it("disables the fund button while the funding request is in flight", async () => {
+    let resolveFriendbot: (value: { data: { ok: boolean } }) => void = () => {};
+    mockGet.mockImplementation((url: unknown) => {
+      if (url === "/wallets/friendbot?address=GABC") {
+        return new Promise<{ data: { ok: boolean } }>((resolve) => {
+          resolveFriendbot = resolve;
+        });
+      }
+      if (url === "/wallets/u1") return Promise.resolve({ data: wallet });
+      if (url === "/wallets/u1/status") return Promise.resolve({ data: walletStatus });
+      if (url === "/wallets/GABC/balance") {
+        return Promise.resolve({ data: { address: "GABC", balances: {}, last_updated: "2026-01-01T00:00:00Z" } });
+      }
+      return Promise.reject(new Error(`unexpected GET ${String(url)}`));
+    });
+
+    renderSettings();
+    fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
+    expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /fund testnet wallet/i }));
+    fireEvent.change(screen.getByPlaceholderText("FUND"), { target: { value: "FUND" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm funding/i }));
+
+    // The button flips to the in-flight label and is disabled while the
+    // friendbot request is pending — a double-click cannot fire a second one.
+    const fundingButton = await screen.findByRole("button", { name: "Funding..." });
+    expect(fundingButton).toBeDisabled();
+    expect(mockGet).toHaveBeenCalledTimes(3); // details (2) + friendbot, still pending
+
+    resolveFriendbot({ data: { ok: true } });
+    expect(await screen.findByText("Wallet funded successfully.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fund testnet wallet/i })).toBeEnabled();
+  });
+
+  it("translates a friendbot rate-limit response into an actionable message", async () => {
+    mockGet
+      .mockResolvedValueOnce({ data: wallet })
+      .mockResolvedValueOnce({ data: walletStatus })
+      .mockRejectedValueOnce({ response: { status: 429 } });
+
+    renderSettings();
+    fireEvent.change(screen.getByPlaceholderText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: /load wallet details/i }));
+    expect(await screen.findByText("Wallet details loaded.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /fund testnet wallet/i }));
+    fireEvent.change(screen.getByPlaceholderText("FUND"), { target: { value: "FUND" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm funding/i }));
+
+    expect(
+      await screen.findByText("Friendbot rate limit reached — wait a moment and try again."),
+    ).toBeInTheDocument();
+    expect(mockToast).toHaveBeenCalledWith(
+      "Friendbot rate limit reached — wait a moment and try again.",
+      "error",
+    );
   });
 });
