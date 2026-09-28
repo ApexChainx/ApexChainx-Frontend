@@ -323,28 +323,40 @@ export async function mockApi(
       const raw = request.postData() ?? "";
       const filenameMatch = raw.match(/filename="([^"]+)"/);
       const filename = filenameMatch?.[1] ?? "upload.csv";
+      const lowerFilename = filename.toLowerCase();
 
-      // Fixtures named with "invalid" trigger a mocked server-side
-      // validation failure (e.g. a business-rule check the client can't
-      // perform), so the negative-case journey can be exercised without a
-      // real backend.
-      const isInvalidFixture = filename.toLowerCase().includes("invalid");
+      // Fixture filename conventions select the mocked outcome so the e2e
+      // suite can exercise each failure path without a real backend
+      // (Issue #613):
+      //   "partial"  -> a mix of valid and invalid rows (partial failure)
+      //   "fullfail" -> every row rejected (full failure)
+      //   "invalid"  -> a single server-side validation failure
+      // The default is a clean import.
+      const rowError = (row: number): BulkImportErrorRecord => ({
+        row,
+        field: "start_time",
+        message: "start_time must be before end_time.",
+      });
 
-      const errors: BulkImportErrorRecord[] = isInvalidFixture
-        ? [
-            {
-              row: 2,
-              field: "start_time",
-              message: "start_time must be before end_time.",
-            },
-          ]
-        : [];
+      let errors: BulkImportErrorRecord[] = [];
+      let imported = 2;
+      let skipped = 0;
 
-      const result = {
-        imported: isInvalidFixture ? 1 : 2,
-        skipped: isInvalidFixture ? 1 : 0,
-        errors,
-      };
+      if (lowerFilename.includes("partial")) {
+        imported = 2;
+        skipped = 0;
+        errors = [rowError(2), rowError(4)];
+      } else if (lowerFilename.includes("fullfail")) {
+        imported = 0;
+        skipped = 0;
+        errors = [rowError(2), rowError(3)];
+      } else if (lowerFilename.includes("invalid")) {
+        imported = 1;
+        skipped = 1;
+        errors = [rowError(2)];
+      }
+
+      const result = { imported, skipped, errors };
 
       bulkImportHistory.unshift({
         id: `BULK-${bulkImportHistory.length + 1}`,
