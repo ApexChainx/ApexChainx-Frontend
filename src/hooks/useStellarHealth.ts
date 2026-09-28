@@ -7,11 +7,16 @@
  * Pings the Horizon (/) endpoint on mount and periodically thereafter, returning
  * connectivity status and measured latency so the UI can gate action buttons or
  * surface a friendly error to the operator.
+ *
+ * Issue #604 — the periodic re-check is scheduled through the shared
+ * visibility-gated helper, so a backgrounded tab stops pinging Horizon and the
+ * latency reading is reconciled immediately when the tab is foregrounded.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { env } from "@/lib/config/env";
+import { useIntervalWhenVisible } from "@/hooks/useIntervalWhenVisible";
 
 export type StellarHealthStatus = "checking" | "reachable" | "unreachable";
 
@@ -72,33 +77,29 @@ export function useStellarHealth(): StellarHealthState {
     latencyMs: null,
     lastChecked: null,
   });
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let mounted = true;
-
-    const check = async () => {
-      const latency = await pingHorizon(horizonUrl);
-      if (!mounted) return;
-
-      setState({
-        status: latency !== null ? "reachable" : "unreachable",
-        latencyMs: latency,
-        lastChecked: new Date(),
-      });
-    };
-
-    // Immediate first check
-    void check();
-
-    // Periodic re-check
-    intervalRef.current = setInterval(check, POLL_INTERVAL_MS);
-
+    mountedRef.current = true;
     return () => {
-      mounted = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      mountedRef.current = false;
     };
+  }, []);
+
+  const check = useCallback(async () => {
+    const latency = await pingHorizon(horizonUrl);
+    if (!mountedRef.current) return;
+
+    setState({
+      status: latency !== null ? "reachable" : "unreachable",
+      latencyMs: latency,
+      lastChecked: new Date(),
+    });
   }, [horizonUrl]);
+
+  // Immediate first check, then periodic re-checks — both suspended while the
+  // document is hidden (issue #604).
+  useIntervalWhenVisible(check, POLL_INTERVAL_MS);
 
   return state;
 }
