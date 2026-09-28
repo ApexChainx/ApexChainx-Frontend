@@ -29,23 +29,6 @@ import { getThemePreference, setThemePreference } from "@/lib/theme-storage";
 import { getUsdValue } from "@/lib/usd-value";
 import { useRouter } from "next/navigation";
 
-type AuthUser = {
-  id: string;
-  email: string;
-  full_name?: string | null;
-  role: string;
-  stellar_wallet?: string | null;
-  created_at: string;
-};
-
-type AuthSessionResponse = {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  user: AuthUser;
-};
-
 type Wallet = {
   user_id: string;
   public_key: string;
@@ -159,39 +142,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleLogoutAll() {
-    setSessionActionLoading("logout-all");
-    setSessionActionFeedback(null);
-    setSessionActionError(null);
-    try {
-      await api.post(ENDPOINTS.auth.logoutAll);
-      await logout();
-      router.replace("/login");
-    } catch (err) {
-      const status = (err as { response?: { status?: number } }).response?.status;
-
-      // Issue #529 — a 404 means the all-session revocation endpoint is not
-      // deployed yet. This is NOT a server fault: signing out every session
-      // is a single-vendor convenience, and the backend may not support it.
-      // Sign out locally and stay on the page instead of silently navigating
-      // (the server-side token may still be valid on other devices).
-      if (status === 404) {
-        setSessionActionLoading(null);
-        await logout().catch(() => undefined);
-        setSessionActionError(
-          "All-session revocation isn't available on this server yet — you've been signed out of this session only. Other sessions will expire on their own."
-        );
-        return;
-      }
-
-      // Any other failure (5xx, network) — keep the session intact and let
-      // the user retry rather than destroying local state for a failed call.
-      setSessionActionError("Could not revoke all sessions. Please try again.");
-      setSessionActionLoading(null);
-    }
-  }
-  const [session, setSession] = useState<AuthSessionResponse | null>(null);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
   const [walletBalance, setWalletBalance] = useState<WalletBalance | null>(null);
@@ -199,16 +149,6 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const [registerForm, setRegisterForm] = useState({
-    email: "operator@example.com",
-    password: "secure123",
-    full_name: "NOC Operator",
-    role: "engineer",
-  });
-  const [loginForm, setLoginForm] = useState({
-    email: "operator@example.com",
-    password: "secure123",
-  });
   const [walletForm, setWalletForm] = useState({
     user_id: "",
     public_key: "",
@@ -217,8 +157,8 @@ export default function SettingsPage() {
   });
 
   const activeUserId = useMemo(
-    () => currentUser?.id ?? walletForm.user_id.trim(),
-    [currentUser?.id, walletForm.user_id],
+    () => walletForm.user_id.trim(),
+    [walletForm.user_id],
   );
   const walletAssetCount = useMemo(
     () => Object.keys(walletBalance?.balances ?? {}).length,
@@ -249,104 +189,6 @@ export default function SettingsPage() {
 
   // USD rates for balance conversion (mainnet only)
   const { rates: usdRates, error: usdRatesError } = useUsdRates();
-
-  async function handleRegister() {
-    setLoadingAction("register");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.post<AuthUser>(ENDPOINTS.auth.register, registerForm);
-      setCurrentUser(response.data);
-      setWalletForm((current) => ({
-        ...current,
-        user_id: response.data.id,
-      }));
-      setFeedback("Account registered successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLogin() {
-    setLoadingAction("login");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.post<AuthSessionResponse>(ENDPOINTS.auth.login, loginForm);
-      setSession(response.data);
-      setCurrentUser(response.data.user);
-      setWalletForm((current) => ({
-        ...current,
-        user_id: response.data.user.id,
-      }));
-      setFeedback("Signed in successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLoadSession() {
-    if (!session?.access_token) {
-      setError("Login first to load the current session.");
-      return;
-    }
-
-    setLoadingAction("session");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const response = await api.get<AuthUser>(ENDPOINTS.auth.me, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      setCurrentUser(response.data);
-      setFeedback("Session refreshed from the backend.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
-
-  async function handleLogout() {
-    if (!session?.access_token) {
-      setSession(null);
-      setCurrentUser(null);
-      setFeedback("Local session cleared.");
-      return;
-    }
-
-    setLoadingAction("logout");
-    setError(null);
-    setFeedback(null);
-
-    try {
-      await api.post(
-        ENDPOINTS.auth.logout,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
-      setSession(null);
-      setCurrentUser(null);
-      setFeedback("Logged out successfully.");
-    } catch (issue) {
-      setError(getErrorMessage(issue));
-    } finally {
-      setLoadingAction(null);
-    }
-  }
 
   async function handleCreateWallet() {
     if (!activeUserId) {
@@ -466,14 +308,78 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              <SettingsFeedbackBanner />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">
+            <h3 className="font-medium text-slate-900">{t('settings.signOutOfThisSession')}</h3>
+            <p className="text-slate-500">
+              {t('settings.endsCurrentSession')}
+            </p>
+            <button
+              onClick={() => void handleSignOut()}
+              disabled={sessionState !== "authenticated" || sessionActionLoading !== null}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              {sessionActionLoading === "signout" ? `${t('common.loading')}` : t('common.signOut')}
+            </button>
+          </div>
+        </div>
 
-              {/* Appearance (theme) + onboarding tour replay */}
-              <AppearanceSettings />
-              <OnboardingReplay />
+        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1">
+          <p className="font-medium">{t('settings.howSessionRefreshWorks')}</p>
+          <p>
+            {t('settings.sessionRefreshExplanation')}
+          </p>
+          <p>
+            {t('settings.sessionExpiredMessage')}
+          </p>
+        </div>
+      </section>
 
-              {/* Account profile (session module) */}
-              <AccountProfile />
+      {/* Language Settings */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-900">{t('settings.languageSettings')}</h2>
+        <p className="mt-1 text-sm text-slate-500">{t('settings.selectLanguage')}</p>
+        
+        <div className="mt-6 max-w-md">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex w-full items-center justify-between rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              {localeNames[locale]}
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-full min-w-[200px]">
+              {locales.map((loc) => (
+                <DropdownMenuItem
+                  key={loc}
+                  onClick={() => setLocale(loc)}
+                  className={`flex cursor-pointer items-center justify-between px-4 py-2 text-sm ${
+                    locale === loc ? "bg-slate-100 font-medium" : ""
+                  }`}
+                >
+                  {localeNames[loc]}
+                  {locale === loc && (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('settings.session')}</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">
+            {sessionUser ? t('settings.authenticated') : t('settings.notSignedIn')}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {sessionUser?.email ?? t('settings.loadCreateAccount')}
+          </p>
+        </div>
 
               <SettingsErrorBanner />
 
@@ -491,21 +397,167 @@ export default function SettingsPage() {
                 <WalletBalancesCard />
               </div>
 
-              {/* Stellar network health + SLA contract id (stellar module) */}
-              <StellarHealthCard network={env.STELLAR_NETWORK} />
-              <SLAContractIdCard
-                contractId={env.SLA_CONTRACT_ID}
-                network={env.STELLAR_NETWORK}
-              />
+          {/*
+            Issue #616 — account access routes through the shared session
+            provider and the real /login and /register flows. The duplicate
+            embedded auth stack (register/login/refresh/logout handlers and
+            this identity card) was removed so the session provider stays
+            the single source of truth for auth transitions.
+          */}
+          {sessionState === "unauthenticated" && (
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                {t('settings.signIn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                {t('settings.registerAccount')}
+              </button>
+            </div>
+          )}
+          {sessionState === "authenticated" && sessionUser && (
+            <p className="text-sm text-slate-600">
+              Signed in as{" "}
+              <span className="font-medium text-slate-900">{sessionUser.email}</span>{" "}
+              — manage your session below.
+            </p>
+          )}
+        </section>
 
-              {/* Dev auth toolset (session module) + wallet status panel (wallet module) */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                <DevAuthToolset />
-                <WalletStatusPanel />
-              </div>
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">{t('settings.walletStatus')}</h2>
+            <p className="text-sm text-slate-500">
+              {t('settings.walletBackendBridge')}
+            </p>
+          </div>
 
-              {/* Wallet readiness guidance (wallet module) */}
-              <WalletReadinessGuidance />
+          <div className="grid gap-3">
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={walletForm.user_id}
+              onChange={(event) =>
+                setWalletForm((current) => ({
+                  ...current,
+                  user_id: event.target.value,
+                }))
+              }
+              placeholder="User ID"
+            />
+            <input
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={walletForm.public_key}
+              onChange={(event) =>
+                setWalletForm((current) => ({
+                  ...current,
+                  public_key: event.target.value,
+                }))
+              }
+              placeholder="Public key"
+            />
+            <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={walletForm.funded}
+                  onChange={(event) =>
+                    setWalletForm((current) => ({
+                      ...current,
+                      funded: event.target.checked,
+                    }))
+                  }
+                />
+                Funded
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={walletForm.trustline_ready}
+                  onChange={(event) =>
+                    setWalletForm((current) => ({
+                      ...current,
+                      trustline_ready: event.target.checked,
+                    }))
+                  }
+                />
+                Trustline ready
+              </label>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              onClick={handleCreateWallet}
+              disabled={loadingAction === "create-wallet" || isHorizonUnreachable}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Create wallet"}
+            >
+              {loadingAction === "create-wallet" ? "Creating..." : "Create wallet"}
+            </button>
+            <button
+              onClick={handleLinkWallet}
+              disabled={loadingAction === "link-wallet" || isHorizonUnreachable}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Link wallet"}
+            >
+              {loadingAction === "link-wallet" ? "Linking..." : "Link wallet"}
+            </button>
+            <button
+              onClick={handleLoadWalletDetails}
+              disabled={loadingAction === "wallet-details" || isHorizonUnreachable}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load wallet details"}
+            >
+              {loadingAction === "wallet-details" ? "Loading..." : "Load wallet details"}
+            </button>
+            <button
+              onClick={handleLoadBalance}
+              disabled={loadingAction === "wallet-balance" || isHorizonUnreachable}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title={isHorizonUnreachable ? "Horizon is unreachable — wallet actions disabled" : "Load balance"}
+            >
+              {loadingAction === "wallet-balance" ? "Loading..." : "Load balance"}
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <h3 className="font-medium text-slate-900">Wallet details</h3>
+              {wallet ? (
+                <dl className="mt-3 grid gap-2 text-slate-600">
+                  <div className="flex justify-between gap-4">
+                    <dt>Address</dt>
+                    <dd className="break-all text-right font-medium text-slate-900">
+                      {explorerLink("account", wallet.public_key) ? (
+                        <a href={explorerLink("account", wallet.public_key)!} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {wallet.public_key}
+                        </a>
+                      ) : wallet.public_key}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>Funded</dt>
+                    <dd className="font-medium text-slate-900">
+                      {wallet.funded ? "Yes" : "No"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>Trustline</dt>
+                    <dd className="font-medium text-slate-900">
+                      {wallet.trustline_ready ? "Ready" : "Missing"}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-3 text-slate-500">No wallet loaded yet.</p>
+              )}
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
