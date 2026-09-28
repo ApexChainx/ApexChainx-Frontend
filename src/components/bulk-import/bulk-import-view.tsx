@@ -7,6 +7,7 @@ import { useRef, useState, useCallback, useId } from "react";
 import { bulkImportOutages } from "@/services/bulkImportService";
 import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
 import { STELLAR_NETWORK } from "@/lib/explorer";
+import { CSV_UNCLOSED_QUOTE, parseCSV, parseJSONRecords } from "@/lib/bulkImportParser";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -16,11 +17,63 @@ const IS_MAINNET = STELLAR_NETWORK === "mainnet";
 const BULK_DISABLED = IS_MAINNET && !ALLOW_BULK;
 const ACCEPTED_TYPES = ["text/csv", "application/json"] as const;
 const ACCEPTED_EXTENSIONS = [".csv", ".json"] as const;
-const MAX_PREVIEW_ROWS = 5;
+// Rows rendered per preview page. The full file is parsed and validated up
+// front; the pane pages through it so large imports can be audited row by
+// row instead of only the first five being visible.
+const PREVIEW_PAGE_SIZE = 10;
+// How many numbered page buttons to show around the current page.
+const PAGE_BUTTON_WINDOW = 5;
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const REQUIRED_FIELDS = ["service_id", "start_time", "end_time"] as const;
+
+// Field-level shape checks shared by the CSV and JSON validators (issue #610):
+// missing site, invalid severity, and malformed timestamps are flagged in the
+// preview so operators fix rows before spending an import cycle, instead of
+// reacting to a failed batch. Values are optional; empties are only reported
+// when the field is required.
+const VALID_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+const OPTIONAL_ENUM_FIELDS = ["severity"] as const;
+const TIMESTAMP_FIELDS = ["start_time", "end_time", "detected_at", "resolved_at"] as const;
+const SITE_FIELDS = ["site_name"] as const;
+
+function isValidTimestamp(value: string): boolean {
+  return !Number.isNaN(new Date(value).getTime());
+}
+
+/**
+ * Field-level shape checks for a single row's values, keyed by column name.
+ * Only fields present in the row's headers/keys are checked, so optional
+ * columns that are simply absent never produce noise.
+ */
+function validateRowFields(values: Record<string, string>): ImportValidationError[] {
+  const errors: ImportValidationError[] = [];
+
+  for (const field of SITE_FIELDS) {
+    if (field in values && values[field]?.trim() === "") {
+      errors.push({ field, message: `Field "${field}" is present but empty` });
+    }
+  }
+
+  for (const field of OPTIONAL_ENUM_FIELDS) {
+    const value = values[field]?.trim() ?? "";
+    if (field in values && value !== "" && !VALID_SEVERITIES.includes(value.toLowerCase() as typeof VALID_SEVERITIES[number])) {
+      errors.push({
+        field,
+        message: `Invalid ${field} "${value}" (expected one of: ${VALID_SEVERITIES.join(", ")})`,
+      });
+    }
+  }
+
+  for (const field of TIMESTAMP_FIELDS) {
+    if (field in values && values[field]?.trim() !== "" && !isValidTimestamp(values[field]?.trim() ?? "")) {
+      errors.push({ field, message: `Malformed timestamp in "${field}"` });
+    }
+  }
+
+  return errors;
+}
 
 // Optional columns the backend accepts for bulk outage import. Columns outside
 // this set (plus REQUIRED_FIELDS) are treated as unrecognized and surface a
@@ -55,7 +108,15 @@ interface PreviewState {
   rows: string[][];
   warnings: ImportValidationError[];
   errors: ImportValidationError[];
-  totalRows: number; // Added: track total for "showing X of Y" messaging
+  totalRows: number;
+  /** Error messages keyed by display row number (see rowNumberOffset). */
+  rowErrors: Record<number, string[]>;
+  /**
+   * Added to a zero-based row index to get the number shown to users and
+   * used in validation errors: 2 for CSV (row 1 is the header), 1 for JSON
+   * (records start at 1).
+   */
+  rowNumberOffset: number;
 }
 
 interface FileValidationResult {
@@ -64,64 +125,6 @@ interface FileValidationResult {
 }
 
 type UploadStatus = "idle" | "validating" | "uploading" | "success" | "error" | "cancelled";
-
-// ─── CSV Parsing ─────────────────────────────────────────────────────────────
-interface ParsedCSV {
-  headers: string[];
-  rows: string[][];
-  allRows: string[][];
-  totalRows: number;
-}
-
-function parseCSV(text: string): ParsedCSV {
-  const lines = text
-    .trim()
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
-  
-  if (lines.length === 0) {
-    return { headers: [], rows: [], allRows: [], totalRows: 0 };
-  }
-
-  // Robust CSV parsing: handles quoted fields containing commas
-  const parseLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
-      
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          current += '"';
-          i++; // Skip escaped quote
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
-  const firstLine = lines[0];
-  const headers = firstLine ? parseLine(firstLine).map((h) => h.replace(/^"|"$/g, "")) : [];
-  const allRows = lines.slice(1).map(parseLine);
-  
-  return {
-    headers,
-    rows: allRows.slice(0, MAX_PREVIEW_ROWS),
-    allRows,
-    totalRows: allRows.length,
-  };
-}
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 interface CSVValidationResult {
@@ -173,6 +176,14 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
         });
       }
     });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const present = headers
+      .map((h, colIndex) => [h, row[colIndex] ?? ""] as const)
+      .filter(([h]) => KNOWN_FIELDS.has(h));
+    validateRowFields(Object.fromEntries(present)).forEach((e) => {
+      errors.push({ row: i + 2, ...e });
+    });
   });
 
   if (rows.length > MAX_VALIDATED_ROWS) {
@@ -186,29 +197,18 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
 
 function validateJSON(text: string): { errors: ImportValidationError[]; parsed?: Record<string, unknown>[] } {
   const errors: ImportValidationError[] = [];
-  let parsed: unknown;
+  const result = parseJSONRecords(text);
+
+  if ("error" in result) {
+    errors.push({ message: result.error });
+    return { errors };
+  }
+
+  const records = result.records;
   
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    const message = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : "Invalid JSON: could not parse file.";
-    errors.push({ message });
-    return { errors };
-  }
-
-  if (!Array.isArray(parsed)) {
-    errors.push({ message: "JSON must be an array of outage records." });
-    return { errors };
-  }
-
-  if (parsed.length === 0) {
-    errors.push({ message: "JSON array is empty." });
-    return { errors };
-  }
-
-  const records = parsed as Record<string, unknown>[];
-  
-  records.slice(0, MAX_PREVIEW_ROWS).forEach((item, i) => {
+  // Validate every record (capped for the 500ms budget) so problems in later
+  // rows surface in the preview, not after the upload.
+  records.slice(0, MAX_VALIDATED_ROWS).forEach((item, i) => {
     if (item === null || typeof item !== "object") {
       errors.push({ row: i + 1, message: `Item ${i + 1} is not a valid object` });
       return;
@@ -223,48 +223,84 @@ function validateJSON(text: string): { errors: ImportValidationError[]; parsed?:
         });
       }
     });
+
+    // Field-level shape checks (site, severity, timestamps) — issue #610.
+    const values: Record<string, string> = {};
+    for (const key of Object.keys(item)) {
+      if (KNOWN_FIELDS.has(key)) {
+        values[key] = String(item[key] ?? "");
+      }
+    }
+    validateRowFields(values).forEach((e) => {
+      errors.push({ row: i + 1, ...e });
+    });
   });
 
   return { errors, parsed: records };
 }
 
 // ─── Preview Builder ─────────────────────────────────────────────────────────
+/**
+ * Index per-row validation errors by the row number shown in the preview so
+ * the table can mark each row's status without another submit.
+ */
+function collectRowErrors(errors: ImportValidationError[]): Record<number, string[]> {
+  const rowErrors: Record<number, string[]> = {};
+  for (const error of errors) {
+    if (error.row == null) continue;
+    (rowErrors[error.row] ??= []).push(error.message);
+  }
+  return rowErrors;
+}
+
 async function buildPreview(file: File): Promise<PreviewState> {
   const text = await file.text();
   const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase() as AcceptedExtension;
 
   if (ext === ".csv" || file.type === "text/csv") {
-    const { headers, rows, allRows, totalRows } = parseCSV(text);
-    const { errors, warnings: schemaWarnings } = validateCSV(headers, allRows);
+    const { headers, rows, totalRows, errors: parseErrors } = parseCSV(text);
+    const { errors, warnings: schemaWarnings } = validateCSV(headers, rows);
     const warnings: ImportValidationError[] = [...schemaWarnings];
-    
+
     if (totalRows === 0 && errors.length === 0) {
       warnings.push({ message: "File has a header row but no data rows." });
-    } else if (totalRows > MAX_PREVIEW_ROWS) {
-      warnings.push({ message: `Showing ${MAX_PREVIEW_ROWS} of ${totalRows} total rows.` });
     }
-    
-    return { headers, rows, errors, warnings, totalRows };
+
+    // Structural parse failures (e.g. an unclosed quote) are blocking: the
+    // rows after the malformed line cannot be trusted.
+    if (parseErrors.includes(CSV_UNCLOSED_QUOTE)) {
+      errors.push({
+        message: "A quoted field is not closed. Fix the quotes and try again.",
+      });
+    }
+
+    return { headers, rows, errors, warnings, totalRows, rowErrors: collectRowErrors(errors), rowNumberOffset: 2 };
   }
 
   // JSON
   const { errors, parsed } = validateJSON(text);
   
-  if (errors.length > 0 || !parsed) {
-    return { headers: [], rows: [], errors, warnings: [], totalRows: 0 };
+  // Only structural failures (invalid JSON, non-array, empty array) suppress
+  // the preview entirely; row-level errors still preview with inline chips
+  // so operators can see which records are affected (issue #610).
+  if (!parsed) {
+    return { headers: [], rows: [], errors, warnings: [], totalRows: 0, rowErrors: collectRowErrors(errors), rowNumberOffset: 1 };
   }
 
   const headers = parsed.length > 0 && parsed[0] ? Object.keys(parsed[0]) : [];
-  const rows = parsed.slice(0, MAX_PREVIEW_ROWS).map((r) => 
+  const rows = parsed.map((r) => 
     headers.map((h) => String(r[h] ?? ""))
   );
-  
-  const warnings: ImportValidationError[] = [];
-  if (parsed.length > MAX_PREVIEW_ROWS) {
-    warnings.push({ message: `Showing ${MAX_PREVIEW_ROWS} of ${parsed.length} total records.` });
-  }
 
-  return { headers, rows, errors, warnings, totalRows: parsed.length };
+  return { headers, rows, errors, warnings: [], totalRows: parsed.length, rowErrors: collectRowErrors(errors), rowNumberOffset: 1 };
+}
+
+/** Page numbers to render around the current page (windowed). */
+function getPageWindow(currentPage: number, pageCount: number): number[] {
+  let start = Math.max(0, currentPage - Math.floor(PAGE_BUTTON_WINDOW / 2));
+  const end = Math.min(pageCount, start + PAGE_BUTTON_WINDOW);
+  start = Math.max(0, end - PAGE_BUTTON_WINDOW);
+  return Array.from({ length: end - start }, (_, i) => start + i);
 }
 
 // ─── Components ──────────────────────────────────────────────────────────────
@@ -356,6 +392,7 @@ export default function BulkImportView() {
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [previewPage, setPreviewPage] = useState(0);
   
   const id = useId();
   const fileInputId = `file-input-${id}`;
@@ -394,6 +431,7 @@ export default function BulkImportView() {
     setFile(nextFile);
     setResult(null);
     setSubmitError(null);
+    setPreviewPage(0);
     setStatus("validating");
 
     try {
@@ -499,11 +537,16 @@ export default function BulkImportView() {
     setSubmitError(null);
     setStatus("idle");
     setProgress(0);
+    setPreviewPage(0);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
   const hasBlockingErrors = (preview?.errors.length ?? 0) > 0;
   const isProcessing = status === "uploading" || status === "validating";
+  const pageCount = preview ? Math.max(1, Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE)) : 1;
+  const safePreviewPage = Math.min(previewPage, pageCount - 1);
+  const pageRows = preview ? preview.rows.slice(safePreviewPage * PREVIEW_PAGE_SIZE, (safePreviewPage + 1) * PREVIEW_PAGE_SIZE) : [];
+  const invalidRowCount = preview ? Object.keys(preview.rowErrors).length : 0;
 
   // Mainnet bulk safety gate — early return with disabled message
   if (BULK_DISABLED) {
@@ -664,12 +707,16 @@ export default function BulkImportView() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Preview
                 </p>
-                <p className="text-xs text-gray-400">
-                  {preview.totalRows > MAX_PREVIEW_ROWS 
-                    ? `Showing ${preview.rows.length} of ${preview.totalRows} rows` 
-                    : `${preview.rows.length} row${preview.rows.length > 1 ? "s" : ""}`
-                  }
-                </p>
+                <div className="flex items-center gap-2">
+                  {invalidRowCount > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      {invalidRowCount} row{invalidRowCount > 1 ? "s" : ""} invalid
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {preview.totalRows} row{preview.totalRows > 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -692,18 +739,123 @@ export default function BulkImportView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.rows.map((row, i) => (
-                      <tr key={i} className="border-t hover:bg-gray-50 transition-colors">
-                        {row.map((cell, j) => (
-                          <td key={j} className="px-3 py-2 text-gray-700 max-w-[200px] truncate" title={cell}>
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    {pageRows.map((row, i) => {
+                      const rowNumber = safePreviewPage * PREVIEW_PAGE_SIZE + i + preview.rowNumberOffset;
+                      const rowErrorList = preview.rowErrors[rowNumber];
+                      return (
+                        <tr
+                          key={i}
+                          className={`border-t transition-colors ${
+                            rowErrorList ? "bg-red-50" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          {row.map((cell, j) => (
+                            <td key={j} className="px-3 py-2 text-gray-700 max-w-[200px] truncate" title={cell}>
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* Per-row error chips — issue #610 */}
+              {(() => {
+                const pageErrorEntries = Object.entries(preview.rowErrors)
+                  .map(([rowStr, messages]) => ({
+                    row: Number(rowStr),
+                    messages,
+                  }))
+                  .filter(({ row }) => {
+                    const zeroBased = row - preview.rowNumberOffset;
+                    return (
+                      zeroBased >= safePreviewPage * PREVIEW_PAGE_SIZE &&
+                      zeroBased < (safePreviewPage + 1) * PREVIEW_PAGE_SIZE
+                    );
+                  })
+                  .sort((a, b) => a.row - b.row);
+
+                if (pageErrorEntries.length === 0) return null;
+
+                return (
+                  <div className="border-t bg-red-50 px-4 py-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {pageErrorEntries.map(({ row, messages }) =>
+                        messages.map((message) => (
+                          <span
+                            key={`${row}-${message}`}
+                            title={message}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                          >
+                            <svg
+                              className="h-3 w-3 flex-shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                              />
+                            </svg>
+                            <span className="truncate">
+                              Row {row}: {message}
+                            </span>
+                          </span>
+                        )),
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Pagination controls */}
+              {pageCount > 1 && (
+                <nav
+                  aria-label="Preview pagination"
+                  className="flex items-center justify-between border-t bg-gray-50 px-4 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPage((p) => Math.max(0, p - 1))}
+                    disabled={safePreviewPage === 0}
+                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ← Previous
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {getPageWindow(safePreviewPage, pageCount).map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setPreviewPage(page)}
+                        aria-current={page === safePreviewPage ? "page" : undefined}
+                        aria-label={`Page ${page + 1}`}
+                        className={`h-6 min-w-[1.5rem] rounded px-1 text-xs transition-colors ${
+                          page === safePreviewPage
+                            ? "bg-blue-600 font-semibold text-white"
+                            : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {page + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPage((p) => Math.min(pageCount - 1, p + 1))}
+                    disabled={safePreviewPage === pageCount - 1}
+                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </nav>
+              )}
             </div>
           )}
         </div>

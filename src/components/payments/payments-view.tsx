@@ -40,20 +40,6 @@ export default function PaymentsView() {
     router.replace("/payments", { scroll: false });
   }
 
-  // FE-069: filter state
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-
-  // FE-072: sort + density
-  const [sortKey, setSortKey] = useState<SortKey>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [density, setDensity] = useState<TableDensity>(() => {
-    const prefs = getPreferences();
-    return prefs.tableDensity || "default";
-  });
-
   // Hydrate preferences from server and subscribe to changes
   useEffect(() => {
     hydratePreferences().then((prefs) => {
@@ -132,6 +118,9 @@ export default function PaymentsView() {
       setExporting(false);
     }
   }
+
+  const loading = isLoading;
+  const error = isError ? (queryError?.message ?? "Failed to load payments.") : null;
 
   return (
     <div className="space-y-4 p-6">
