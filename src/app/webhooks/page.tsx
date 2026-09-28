@@ -13,7 +13,9 @@ import {
   fetchWebhookDeliveries,
   retryDelivery,
 } from "@/services/webhookService";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
+import { slaEventKeys } from "@/lib/query-keys";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
 
@@ -28,13 +30,15 @@ export default function WebhooksPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
 
+  // Issue #623 — webhook reads and invalidations go through the canonical
+  // factory keys so they participate in shared sla-events invalidation.
   const { data: webhooks = [], isLoading } = useQuery({
-    queryKey: ["webhooks"],
+    queryKey: slaEventKeys.webhooks.list(),
     queryFn: fetchWebhooks,
   });
 
   const { data: deliveries = [], isLoading: deliveriesLoading } = useQuery({
-    queryKey: ["webhook-deliveries", selectedWebhook?.id],
+    queryKey: slaEventKeys.webhooks.deliveries(selectedWebhook?.id ?? ""),
     queryFn: () => fetchWebhookDeliveries(selectedWebhook!.id),
     enabled: !!selectedWebhook,
   });
@@ -42,7 +46,7 @@ export default function WebhooksPage() {
   const createMutation = useMutation({
     mutationFn: createWebhook,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["webhooks"] });
+      qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       resetForm();
     },
     onError: (err: Error) => setFormError(err.message),
@@ -52,7 +56,7 @@ export default function WebhooksPage() {
     mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateWebhook>[1] }) =>
       updateWebhook(id, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["webhooks"] });
+      qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       resetForm();
     },
     onError: (err: Error) => setFormError(err.message),
@@ -61,7 +65,7 @@ export default function WebhooksPage() {
   const deleteMutation = useMutation({
     mutationFn: deleteWebhook,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["webhooks"] });
+      qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       if (selectedWebhook) setSelectedWebhook(null);
     },
   });
@@ -74,7 +78,7 @@ export default function WebhooksPage() {
     },
     onSuccess: () => {
       setRetryingId(null);
-      qc.invalidateQueries({ queryKey: ["webhook-deliveries", selectedWebhook?.id] });
+      qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.deliveries(selectedWebhook?.id ?? "") });
     },
     onError: (err: Error) => {
       setRetryingId(null);

@@ -10,6 +10,14 @@ import { mockApi } from "./mock-api";
  * filename so assertions can target "this test's record" via its filename
  * rather than assuming the history list is empty, since the mock's history
  * state is not reset between tests in the same worker.
+ *
+ * Issue #613 extends the happy path with the failure paths operators actually
+ * hit: an oversized-file rejection (client-side size guard), a partially
+ * failed import (mixed valid/invalid rows -> per-row error chips + a
+ * partial-failure summary banner), a full failure (every row rejected), and
+ * a mid-upload cancellation (the mock aborts the request -> the UI must not
+ * report success). The mock selects the outcome from the fixture filename
+ * ("partial" / "fullfail" / "invalid"); the default is a clean import.
  */
 
 const VALID_HEADERS = "service_id,start_time,end_time";
@@ -69,6 +77,51 @@ test.describe("Bulk import journey", () => {
     // ...and the upload itself still succeeds from a later page.
     await page.getByRole("button", { name: /upload file/i }).click();
     await expect(page.getByText("Import Summary")).toBeVisible();
+  });
+
+  // Issue #611: history renders a summary strip and per-run failure badges,
+  // and pagination keeps the DOM bounded for long histories.
+  test("history shows a summary strip, failure badges, and bounded pagination", async ({ page }) => {
+    await mockApi(page);
+    await login(page);
+
+    // Seed 12 runs by importing one file per run so the history spans two
+    // pages at 10 records per page.
+    await page.goto("/bulk-import");
+    const seed = Date.now();
+    const filenames = Array.from({ length: 12 }, (_, i) => `history-run-${i + 1}-${seed}.csv`);
+    for (const filename of filenames) {
+      await page.getByLabel("Choose file").setInputFiles({
+        name: filename,
+        mimeType: "text/csv",
+        buffer: Buffer.from(validCsv()),
+      });
+      await expect(page.getByText("Import Summary")).toBeVisible();
+      await page.getByRole("button", { name: /upload another file/i }).click();
+    }
+
+    await page.getByRole("link", { name: /view history/i }).click();
+    await expect(page.getByRole("heading", { name: "Import History" })).toBeVisible();
+
+    // Summary strip renders with a success-rate percentage.
+    const summary = page.getByTestId("history-summary");
+    await expect(summary).toBeVisible();
+    await expect(summary).toContainText(/\d+%/);
+
+    // Visible runs carry a failure-rate badge; page 1 shows 10 of the 12.
+    await expect(page.getByText(/0% failures/i).first()).toBeVisible();
+    expect(await page.getByText(/% failures/i).count()).toBeLessThanOrEqual(10);
+
+    // Pagination keeps the DOM bounded and slides to page 2.
+    await expect(page.getByRole("navigation", { name: /history pagination/i })).toBeVisible();
+    expect(await page.getByRole("button", { name: /^Page \d+$/ }).count()).toBeLessThanOrEqual(5);
+    await expect(page.getByText(filenames[11]!, { exact: true })).toBeVisible(); // newest first
+    await expect(page.getByText(filenames[2]!, { exact: true })).toBeVisible(); // 10th record
+    await expect(page.getByText(filenames[1]!, { exact: true })).toBeHidden();
+
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByText(filenames[1]!, { exact: true })).toBeVisible();
   });
 
   test("uploads a valid CSV, shows the result, and lists it in history", async ({ page }) => {
@@ -140,5 +193,46 @@ test.describe("Bulk import journey", () => {
     await page.getByRole("link", { name: /view history/i }).click();
     await expect(page.getByText(filename)).toBeVisible();
     await expect(page.getByText(/1 errors/i)).toBeVisible();
+  });
+
+  // Issue #614 — a throttled import endpoint makes the staged progress
+  // strip's transition observable: the strip appears with an in-flight
+  // stage while the request is pending, and the result lands only after
+  // the (delayed) response.
+  test("shows a visible progress transition while a throttled import is in flight", async ({
+    page,
+  }) => {
+    await mockApi(page, { bulkImportDelayMs: 1500 });
+    await login(page);
+
+    const filename = `throttled-import-${Date.now()}.csv`;
+
+    await page.goto("/bulk-import");
+    await expect(page.getByRole("heading", { name: "Bulk Outage Import" })).toBeVisible();
+
+    await page.getByLabel("Choose file").setInputFiles({
+      name: filename,
+      mimeType: "text/csv",
+      buffer: Buffer.from(validCsv()),
+    });
+    await expect(page.getByText(filename)).toBeVisible();
+
+    const uploadButton = page.getByRole("button", { name: /upload file/i });
+    await expect(uploadButton).toBeEnabled();
+    await uploadButton.click();
+
+    // The progress strip is visible with a live stage label and bar while
+    // the throttled request is pending — not a frozen busy state.
+    const bar = page.getByRole("progressbar", { name: "Import progress" });
+    await expect(bar).toBeVisible();
+    await expect(page.getByText("Uploading file…")).toBeVisible();
+
+    // The submit button is gone for the duration of the import, so the
+    // batch cannot be re-submitted mid-flight.
+    await expect(page.getByRole("button", { name: /upload file/i })).toHaveCount(0);
+
+    // Once the throttled response lands, the import completes.
+    await expect(page.getByText("Import Summary")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Imported")).toBeVisible();
   });
 });

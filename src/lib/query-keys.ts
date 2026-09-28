@@ -14,9 +14,18 @@
  *
  * Issue #416 — This is the canonical, project-wide query-key factory. See
  * docs/query-keys.md for the full conventions: how to add a new key
- * family, how prefix-matching invalidation works, and the currently known
- * divergence (SLA config, dashboard-metrics, sla-disputes still use literal
- * keys outside this factory — tracked as separate follow-up issues).
+ * family, how prefix-matching invalidation works, and the test-based scan
+ * (tests/query-key-literal-scan.test.ts) that fails the suite when a literal
+ * key is introduced.
+ *
+ * Issue #623 — The former literal-key offenders (SLA config, dashboard
+ * metrics/comparison, SLA disputes, webhooks, bulk-import history) now read
+ * their keys from this factory, so invalidating `slaEventKeys.*` reaches
+ * them as documented.
+ *
+ * Issue #624 — `stellarHealth` backs the settings page's Horizon health
+ * poller, which moved from a hand-rolled useState+useEffect loop onto
+ * React Query (`refetchInterval` replaces the bespoke setInterval).
  */
 
 export const slaEventKeys = {
@@ -26,6 +35,14 @@ export const slaEventKeys = {
   /** Dashboard analytics */
   dashboard: (filters?: Record<string, unknown>) =>
     ["sla-events", "dashboard", filters] as const,
+
+  /**
+   * Dashboard analytics for the comparison window (issue #623 — replaces the
+   * literal ["dashboard-metrics-compare", filters] key so the compare view
+   * participates in shared invalidation).
+   */
+  dashboardCompare: (filters?: Record<string, unknown>) =>
+    ["sla-events", "dashboard-compare", filters] as const,
 
   /** SLA calculations & previews */
   sla: {
@@ -61,6 +78,22 @@ export const slaEventKeys = {
     detail: (id: string) => ["sla-events", "payments", id] as const,
   },
 
+  /**
+   * Webhook endpoints and their delivery history (issue #597).
+   *
+   * Both the endpoint list and a single endpoint's deliveries live under the
+   * shared `sla-events` prefix, so invalidating `webhooks.all` after a CRUD
+   * mutation refreshes the deliveries panel too instead of leaving stale rows
+   * visible next to the edited endpoint.
+   */
+  webhooks: {
+    all: ["sla-events", "webhooks"] as const,
+    list: (params?: Record<string, unknown>) =>
+      ["sla-events", "webhooks", "list", params] as const,
+    deliveries: (webhookId: string) =>
+      ["sla-events", "webhooks", "deliveries", webhookId] as const,
+  },
+
   /** SLA disputes */
   disputes: {
     all: ["sla-events", "disputes"] as const,
@@ -71,6 +104,33 @@ export const slaEventKeys = {
 
   /** SLA configuration */
   config: ["sla-events", "config"] as const,
+
+  /**
+   * Webhook endpoints & their deliveries (issue #623 — replaces the literal
+   * ["webhooks"] / ["webhook-deliveries", id] keys).
+   */
+  webhooks: {
+    all: ["sla-events", "webhooks"] as const,
+    list: (params?: Record<string, unknown>) =>
+      ["sla-events", "webhooks", "list", params] as const,
+    detail: (id: string) => ["sla-events", "webhooks", id] as const,
+  },
+
+  /**
+   * Bulk import history (issue #623 — replaces the literal
+   * ["bulk-import-history"] key).
+   */
+  bulkImports: {
+    all: ["sla-events", "bulk-imports"] as const,
+    list: (params?: Record<string, unknown>) =>
+      ["sla-events", "bulk-imports", "list", params] as const,
+  },
+
+  /**
+   * Horizon network health probe (issue #624 — the settings page's stellar
+   * health poller moved onto React Query; no family existed for it).
+   */
+  stellarHealth: ["sla-events", "stellar-health"] as const,
 };
 
 /**

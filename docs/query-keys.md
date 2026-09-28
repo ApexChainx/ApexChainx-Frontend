@@ -74,15 +74,20 @@ under the shared prefix to begin with.
      all: ["sla-events"] as const,
      // ...existing families...
 
-     /** Webhook deliveries */
+     /** Webhook endpoints & delivery history (issue #597) */
      webhooks: {
        all: ["sla-events", "webhooks"] as const,
        list: (params?: Record<string, unknown>) =>
          ["sla-events", "webhooks", "list", params] as const,
-       detail: (id: string) => ["sla-events", "webhooks", id] as const,
+       deliveries: (webhookId: string) =>
+         ["sla-events", "webhooks", "deliveries", webhookId] as const,
      },
    };
    ```
+
+   This is the shape `src/lib/query-keys.ts` actually ships: the `webhooks`
+   family was registered (and `src/app/webhooks/page.tsx` ported onto it) by
+   issue #597.
 
 2. Follow the existing shape used by `outages`, `payments`, and `disputes`:
    an `all` root, a `list(params)` for filtered/paginated queries, and a
@@ -92,8 +97,8 @@ under the shared prefix to begin with.
 3. Use the new family's `queryKey` in every `useQuery`/`useMutation` for
    that domain, and invalidate through it — never hand-roll a parallel
    literal-array key for the same data (see
-   [Known divergence](#known-divergence-do-not-copy) for what that produces
-   when it goes wrong).
+   [Literal-key alarm](#literal-key-alarm-test-based-scan) for the mechanical
+   guard that enforces this).
 
 4. **Register every `invalidateQueries` root.** If a mutation should bust
    this family's cache, add the call to the shared invalidation flow (see
@@ -103,38 +108,37 @@ under the shared prefix to begin with.
    root is a silent staleness bug waiting to happen — exactly the class of
    bug in the next section.
 
-## Known divergence (do not copy — separate issues track fixing these)
+## Literal-key alarm (test-based scan)
 
-Three places in the codebase currently query with **literal key arrays that
-are not built from `slaEventKeys`**, even though the data they hold is
-exactly what `slaEventKeys` mutations are meant to keep fresh. Invalidating
-`slaEventKeys.*` silently does **not** reach any of these — they are
-documented here as a map of the hazard, not fixed here:
+> Issue #623 — the literal-key divergences this doc used to catalogue (SLA
+> config, dashboard metrics/comparison, SLA disputes, webhooks,
+> bulk-import history) are **fixed**: every one of those queries now reads
+> its key from `slaEventKeys`, so the shared invalidation flows
+> (`useInvalidateOnResolve.ts` et al.) actually reach them.
 
-- **SLA config** — `src/hooks/useSlaConfig.ts` queries
-  `SLA_CONFIG_KEY = ["sla", "config"]`. This happens to collide in spelling
-  with `slaEventKeys.config` (`["sla-events", "config"]`) but is a different
-  array under a different root, so it is invalidated by neither
-  `slaEventKeys.all` nor `slaEventKeys.config`.
-- **Dashboard metrics** — `src/components/dashboard/sla-dashboard-view.tsx`
-  queries `["dashboard-metrics", filters]` and
-  `["dashboard-metrics-compare", comparisonFilters]`, not
-  `slaEventKeys.dashboard(filters)`. The outage-resolution flow in
-  `useInvalidateOnResolve.ts` invalidates `slaEventKeys.dashboard()`
-  believing it refreshes this view — it does not.
-- **SLA disputes** — `src/components/outages/SLADisputesPanel.tsx` queries
-  `["sla-disputes", outageId]`, not `slaEventKeys.disputes.detail(...)`. The
-  same `useInvalidateOnResolve.ts` flow invalidates
-  `slaEventKeys.disputes.all` believing it refreshes this panel — it does
-  not.
+To keep it that way, [`tests/query-key-literal-scan.test.ts`](../tests/query-key-literal-scan.test.ts)
+walks every `.ts`/`.tsx` file under `src/` (excluding colocated test
+files) and fails the suite when it finds a literal array passed directly as
+a `queryKey:` property or as the direct argument of `useQuery`/
+`useMutation`:
 
-Fixing each of these (migrating the literal key to the corresponding
-`slaEventKeys` entry) is tracked as separate follow-up work, not part of
-this documentation change. If you're picking up one of those issues, the
-fix is mechanical: replace the literal array with the matching
-`slaEventKeys` accessor so the query key shares the `"sla-events"` prefix,
-then confirm the existing `invalidateQueries` calls in
-`useInvalidateOnResolve.ts` actually refetch the view.
+```bash
+npx vitest run tests/query-key-literal-scan.test.ts
+# or just run the whole suite — the scan is part of it:
+npm test
+```
+
+The scan also asserts it catches a deliberate violation fixture
+([`tests/fixtures/query-keys-literal-violation.ts`](../tests/fixtures/query-keys-literal-violation.ts)),
+so a broken regex fails loudly instead of silently passing. The fixture
+lives under `tests/` (excluded from the src scan) and must keep its
+literals — the scan test depends on them.
+
+**Known limits:** the scan targets those call-site patterns only. A literal
+returned by a key-builder function and passed indirectly (e.g.
+`queryKey: someKeyBuilder()`) is not flagged — prefer extending the
+factory over adding local key builders for the same reason: indirect keys
+desync from the factory just like literals do.
 
 ## The session key family (`sessionKeys`)
 
@@ -165,5 +169,5 @@ for SLA/outage work.
 | Rule | Why |
 | --- | --- |
 | Use `slaEventKeys` (`src/lib/query-keys.ts`) for all new query keys | It's the canonical, project-wide factory — the only one designed for cross-domain invalidation |
-| Never hand-roll a literal key array for data also covered by `slaEventKeys` | Breaks prefix-matching invalidation — see [Known divergence](#known-divergence-do-not-copy) |
+| Never hand-roll a literal key array for data also covered by `slaEventKeys` | Breaks prefix-matching invalidation — and the [literal-key alarm](#literal-key-alarm-test-based-scan) fails the suite |
 | Every new key family needs a registered `invalidateQueries` root | An unregistered family is a silent staleness bug |

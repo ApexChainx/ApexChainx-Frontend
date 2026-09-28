@@ -1,4 +1,4 @@
-/** ApexChain Network Operations Intelligence Platform */
+/** ApexChain - Network Operations Intelligence Platform */
 /**
  * Hook: useStellarHealth
  *
