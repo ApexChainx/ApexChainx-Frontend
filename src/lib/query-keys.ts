@@ -78,6 +78,22 @@ export const slaEventKeys = {
     detail: (id: string) => ["sla-events", "payments", id] as const,
   },
 
+  /**
+   * Webhook endpoints and their delivery history (issue #597).
+   *
+   * Both the endpoint list and a single endpoint's deliveries live under the
+   * shared `sla-events` prefix, so invalidating `webhooks.all` after a CRUD
+   * mutation refreshes the deliveries panel too instead of leaving stale rows
+   * visible next to the edited endpoint.
+   */
+  webhooks: {
+    all: ["sla-events", "webhooks"] as const,
+    list: (params?: Record<string, unknown>) =>
+      ["sla-events", "webhooks", "list", params] as const,
+    deliveries: (webhookId: string) =>
+      ["sla-events", "webhooks", "deliveries", webhookId] as const,
+  },
+
   /** SLA disputes */
   disputes: {
     all: ["sla-events", "disputes"] as const,

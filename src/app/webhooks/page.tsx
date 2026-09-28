@@ -15,6 +15,7 @@ import {
 } from "@/services/webhookService";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
+import { slaEventKeys } from "@/lib/query-keys";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
 
@@ -32,12 +33,12 @@ export default function WebhooksPage() {
   // Issue #623 — webhook reads and invalidations go through the canonical
   // factory keys so they participate in shared sla-events invalidation.
   const { data: webhooks = [], isLoading } = useQuery({
-    queryKey: slaEventKeys.webhooks.all,
+    queryKey: slaEventKeys.webhooks.list(),
     queryFn: fetchWebhooks,
   });
 
   const { data: deliveries = [], isLoading: deliveriesLoading } = useQuery({
-    queryKey: slaEventKeys.webhooks.list({ webhook_id: selectedWebhook?.id }),
+    queryKey: slaEventKeys.webhooks.deliveries(selectedWebhook?.id ?? ""),
     queryFn: () => fetchWebhookDeliveries(selectedWebhook!.id),
     enabled: !!selectedWebhook,
   });
@@ -77,9 +78,7 @@ export default function WebhooksPage() {
     },
     onSuccess: () => {
       setRetryingId(null);
-      qc.invalidateQueries({
-        queryKey: slaEventKeys.webhooks.list({ webhook_id: selectedWebhook?.id }),
-      });
+      qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.deliveries(selectedWebhook?.id ?? "") });
     },
     onError: (err: Error) => {
       setRetryingId(null);
