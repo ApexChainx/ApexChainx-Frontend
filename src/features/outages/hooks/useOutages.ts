@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useMemo, useRef } from "react";
 
 import { DEFAULT_OUTAGES_PAGE_SIZE, fetchOutages } from "@/lib/outages";
-import { persistedCache } from "@/lib/persisted-cache";
+import { persistedCache, clearOldSchemaVersions } from "@/lib/persisted-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
 import type { OutagesQuery } from "@/lib/outages";
@@ -55,6 +55,11 @@ export function useOutages(params: UseOutagesParams = {}) {
     [normalizedParams],
   );
   const cacheKeyStr = useMemo(() => cacheKey(normalizedParams), [normalizedParams]);
+
+  // Clear old schema versions on bootstrap (Issue #563)
+  useEffect(() => {
+    void clearOldSchemaVersions();
+  }, []);
 
   // Hydrate from IndexedDB on first mount (offline-first)
   useEffect(() => {
