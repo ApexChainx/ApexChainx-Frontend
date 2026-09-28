@@ -22,6 +22,7 @@ import { ENDPOINTS } from "@/lib/endpoints";
 import { logger } from "@/lib/logger";
 import { checkLogoutRateLimit } from "@/lib/logout-rate-limit";
 import { resetPreferences } from "@/lib/preferences";
+import { clearSessionSnapshot } from "@/lib/session-snapshot";
 
 /**
  * localStorage flag recording that this browser has successfully
@@ -222,7 +223,7 @@ export function SessionProvider({
     });
   }
 
-  const clearSession = useCallback(() => {
+  const clearSession = useCallback(async () => {
     clearTokens();
     setUser(null);
     setState("unauthenticated");
@@ -249,6 +250,9 @@ export function SessionProvider({
     // apexchain_user_preferences, so it is already excluded and is
     // untouched by this reset).
     resetPreferences();
+
+    // Issue #559 — Clear all cache surfaces (IndexedDB, React Query, mutation queue, SW)
+    await clearSessionSnapshot();
   }, []);
 
   /**

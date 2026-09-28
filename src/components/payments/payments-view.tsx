@@ -8,8 +8,9 @@ import { useEffect, useMemo, useState } from "react";
 import { PaymentDetailDrawer } from "@/components/payments/payment-detail-drawer";
 import { PaymentsTable, type SortDir, type SortKey } from "@/components/payments/payments-table";
 import type { TableDensity } from "@/components/data-table";
-import { exportPayments, fetchPayments } from "@/services/paymentService";
+import { exportPayments } from "@/services/paymentService";
 import { getPreferences, hydratePreferences, subscribeToPreferences, updatePreferences } from "@/lib/preferences";
+import { usePayments } from "@/features/payments/hooks/usePayments";
 import type { PaginatedPayments } from "@/types/payment";
 
 /**
@@ -21,11 +22,24 @@ const ROWS_PER_PAGE_OPTIONS = [10, 100, 500] as const;
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<PaginatedPayments | null>(null);
+
+  // FE-069: filter state
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // FE-072: sort + density
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [density, setDensity] = useState<TableDensity>(() => {
+    const prefs = getPreferences();
+    return prefs.tableDensity || "default";
+  });
+
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(
     () => searchParams?.get("paymentId") ?? null
   );
@@ -41,20 +55,6 @@ export default function PaymentsView() {
     setSelectedPaymentId(null);
     router.replace("/payments", { scroll: false });
   }
-
-  // FE-069: filter state
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-
-  // FE-072: sort + density
-  const [sortKey, setSortKey] = useState<SortKey>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [density, setDensity] = useState<TableDensity>(() => {
-    const prefs = getPreferences();
-    return prefs.tableDensity || "default";
-  });
 
   // Hydrate preferences from server and subscribe to changes
   useEffect(() => {
@@ -78,29 +78,16 @@ export default function PaymentsView() {
     setPage(1);
   };
 
-  const requestKey = useMemo(
-    () => `${page}:${perPage}:${statusFilter}:${typeFilter}:${dateFrom}:${dateTo}:${sortKey}:${sortDir}`,
-    [page, perPage, statusFilter, typeFilter, dateFrom, dateTo, sortKey, sortDir]
-  );
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    fetchPayments({
-      page,
-      page_size: perPage,
-      status: statusFilter || undefined,
-      type: typeFilter || undefined,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-      sort_by: sortKey,
-      sort_dir: sortDir,
-    })
-      .then((response) => { if (isMounted) { setData(response); setError(null); } })
-      .catch(() => { if (isMounted) setError("Failed to load payments."); })
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
-  }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { data, isLoading, isError, error: queryError, refetch } = usePayments({
+    page,
+    page_size: perPage,
+    status: statusFilter || undefined,
+    type: typeFilter || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    sort_by: sortKey,
+    sort_dir: sortDir,
+  });
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -130,6 +117,9 @@ export default function PaymentsView() {
       setExporting(false);
     }
   }
+
+  const loading = isLoading;
+  const error = isError ? (queryError?.message ?? "Failed to load payments.") : null;
 
   return (
     <div className="space-y-4 p-6">

@@ -10,8 +10,9 @@
  *  - payments (list & detail)
  *  - disputes (list & detail)
  *
- * This hook returns a stable invalidate function that busts every cache
- * in the slaEventKeys family so no stale data lingers after a mutation.
+ * Issue #574 — Invalidate narrowly (current list filter + detail key) instead of
+ * busting the entire SLA event family. Apply optimistic patches for the
+ * resolved row so the visible UI updates without a refetch.
  */
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,8 +24,8 @@ export function useInvalidateOutageChange() {
 
   const invalidate = useCallback(async () => {
     await Promise.all([
-      // Bust all outage queries (list + detail)
-      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.all }),
+      // Bust only the outage list pages (not detail queries, which are patched optimistically)
+      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.lists }),
 
       // Bust dashboard analytics (SLA compliance, trends)
       queryClient.invalidateQueries({

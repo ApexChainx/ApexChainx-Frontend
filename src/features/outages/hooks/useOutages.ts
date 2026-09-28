@@ -2,7 +2,8 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useMemo, useRef } from "react";
 
 import { DEFAULT_OUTAGES_PAGE_SIZE, fetchOutages } from "@/lib/outages";
-import { persistedCache } from "@/lib/persisted-cache";
+import { persistedCache, clearOldSchemaVersions } from "@/lib/persisted-cache";
+import { debouncedCacheSet } from "@/lib/debounced-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
 import type { OutagesQuery } from "@/lib/outages";
@@ -28,6 +29,7 @@ export interface UseOutagesParams {
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = DEFAULT_OUTAGES_PAGE_SIZE;
 const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes
+const CACHE_WRITE_DEBOUNCE_MS = 500; // Coalesce rapid writes
 
 function cacheKey(params: UseOutagesParams): string {
   return `outages:${JSON.stringify(params)}`;
@@ -55,6 +57,11 @@ export function useOutages(params: UseOutagesParams = {}) {
     [normalizedParams],
   );
   const cacheKeyStr = useMemo(() => cacheKey(normalizedParams), [normalizedParams]);
+
+  // Clear old schema versions on bootstrap (Issue #563)
+  useEffect(() => {
+    void clearOldSchemaVersions();
+  }, []);
 
   // Hydrate from IndexedDB on first mount (offline-first)
   useEffect(() => {
@@ -92,10 +99,11 @@ export function useOutages(params: UseOutagesParams = {}) {
         signal,
       });
 
-      // Persist successful fetches to IndexedDB. A successful response with
-      // zero items is still meaningful ("no incidents match this filter") and
-      // must be cached so the confirmed-empty state is available offline.
-      void persistedCache.set(cacheKeyStr, data, CACHE_TTL_MS);
+      // Persist successful fetches to IndexedDB with debouncing (Issue #567).
+      // A successful response with zero items is still meaningful ("no incidents
+      // match this filter") and must be cached so the confirmed-empty state is
+      // available offline.
+      void debouncedCacheSet(cacheKeyStr, data, CACHE_TTL_MS, CACHE_WRITE_DEBOUNCE_MS);
 
       return data;
     },

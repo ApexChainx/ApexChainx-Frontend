@@ -2,6 +2,8 @@
 
 This document contains architectural diagrams that visualize ApexChain's component structure and key data flows.
 
+
+
 ## Table of Contents
 - [Frontend Component Tree](#frontend-component-tree)
 - [Auth/Refresh Flow](#authrefresh-flow)
