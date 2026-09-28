@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
     getPreferences,
@@ -11,8 +11,7 @@ import {
     updatePreferences,
     type FilterPreset
 } from "@/lib/preferences";
-import { getOutages } from "@/services/outages";
-import type { Outage } from "@/types/outages";
+import { parseOutagesFilter, type SortField, type SortOrder } from "@/lib/urlState";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Failed to load outages";
@@ -62,9 +61,8 @@ export function useFilterPresets() {
   return { presets, savePreset, deletePreset };
 }
 
-import { parseOutagesFilter, type SortField, type SortOrder } from "@/lib/urlState";
-
-// Existing state manager — extended with search + sort + full URL sync (FE-058, FE-059, FE-060)
+// Table state manager — handles URL sync for filters, sort, pagination
+// Data fetching is delegated to useOutages hook (Issue #573)
 export function useOutagesTableState() {
   const params = useSearchParams();
   const router = useRouter();
@@ -154,72 +152,4 @@ export function useOutagesTableState() {
       clearSort,
     },
   };
-}
-
-// New data fetching & polling hook for the Outages list
-export function useOutagesList(
-  page: number,
-  severity?: string,
-  status?: string,
-  pageSize: number = 10,
-  search?: string,
-  sortField?: SortField,
-  sortOrder?: SortOrder,
-) {
-  const [outages, setOutages] = useState<Outage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const isFetching = useRef(false);
-  const hasOutagesRef = useRef(false);
-
-  useEffect(() => {
-    hasOutagesRef.current = outages.length > 0;
-  }, [outages]);
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-
-    const fetchList = async () => {
-      if (isFetching.current) return;
-      isFetching.current = true;
-
-      try {
-        const data = await getOutages({
-          page,
-          page_size: pageSize,
-          severity,
-          status,
-          search,
-          sort_field: sortField,
-          sort_order: sortOrder,
-        });
-        if (isMounted) {
-          setOutages(data.items);
-          setError(null);
-        }
-      } catch (error: unknown) {
-        if (isMounted && !hasOutagesRef.current) {
-          setError(getErrorMessage(error));
-        }
-      } finally {
-        isFetching.current = false;
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchList();
-
-    // The list page constantly polls every 15 seconds to ensure we 
-    // catch any newly generated incidents as well as updates to existing ones.
-    const intervalId = setInterval(fetchList, 15000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
-    };
-  }, [page, pageSize, severity, status, search, sortField, sortOrder]);
-
-  return { outages, loading, error };
 }

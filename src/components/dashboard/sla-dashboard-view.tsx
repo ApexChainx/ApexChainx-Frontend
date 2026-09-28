@@ -1,6 +1,5 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
-/** ApexChain Network Operations Intelligence Platform */
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -13,6 +12,7 @@ import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
+import { slaEventKeys } from "@/lib/query-keys";
 
 function exportSnapshot(metrics: DashboardMetrics, label = "dashboard") {
   const snapshot = {
@@ -96,7 +96,7 @@ export default function SLADashboardView() {
   }
 
   const primary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics", filters],
+    queryKey: slaEventKeys.dashboard(filters),
     queryFn: () => fetchDashboardMetrics(filters),
     staleTime: 30_000,
     structuralSharing: (oldData: unknown, newData: unknown) => {
@@ -126,7 +126,7 @@ export default function SLADashboardView() {
   const compareModeActive = compareMode && hasDateRange;
 
   const secondary = useQuery<DashboardMetrics>({
-    queryKey: ["dashboard-metrics-compare", comparisonFilters],
+    queryKey: slaEventKeys.dashboard(comparisonFilters),
     queryFn: () => fetchDashboardMetrics(comparisonFilters),
     staleTime: 30_000,
     enabled: compareModeActive,
