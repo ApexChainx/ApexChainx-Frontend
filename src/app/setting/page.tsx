@@ -52,6 +52,32 @@ import {
   StellarHealthProvider,
 } from "@/features/settings/stellar";
 
+/**
+ * Issue #620 — translate known faucet rate-limit responses (HTTP 429, or a
+ * friendbot error body that reports rate limiting) into an actionable
+ * message; anything else falls back to the generic error text.
+ */
+function getFundingErrorMessage(
+  issue: unknown,
+  t: (key: string) => string,
+): string {
+  const response = (issue as { response?: { status?: number; data?: unknown } }).response;
+  if (response?.status === 429) {
+    return t('settings.friendbotRateLimited');
+  }
+
+  // Some proxies answer with a 200/400 and a rate-limit body instead of
+  // HTTP 429 — flag those too rather than showing a generic failure.
+  if (response?.data && typeof response.data === "object") {
+    const bodyText = JSON.stringify(response.data).toLowerCase();
+    if (bodyText.includes("rate limit") || bodyText.includes("rate_limit")) {
+      return t('settings.friendbotRateLimited');
+    }
+  }
+
+  return getErrorMessage(issue);
+}
+
 export default function SettingsPage() {
   const { t } = useI18n();
 

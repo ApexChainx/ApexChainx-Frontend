@@ -1,4 +1,4 @@
-/** ApexChain Network Operations Intelligence Platform */
+/** ApexChain - Network Operations Intelligence Platform */
 /**
  * Hook: useStellarHealth
  *
@@ -7,11 +7,17 @@
  * Pings the Horizon (/) endpoint on mount and periodically thereafter, returning
  * connectivity status and measured latency so the UI can gate action buttons or
  * surface a friendly error to the operator.
+ *
+ * Issue #624 — Migrated from a hand-rolled useState+useEffect poller onto
+ * React Query: the query key comes from the factory (slaEventKeys.stellarHealth)
+ * and `refetchInterval` replaces the bespoke setInterval + AbortController
+ * teardown. pingHorizon still owns the per-request 5s timeout.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { env } from "@/lib/config/env";
+import { slaEventKeys } from "@/lib/query-keys";
 
 export type StellarHealthStatus = "checking" | "reachable" | "unreachable";
 
@@ -67,38 +73,23 @@ async function pingHorizon(url: string): Promise<number | null> {
  */
 export function useStellarHealth(): StellarHealthState {
   const horizonUrl = getHorizonUrl();
-  const [state, setState] = useState<StellarHealthState>({
-    status: "checking",
-    latencyMs: null,
-    lastChecked: null,
+
+  const query = useQuery({
+    queryKey: slaEventKeys.stellarHealth,
+    queryFn: () => pingHorizon(horizonUrl),
+    refetchInterval: POLL_INTERVAL_MS,
+    // The poller is the single re-check path; keep window focus from
+    // triggering extra pings the old setInterval loop never did.
+    refetchOnWindowFocus: false,
   });
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
+  // pingHorizon resolves `null` on failure instead of throwing, so `data`
+  // (not `error`) carries the check outcome.
+  const checked = query.data !== undefined;
 
-    const check = async () => {
-      const latency = await pingHorizon(horizonUrl);
-      if (!mounted) return;
-
-      setState({
-        status: latency !== null ? "reachable" : "unreachable",
-        latencyMs: latency,
-        lastChecked: new Date(),
-      });
-    };
-
-    // Immediate first check
-    void check();
-
-    // Periodic re-check
-    intervalRef.current = setInterval(check, POLL_INTERVAL_MS);
-
-    return () => {
-      mounted = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [horizonUrl]);
-
-  return state;
+  return {
+    status: !checked ? "checking" : query.data !== null ? "reachable" : "unreachable",
+    latencyMs: query.data ?? null,
+    lastChecked: checked ? new Date() : null,
+  };
 }

@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { ApiError } from "@/lib/errors";
 
 import type {
   DisputeListParams,
@@ -28,10 +29,6 @@ interface PreviewSLAParams {
   mttr_minutes: number;
 }
 
-interface APIErrorResponse {
-  message?: string;
-}
-
 /* -------------------------------------------------------------------------- */
 /*                                  Constants                                 */
 /* -------------------------------------------------------------------------- */
@@ -45,16 +42,6 @@ const SLA_ENDPOINTS = {
 /* -------------------------------------------------------------------------- */
 /*                               Helper Methods                               */
 /* -------------------------------------------------------------------------- */
-
-function extractErrorMessage(error: unknown): string {
-  const axiosError = error as AxiosError<APIErrorResponse>;
-
-  return (
-    axiosError.response?.data?.message ||
-    axiosError.message ||
-    "An unexpected error occurred."
-  );
-}
 
 function sanitizeParams<T extends object>(
   params: T
@@ -97,7 +84,7 @@ export async function calculateSLA(
 
     return response.data;
   } catch (error: unknown) {
-    throw new Error(extractErrorMessage(error));
+    throw ApiError.fromError(error);
   }
 }
 
@@ -117,7 +104,7 @@ export async function previewSLA(
 
     return response.data;
   } catch (error: unknown) {
-    throw new Error(extractErrorMessage(error));
+    throw ApiError.fromError(error);
   }
 }
 
@@ -137,7 +124,7 @@ export async function getDisputes(
 
     return response.data;
   } catch (error: unknown) {
-    throw new Error(extractErrorMessage(error));
+    throw ApiError.fromError(error);
   }
 }
 
@@ -155,7 +142,7 @@ export async function flagDispute(
 
     return response.data;
   } catch (error: unknown) {
-    throw new Error(extractErrorMessage(error));
+    throw ApiError.fromError(error);
   }
 }
 
@@ -178,7 +165,7 @@ export async function resolveDispute(
 
     return response.data;
   } catch (error: unknown) {
-    throw new Error(extractErrorMessage(error));
+    throw ApiError.fromError(error);
   }
 }
 

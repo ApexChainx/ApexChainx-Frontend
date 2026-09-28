@@ -8,6 +8,7 @@
  * exception that never comes.
  */
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/i18n";
@@ -44,11 +45,16 @@ vi.mock("@/hooks/useSession", () => ({
   }),
 }));
 
+// Issue #624 — the page's stellar health poller is React Query-backed now, so
+// a client must be in scope (same harness pattern as payments-view.test.tsx).
 function renderSettingsPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <I18nProvider>
-      <SettingsPage />
-    </I18nProvider>
+    <QueryClientProvider client={client}>
+      <I18nProvider>
+        <SettingsPage />
+      </I18nProvider>
+    </QueryClientProvider>
   );
 }
 
