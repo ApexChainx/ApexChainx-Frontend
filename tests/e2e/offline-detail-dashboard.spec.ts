@@ -87,6 +87,11 @@ test.describe("Offline detail page and dashboard", () => {
     await expect(page.getByRole("heading", { name: /SLA Analytics Dashboard/i })).toBeVisible();
     await expect(page.getByText("SLA Compliance")).toBeVisible();
 
+    // Issue #605 — the tiles come from the persisted snapshot, so the page
+    // must label them as cached rather than presenting them as live figures.
+    await expect(page.getByTestId("dashboard-snapshot-badge")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-snapshot-badge")).toHaveText(/cached snapshot/i);
+
     await wipeIndexedDb(page);
   });
 
