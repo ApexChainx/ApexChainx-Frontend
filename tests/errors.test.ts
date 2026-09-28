@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeApiError } from "@/lib/errors";
+import { normalizeApiError, ApiError } from "@/lib/errors";
 
 const error = (status?: number, data?: unknown, message?: string, headers?: Record<string, string | null>) => ({
   response: { status, data, headers },
@@ -40,5 +40,52 @@ describe("normalizeApiError", () => {
       "x-correlation-id": "header",
     })).correlationId).toBe("header");
     expect(normalizeApiError(error(500, { requestId: "request" })).correlationId).toBe("request");
+  });
+});
+
+describe("ApiError", () => {
+  it("preserves correlationId from response headers", () => {
+    const apiError = ApiError.fromError(
+      error(500, { message: "Server error" }, undefined, { "x-correlation-id": "corr-123" })
+    );
+    expect(apiError.correlationId).toBe("corr-123");
+    expect(apiError.message).toBe("Server error");
+    expect(apiError.kind).toBe("unknown");
+    expect(apiError.status).toBe(500);
+  });
+
+  it("preserves correlationId from response body", () => {
+    const apiError = ApiError.fromError(
+      error(404, { correlationId: "body-corr-456", message: "Not found" })
+    );
+    expect(apiError.correlationId).toBe("body-corr-456");
+    expect(apiError.kind).toBe("not_found");
+  });
+
+  it("preserves original error as cause", () => {
+    const original = new Error("network error");
+    const apiError = ApiError.fromError(
+      error(500, { message: "Server error" }, "network error"),
+      original
+    );
+    expect(apiError.originalError).toBe(original);
+    expect(apiError.cause).toBe(original);
+  });
+
+  it("includes kind based on status code", () => {
+    const authError = ApiError.fromError(error(401));
+    expect(authError.kind).toBe("auth");
+
+    const validationError = ApiError.fromError(error(422));
+    expect(validationError.kind).toBe("validation");
+
+    const notFoundError = ApiError.fromError(error(404));
+    expect(notFoundError.kind).toBe("not_found");
+  });
+
+  it("maintains proper stack trace", () => {
+    const apiError = ApiError.fromError(error(500));
+    expect(apiError.stack).toBeDefined();
+    expect(apiError.stack).toContain("ApiError");
   });
 });
