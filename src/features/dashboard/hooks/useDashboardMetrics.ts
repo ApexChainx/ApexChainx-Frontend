@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import { persistedCache, clearOldSchemaVersions } from "@/lib/persisted-cache";
@@ -16,9 +16,20 @@ function cacheKey(filters: DashboardFilters): string {
   return `dashboard-metrics:${JSON.stringify(filters)}`;
 }
 
-export function useDashboardMetrics(filters: DashboardFilters = {}) {
+/**
+ * Issue #605 — the dashboard is the first screen an operator opens after
+ * reconnecting, so a network blip must not leave it blank. The query result is
+ * annotated with `isStaleSnapshot`: true while the page is rendering the
+ * persisted snapshot because the live request has not succeeded.
+ */
+export type DashboardMetricsQuery = UseQueryResult<DashboardMetrics, Error> & {
+  isStaleSnapshot: boolean;
+};
+
+export function useDashboardMetrics(filters: DashboardFilters = {}): DashboardMetricsQuery {
   const queryClient = useQueryClient();
   const hydratedRef = useRef(false);
+  const [hydratedFromCache, setHydratedFromCache] = useState(false);
 
   const normalizedFilters = useMemo<DashboardFilters>(
     () => ({
@@ -54,6 +65,7 @@ export function useDashboardMetrics(filters: DashboardFilters = {}) {
         const existing = queryClient.getQueryData<DashboardMetrics>(queryKey);
         if (!existing) {
           queryClient.setQueryData(queryKey, cached);
+          setHydratedFromCache(true);
         }
       }
     }).catch(() => {});
@@ -65,7 +77,7 @@ export function useDashboardMetrics(filters: DashboardFilters = {}) {
 
   const query = useQuery<DashboardMetrics, Error>({
     queryKey,
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       const data = await fetchDashboardMetrics(normalizedFilters);
 
       // Persist with debouncing
@@ -77,8 +89,31 @@ export function useDashboardMetrics(filters: DashboardFilters = {}) {
     gcTime: 1000 * 60 * 10,
     retry: 2,
     refetchOnWindowFocus: false,
-    enabled: Object.keys(normalizedFilters).length > 0,
+    // Issue #605 — the dashboard must load with no filters selected. (The
+    // previous gate compared `Object.keys` on a normalized object that always
+    // carries all four keys, so it never actually disabled the query.)
+    enabled: true,
+    structuralSharing: (oldData: unknown, newData: unknown) => {
+      if (!oldData || !newData) return newData as DashboardMetrics;
+      const o = oldData as DashboardMetrics;
+      const n = newData as DashboardMetrics;
+      if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
+          o.penalties.total === n.penalties.total &&
+          o.rewards.total === n.rewards.total) {
+        return o;
+      }
+      return n;
+    },
   });
 
-  return query;
+  // We are showing a snapshot whenever the persisted copy hydrated and the
+  // live request has since failed (offline, or the metrics endpoint is down).
+  // `failureCount` is checked rather than `isError` alone because React Query
+  // keeps the previously hydrated `data` and retries in the background, and the
+  // operator should be told the figures are cached from the first failed
+  // attempt rather than after the retry budget is exhausted.
+  const isStaleSnapshot =
+    hydratedFromCache && query.data != null && (query.isError || query.failureCount > 0);
+
+  return { ...query, isStaleSnapshot };
 }
