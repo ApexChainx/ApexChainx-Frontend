@@ -227,11 +227,7 @@ function BulkAssignModal({
   );
 }
 
-import { useRouter, useSearchParams } from "next/navigation";
-
 export default function OutagesPageClient({ data = [], isFetching, searchTerm = "", debouncedSearch = "" }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   // -----------------------------
   // State

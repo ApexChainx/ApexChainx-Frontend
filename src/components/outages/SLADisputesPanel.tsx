@@ -63,11 +63,6 @@ export function SLADisputesPanel({
     [outageId, statusFilter, page]
   );
 
-  const queryKey = useMemo(
-    () => ["sla-disputes", outageId, statusFilter, page],
-    [outageId, statusFilter, page]
-  );
-
   // Changing the filter jumps back to the first page. Resetting inside the
   // click handler keeps the two state writes in the same event (no
   // effect-based setState, and no transient out-of-bounds query).

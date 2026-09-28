@@ -20,6 +20,7 @@ import { useDocumentVisibility } from "@/hooks/useDocumentVisibility";
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
 import { useOutageDetail } from "@/features/outages/hooks/useOutageDetail";
 import { slaEventKeys } from "@/lib/query-keys";
+import { getSiteDisplayTitle } from "@/lib/site-display";
 import { explorerLink } from "@/lib/explorer";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 
@@ -165,9 +166,13 @@ export default function OutageDetailsPage() {
   // entirely while `document.hidden` is true and rebuilt on
   // `visibilitychange`, so the last response the operator saw is the one
   // they come back to — no burst of catch-up fetches either.
+  //
+  // Issue #578 — pause the poll while the resolve modal is open to avoid
+  // doubling stale fetches while the operator decides.
   useEffect(() => {
     if (!id || !outage || outage.status === "resolved") return;
     if (!isDocumentVisible) return;
+    if (isResolveModalOpen) return; // Pause while modal is open
 
     let mounted = true;
     const controller = new AbortController();
@@ -188,7 +193,7 @@ export default function OutageDetailsPage() {
       controller.abort();
       clearInterval(intervalId);
     };
-  }, [id, outage?.status, isDocumentVisible]);
+  }, [id, outage?.status, isDocumentVisible, isResolveModalOpen]);
 
   /**
    * Issue #571 — after any successful mutation the cached list pages are
@@ -478,7 +483,7 @@ if (!outage) {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Site Name</span>
-              <span className="font-medium">{outage.site_name}</span>
+              <span className="font-medium">{getSiteDisplayTitle(outage.site_name)}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
