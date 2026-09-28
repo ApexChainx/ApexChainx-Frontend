@@ -27,9 +27,9 @@ function renderSettings(secret?: string) {
   );
 }
 
-/** The secret input renders masked until "Show" is clicked. */
+/** The secret input renders masked until the reveal toggle is clicked. */
 function revealSecret(): HTMLInputElement {
-  fireEvent.click(screen.getByRole("button", { name: "Show" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show signing secret" }));
   return screen.getByLabelText("Signing Secret") as HTMLInputElement;
 }
 

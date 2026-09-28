@@ -36,6 +36,7 @@ describe("slaEventKeys.webhooks", () => {
       "deliveries",
       "wh-1",
     ]);
+    expect(slaEventKeys.webhooks.detail("wh-1")).toEqual(["sla-events", "webhooks", "wh-1"]);
   });
 
   it("makes webhooks.all a prefix of both read keys", () => {

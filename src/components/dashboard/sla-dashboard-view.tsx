@@ -9,7 +9,7 @@ import KPICard from "@/components/dashboard/KPICard";
 import MetricErrorBoundary from "@/components/dashboard/MetricErrorBoundary";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
-import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
 import { useDashboardMetrics } from "@/features/dashboard/hooks/useDashboardMetrics";
@@ -176,6 +176,12 @@ export default function SLADashboardView() {
   // them on mount so the landing page survives an offline reload.
   const primary = useDashboardMetrics(filters);
   const retryMetrics = useCallback(() => void primary.refetch(), [primary]);
+
+  const trends = useQuery<TrendPoint[], Error>({
+    queryKey: slaEventKeys.dashboardTrends(filters),
+    queryFn: () => fetchDashboardTrends(filters),
+    staleTime: 30_000,
+  });
 
   const hasDateRange = useMemo(
     () => Boolean(filters.date_from || filters.date_to),
