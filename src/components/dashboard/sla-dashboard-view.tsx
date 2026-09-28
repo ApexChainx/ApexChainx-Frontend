@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import KPICard from "@/components/dashboard/KPICard";
+import MetricErrorBoundary from "@/components/dashboard/MetricErrorBoundary";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
-import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
+import { useDashboardMetrics } from "@/features/dashboard/hooks/useDashboardMetrics";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
@@ -86,6 +88,80 @@ export function computeComparisonFilters(filters: DashboardFilters): DashboardFi
   };
 }
 
+/**
+ * Issue #607 — each tile derives its own display value. Keeping the derivation
+ * inside the tile (rather than inline in the grid) is what lets a malformed
+ * metric fail inside its own error boundary instead of taking the page down.
+ */
+interface TileProps {
+  metrics: DashboardMetrics;
+  comparison: DashboardMetrics | null;
+}
+
+function ComplianceTile({ metrics, comparison }: TileProps) {
+  const value = metrics.sla_compliance_percentage;
+  return (
+    <KPICard
+      title="SLA Compliance"
+      value={`${value.toFixed(1)}%`}
+      subtitle={
+        comparison
+          ? `vs ${comparison.sla_compliance_percentage.toFixed(1)}% (${delta(value, comparison.sla_compliance_percentage)}pp)`
+          : "Overall compliance rate"
+      }
+      highlight={value >= 90 ? "green" : "red"}
+    />
+  );
+}
+
+function PenaltiesTile({ metrics, comparison }: TileProps) {
+  const total = metrics.penalties.total;
+  return (
+    <KPICard
+      title="Total Penalties"
+      value={`$${total.toLocaleString()}`}
+      subtitle={
+        comparison
+          ? `vs $${comparison.penalties.total.toLocaleString()} (${delta(total, comparison.penalties.total)})`
+          : `${metrics.penalties.count} incidents`
+      }
+      highlight="red"
+    />
+  );
+}
+
+function RewardsTile({ metrics, comparison }: TileProps) {
+  const total = metrics.rewards.total;
+  return (
+    <KPICard
+      title="Total Rewards"
+      value={`$${total.toLocaleString()}`}
+      subtitle={
+        comparison
+          ? `vs $${comparison.rewards.total.toLocaleString()} (${delta(total, comparison.rewards.total)})`
+          : `${metrics.rewards.count} achievements`
+      }
+      highlight="green"
+    />
+  );
+}
+
+function NetBalanceTile({ metrics, comparison }: TileProps) {
+  const netBalance = metrics.rewards.total - metrics.penalties.total;
+  return (
+    <KPICard
+      title="Net Balance"
+      value={`${netBalance >= 0 ? "+" : ""}$${netBalance.toLocaleString()}`}
+      subtitle={(() => {
+        if (!comparison) return "Rewards minus penalties";
+        const cmpNet = comparison.rewards.total - comparison.penalties.total;
+        return `vs ${cmpNet >= 0 ? "+" : ""}$${cmpNet.toLocaleString()} (${delta(netBalance, cmpNet)})`;
+      })()}
+      highlight={netBalance >= 0 ? "green" : "red"}
+    />
+  );
+}
+
 export default function SLADashboardView() {
   const router = useRouter();
   const [compareMode, setCompareMode] = useState(false);
@@ -95,21 +171,16 @@ export default function SLADashboardView() {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  const primary = useQuery<DashboardMetrics>({
-    queryKey: slaEventKeys.dashboard(filters),
-    queryFn: () => fetchDashboardMetrics(filters),
+  // Issue #605 — the primary metrics query is the persisted one: it keys into
+  // the shared factory, writes successful snapshots to IndexedDB, and hydrates
+  // them on mount so the landing page survives an offline reload.
+  const primary = useDashboardMetrics(filters);
+  const retryMetrics = useCallback(() => void primary.refetch(), [primary]);
+
+  const trends = useQuery<TrendPoint[], Error>({
+    queryKey: slaEventKeys.dashboardTrends(filters),
+    queryFn: () => fetchDashboardTrends(filters),
     staleTime: 30_000,
-    structuralSharing: (oldData: unknown, newData: unknown) => {
-      if (!oldData || !newData) return newData as DashboardMetrics;
-      const o = oldData as DashboardMetrics;
-      const n = newData as DashboardMetrics;
-      if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
-          o.penalties.total === n.penalties.total &&
-          o.rewards.total === n.rewards.total) {
-        return o;
-      }
-      return n;
-    },
   });
 
   const hasDateRange = useMemo(
@@ -154,7 +225,7 @@ export default function SLADashboardView() {
     router.push(`/payments?${params.toString()}`);
   }, [router]);
 
-  if (primary.isLoading) {
+  if (primary.isLoading && !primary.data) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -163,18 +234,20 @@ export default function SLADashboardView() {
     );
   }
 
-  if (primary.isError || !primary.data) {
+  // With no data at all there is nothing to isolate — hand off to the route
+  // error state. A snapshot-backed render falls through to the tiles below and
+  // is flagged as stale instead.
+  if (!primary.data) {
     return (
       <RouteErrorState
         title="Dashboard unavailable"
         description="We could not load the latest analytics right now."
-        primaryAction={{ label: "Retry", onClick: () => void primary.refetch() }}
+        primaryAction={{ label: "Retry", onClick: retryMetrics }}
       />
     );
   }
 
   const metrics = primary.data;
-  const netBalance = metrics.rewards.total - metrics.penalties.total;
   const lastUpdated = primary.dataUpdatedAt
     ? new Date(primary.dataUpdatedAt).toLocaleString()
     : "Not synced yet";
@@ -188,6 +261,18 @@ export default function SLADashboardView() {
           <p className="text-sm text-gray-500">Live backend analytics for compliance, payouts, and trend movement.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/*
+            Issue #605 — the tiles below come from the persisted snapshot rather
+            than a live request, so say so instead of presenting it as current.
+          */}
+          {primary.isStaleSnapshot ? (
+            <span
+              data-testid="dashboard-snapshot-badge"
+              className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800"
+            >
+              Cached snapshot
+            </span>
+          ) : null}
           <span className="text-xs uppercase tracking-wide text-gray-600">Updated {lastUpdated}</span>
         <button
           onClick={() => setCompareMode((v) => !v)}
@@ -199,7 +284,7 @@ export default function SLADashboardView() {
           {compareModeActive ? "Exit Compare" : "Compare"}
         </button>
           <button onClick={() => exportSnapshot(metrics)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Export</button>
-          <button onClick={() => void primary.refetch()} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
+          <button onClick={retryMetrics} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
         </div>
       </div>
 
@@ -236,34 +321,18 @@ export default function SLADashboardView() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="dashboard-kpis">
-        <KPICard
-          title="SLA Compliance"
-          value={`${metrics.sla_compliance_percentage.toFixed(1)}%`}
-          subtitle={cmp ? `vs ${cmp.sla_compliance_percentage.toFixed(1)}% (${delta(metrics.sla_compliance_percentage, cmp.sla_compliance_percentage)}pp)` : "Overall compliance rate"}
-          highlight={metrics.sla_compliance_percentage >= 90 ? "green" : "red"}
-        />
-        <KPICard
-          title="Total Penalties"
-          value={`$${metrics.penalties.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.penalties.total.toLocaleString()} (${delta(metrics.penalties.total, cmp.penalties.total)})` : `${metrics.penalties.count} incidents`}
-          highlight="red"
-        />
-        <KPICard
-          title="Total Rewards"
-          value={`$${metrics.rewards.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.rewards.total.toLocaleString()} (${delta(metrics.rewards.total, cmp.rewards.total)})` : `${metrics.rewards.count} achievements`}
-          highlight="green"
-        />
-        <KPICard
-          title="Net Balance"
-          value={`${netBalance >= 0 ? "+" : ""}$${netBalance.toLocaleString()}`}
-          subtitle={(() => {
-            if (!cmp) return "Rewards minus penalties";
-            const cmpNet = cmp.rewards.total - cmp.penalties.total;
-            return `vs ${cmpNet >= 0 ? "+" : ""}$${cmpNet.toLocaleString()} (${delta(netBalance, cmpNet)})`;
-          })()}
-          highlight={netBalance >= 0 ? "green" : "red"}
-        />
+        <MetricErrorBoundary title="SLA Compliance" onRetry={retryMetrics}>
+          <ComplianceTile metrics={metrics} comparison={cmp} />
+        </MetricErrorBoundary>
+        <MetricErrorBoundary title="Total Penalties" onRetry={retryMetrics}>
+          <PenaltiesTile metrics={metrics} comparison={cmp} />
+        </MetricErrorBoundary>
+        <MetricErrorBoundary title="Total Rewards" onRetry={retryMetrics}>
+          <RewardsTile metrics={metrics} comparison={cmp} />
+        </MetricErrorBoundary>
+        <MetricErrorBoundary title="Net Balance" onRetry={retryMetrics}>
+          <NetBalanceTile metrics={metrics} comparison={cmp} />
+        </MetricErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
