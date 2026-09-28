@@ -1,12 +1,18 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 import { RouteEmptyState, RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { useRetryQueue } from "@/features/payments/hooks/useRetryQueue";
-import type { Payment, PaymentStatus } from "@/types/payment";
+import type { Payment } from "@/types/payment";
 import Link from "next/link";
-import { useCallback } from "react";
+
+/**
+ * Issue #641 — the bulk retry is irreversible and touches many payments, so
+ * it goes through the same typed-phrase gate as the other destructive payment
+ * actions. The e2e journey types this exact phrase.
+ */
+export const BULK_RETRY_CONFIRM_PHRASE = "retry payments";
 
 const statusStyles: Record<string, string> = {
   failed: "bg-red-100 text-red-700",
@@ -18,14 +24,11 @@ const typeStyles: Record<string, string> = {
   penalty: "bg-red-100 text-red-700",
 };
 
-const OPTIMISTIC_PENDING_STATUS: PaymentStatus = "pending";
-
 export default function RetryQueueView() {
   const {
     query,
     selectedIds,
     retryingIds,
-    optimisticStatus,
     retryError,
     bulkRetrying,
     showConfirmDialog,
@@ -42,6 +45,10 @@ export default function RetryQueueView() {
   const loading = isLoading;
   const error = isError ? (queryError?.message ?? "Failed to load failed payments.") : null;
 
+  const items = data?.items ?? [];
+  const failedCount = items.filter((payment) => rowStatus(payment) === "failed").length;
+  const pendingCount = items.filter((payment) => rowStatus(payment) === "pending").length;
+
   const cell = "px-4 py-3 text-sm";
 
   return (
@@ -49,7 +56,17 @@ export default function RetryQueueView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Payment Retry Queue</h1>
-          <p className="text-sm text-gray-600 mt-1">Failed payments from the last 7 days</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Failed payments from the last 7 days
+            {!loading && !error && (
+              <>
+                {" · "}
+                <span data-testid="retry-queue-summary">
+                  {failedCount} failed · {pendingCount} pending
+                </span>
+              </>
+            )}
+          </p>
         </div>
         {selectedIds.size > 0 && (
           <Button 
@@ -119,6 +136,7 @@ export default function RetryQueueView() {
                     type="checkbox" 
                     checked={selectedIds.has(payment.id)}
                     onChange={() => toggleSelect(payment.id)}
+                    aria-label={`Select payment ${payment.id}`}
                     className="rounded border-gray-300"
                   />
                 </td>
@@ -167,24 +185,19 @@ export default function RetryQueueView() {
         </table>
       </div>
 
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Bulk Retry</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to retry {selectedIds.size} payment{selectedIds.size > 1 ? 's' : ''}? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setShowConfirmDialog(false)} disabled={bulkRetrying}>
-              Cancel
-            </Button>
-            <Button onClick={handleBulkRetry} disabled={bulkRetrying}>
-              {bulkRetrying ? "Retrying..." : "Confirm Retry"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        isOpen={showConfirmDialog}
+        title={`Retry ${selectedIds.size} payment${selectedIds.size === 1 ? "" : "s"}?`}
+        message={
+          `Each of the ${selectedIds.size} selected payment${selectedIds.size === 1 ? "" : "s"} will be ` +
+          "submitted for retry exactly once. This action cannot be undone."
+        }
+        confirmPhrase={BULK_RETRY_CONFIRM_PHRASE}
+        confirmLabel="Confirm retry"
+        loading={bulkRetrying}
+        onConfirm={handleBulkRetry}
+        onCancel={() => setShowConfirmDialog(false)}
+      />
     </div>
   );
 }
