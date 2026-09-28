@@ -2,6 +2,7 @@
 import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { logger } from "@/lib/logger";
+import { mutationQueue, registerMutationExecutor } from "@/lib/mutation-queue";
 
 // Define preference types
 export interface UserPreferences {
@@ -33,59 +34,10 @@ const subscribers = new Set<Subscriber>();
 // Current in-memory preferences
 let currentPreferences: UserPreferences = {};
 
-/**
- * Issue #293 — pending preference writes that failed to reach the server.
- *
- * Preference writes are optimistic (localStorage-first, then server sync), so
- * a transient failure used to drop the write silently. Instead, failed PUTs
- * are queued and replayed (oldest-last, so the newest state wins) when:
- * - `updatePreferences` is called again, or
- * - the session recovers (401 refresh) and the retried write succeeds, or
- * - `hydratePreferences` runs on the next page load.
- *
- * Only non-auth failures are queued: a definitive 401/403 means the session
- * is gone and the queued write belongs to a signed-out user — clearSession()
- * resets the whole preferences store in that case anyway.
- */
-const pendingSyncQueue = new Set<string>();
-
-export function hasPendingPreferenceSync(): boolean {
-  return pendingSyncQueue.size > 0;
-}
-
-function queuePendingSync(preferences: UserPreferences): void {
-  pendingSyncQueue.add(JSON.stringify(preferences));
-}
-
-async function syncToServer(preferences: UserPreferences): Promise<void> {
+// Register preference sync executor with mutation queue
+registerMutationExecutor("syncPreferences", async (preferences: UserPreferences) => {
   await api.put(ENDPOINTS.preferences.base, preferences);
-}
-
-/**
- * Replay queued preference writes that previously failed. Called on
- * hydration and after any successful sync so recovery is automatic once
- * the session/backend is reachable again.
- */
-async function flushPendingSyncs(): Promise<void> {
-  if (pendingSyncQueue.size === 0) return;
-
-  const queued = [...pendingSyncQueue];
-  pendingSyncQueue.clear();
-  // Replay oldest-last: the last queued state is the most recent one the
-  // user saw, so it must win on the server.
-  for (const payload of queued) {
-    try {
-      await api.put(ENDPOINTS.preferences.base, JSON.parse(payload));
-    } catch (e) {
-      logger.warn("preferences-sync-retry-failed", {
-        message: e instanceof Error ? e.message : String(e),
-      });
-      pendingSyncQueue.add(payload);
-      // Stop at the first failure — the session/backend is still down.
-      return;
-    }
-  }
-}
+});
 
 // Initialize current preferences from localStorage (fallback)
 function loadFromLocalStorage(): UserPreferences {
@@ -138,9 +90,8 @@ export async function hydratePreferences(): Promise<UserPreferences> {
     subscribers.forEach((sub) => sub(currentPreferences));
     isHydrated = true;
 
-    // The session is clearly alive if we got here — replay anything that
-    // failed to sync earlier.
-    await flushPendingSyncs();
+    // Replay any queued preference syncs
+    await mutationQueue.replay();
 
     return currentPreferences;
   } catch (e) {
@@ -180,14 +131,14 @@ export async function updatePreferences(
     // pipeline so the PUT carries X-CSRF-Token (an authed cookie PUT is
     // rejected as CSRF-invalid otherwise) and is retried through the 401
     // refresh flow when the session expired mid-flight.
-    pendingSyncQueue.clear();
-    await syncToServer(currentPreferences);
+    await api.put(ENDPOINTS.preferences.base, currentPreferences);
   } catch (e) {
     const status = (e as { response?: { status?: number } })?.response?.status;
     if (status === 401 || status === 403) {
       // Definitive auth failure: the refresh flow already ran and the
       // session is gone. Do not queue — clearSession() resets preferences.
       logger.warn("preferences-sync-failed-auth", { status });
+      await mutationQueue.remove("sync-preferences");
     } else {
       // Transient failure: queue the payload so it is replayed on the next
       // successful sync or hydration instead of being dropped silently.
@@ -195,7 +146,11 @@ export async function updatePreferences(
         status,
         message: e instanceof Error ? e.message : String(e),
       });
-      queuePendingSync(currentPreferences);
+      await mutationQueue.enqueue({
+        idempotencyKey: "sync-preferences",
+        type: "syncPreferences",
+        payload: currentPreferences,
+      });
     }
   }
 
@@ -229,6 +184,10 @@ export function resetPreferences(): void {
   isHydrated = false;
   // A signed-out user's unsynced writes belong to the previous account and
   // must not be replayed into the next user's session.
-  pendingSyncQueue.clear();
+  void mutationQueue.remove("sync-preferences");
   subscribers.forEach((sub) => sub(currentPreferences));
+}
+
+export function hasPendingPreferenceSync(): boolean {
+  return mutationQueue.hasPending();
 }
