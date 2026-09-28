@@ -142,6 +142,28 @@ export interface FailedPaymentSeed {
   created_at: string;
 }
 
+/**
+ * Seed fixture for a webhook endpoint (issues #598 / #599 / #601 / #603).
+ * Callers opt in via the `webhooks` option; the default is empty so existing
+ * specs are unaffected.
+ */
+export interface WebhookSeed {
+  id: string;
+  url: string;
+  events: string[];
+  active?: boolean;
+  created_at?: string;
+}
+
+export interface WebhookDeliverySeed {
+  id: string;
+  webhook_id: string;
+  event: string;
+  status: "success" | "failed" | "pending";
+  response_code?: number | null;
+  created_at?: string;
+}
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
@@ -163,6 +185,11 @@ export interface MockApiOptions {
    * instead of a single fast busy flash. Defaults to no delay.
    */
   bulkImportDelayMs?: number;
+
+  /** Webhook endpoints to seed the webhooks page with. Defaults to none. */
+  webhooks?: WebhookSeed[];
+  /** Delivery-history rows for those endpoints. Defaults to none. */
+  webhookDeliveries?: WebhookDeliverySeed[];
 }
 
 /**
@@ -188,6 +215,25 @@ export async function mockApi(
     transaction_hash: "",
     from_address: FROM_ADDRESS,
     to_address: TO_ADDRESS,
+  }));
+
+  // Webhook fixtures, likewise scoped to this call. Deletes and delivery
+  // retries mutate these in place so a refetch reflects the change.
+  const webhooks = (options.webhooks ?? []).map((seed, index) => ({
+    id: seed.id,
+    url: seed.url,
+    events: seed.events,
+    active: seed.active ?? true,
+    created_at: seed.created_at ?? new Date(Date.UTC(2026, 0, index + 1, 9)).toISOString(),
+  }));
+
+  const webhookDeliveries = (options.webhookDeliveries ?? []).map((seed, index) => ({
+    id: seed.id,
+    webhook_id: seed.webhook_id,
+    event: seed.event,
+    status: seed.status,
+    response_code: seed.response_code ?? null,
+    created_at: seed.created_at ?? new Date(Date.UTC(2026, 0, index + 1, 10)).toISOString(),
   }));
 
   await page.route("**/api/v1/**", async (route) => {
@@ -543,6 +589,70 @@ export async function mockApi(
         balances: { XLM: "1000" },
         last_updated: new Date().toISOString(),
       });
+    }
+
+    /* ---------------------------- Webhooks --------------------------- */
+    if (method === "GET" && path === "/api/v1/webhooks") {
+      return json(200, webhooks);
+    }
+
+    if (method === "POST" && path === "/api/v1/webhooks") {
+      const body = request.postDataJSON() as { url?: string; events?: string[] };
+      const created = {
+        id: `WEB-${webhooks.length + 1}`,
+        url: body.url ?? "https://example.com/hook",
+        events: body.events ?? [],
+        active: true,
+        created_at: new Date().toISOString(),
+      };
+      webhooks.push(created);
+      return json(201, created);
+    }
+
+    const deliveriesMatch = path.match(/^\/api\/v1\/webhooks\/([^/]+)\/deliveries$/);
+    if (deliveriesMatch && method === "GET") {
+      const list = webhookDeliveries
+        .filter((delivery) => delivery.webhook_id === deliveriesMatch[1])
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return json(200, list);
+    }
+
+    const deliveryRetryMatch = path.match(
+      /^\/api\/v1\/webhooks\/([^/]+)\/deliveries\/([^/]+)\/retry$/,
+    );
+    if (deliveryRetryMatch && method === "POST") {
+      const delivery = webhookDeliveries.find((item) => item.id === deliveryRetryMatch[2]);
+      if (!delivery) return json(404, { message: "Not found" });
+      delivery.status = "success";
+      delivery.response_code = 200;
+      return json(200, delivery);
+    }
+
+    const webhookMatch = path.match(/^\/api\/v1\/webhooks\/([^/]+)$/);
+    if (webhookMatch) {
+      const index = webhooks.findIndex((item) => item.id === webhookMatch[1]);
+      if (index === -1) return json(404, { message: "Not found" });
+
+      if (method === "PATCH") {
+        const body = request.postDataJSON() as Partial<{
+          url: string;
+          events: string[];
+          active: boolean;
+        }>;
+        Object.assign(webhooks[index]!, body);
+        return json(200, webhooks[index]);
+      }
+
+      if (method === "DELETE") {
+        const removed = webhooks[index]!;
+        webhooks.splice(index, 1);
+        for (let i = webhookDeliveries.length - 1; i >= 0; i -= 1) {
+          if (webhookDeliveries[i]!.webhook_id === removed.id) {
+            webhookDeliveries.splice(i, 1);
+          }
+        }
+        return json(200, { message: "Webhook deleted" });
+      }
     }
 
     /* ------------------------------ SLA ------------------------------ */

@@ -15,9 +15,16 @@ import {
 } from "@/services/webhookService";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
-import { slaEventKeys } from "@/lib/query-keys";
+import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
+
+/**
+ * Issue #599 — deleting a webhook silently stops delivery for a live
+ * integration, so it gets the same typed-phrase gate as the other
+ * irreversible payment actions.
+ */
+const DELETE_CONFIRM_PHRASE = "delete webhook";
 
 export default function WebhooksPage() {
   const qc = useQueryClient();
@@ -29,6 +36,7 @@ export default function WebhooksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Webhook | null>(null);
 
   // Issue #623 — webhook reads and invalidations go through the canonical
   // factory keys so they participate in shared sla-events invalidation.
@@ -68,6 +76,7 @@ export default function WebhooksPage() {
       qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       if (selectedWebhook) setSelectedWebhook(null);
     },
+    onSettled: () => setPendingDelete(null),
   });
 
   const retryMutation = useMutation({
@@ -244,7 +253,7 @@ export default function WebhooksPage() {
                     Edit
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(wh.id)}
+                    onClick={() => setPendingDelete(wh)}
                     disabled={deleteMutation.isPending}
                     className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
@@ -319,6 +328,23 @@ export default function WebhooksPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title="Delete webhook?"
+        message={
+          `Deleting ${pendingDelete?.url ?? "this webhook"} stops delivery for every subscribed ` +
+          "event immediately and cannot be undone."
+        }
+        confirmPhrase={DELETE_CONFIRM_PHRASE}
+        confirmLabel="Delete webhook"
+        loading={deleteMutation.isPending}
+        variant="danger"
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
