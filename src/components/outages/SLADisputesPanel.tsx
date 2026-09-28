@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { flagDispute, getDisputes, resolveDispute } from "@/services/sla";
+import { slaEventKeys } from "@/lib/query-keys";
 import type { DisputeStatus, SLADispute } from "@/types/sla";
 
 const PAGE_SIZE = 5;
@@ -57,8 +58,18 @@ export function SLADisputesPanel({
     {}
   );
 
+  // Issue #623 — the dispute list reads through the canonical factory key so
+  // the shared invalidation flows (useInvalidateOutages.ts invalidates
+  // `disputes.all`) actually reach this panel. The `outage_id` segment keeps
+  // invalidation scoped to this outage's list pages (React Query matches
+  // invalidation keys segment-by-segment, object segments by subset).
   const queryKey = useMemo(
-    () => ["sla-disputes", outageId, statusFilter, page],
+    () =>
+      slaEventKeys.disputes.list({
+        outage_id: outageId,
+        status: statusFilter || undefined,
+        page,
+      }),
     [outageId, statusFilter, page]
   );
 
@@ -99,8 +110,10 @@ export function SLADisputesPanel({
   );
 
   const invalidateDisputes = async () => {
+    // Prefix-matches every cached list page for this outage (any status/page
+    // combination) without touching other outages' dispute lists.
     await queryClient.invalidateQueries({
-      queryKey: ["sla-disputes", outageId],
+      queryKey: slaEventKeys.disputes.list({ outage_id: outageId }),
     });
   };
 
@@ -161,13 +174,13 @@ export function SLADisputesPanel({
           <CardTitle>SLA Disputes</CardTitle>
 
           {isFetching && !isLoading ? (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-600">
               Refreshing...
             </span>
           ) : null}
         </div>
 
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-600">
           Track, resolve, and manage SLA-related outage disputes.
         </p>
       </CardHeader>
@@ -205,7 +218,7 @@ export function SLADisputesPanel({
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-600">
               {reason.length}/300 characters
             </span>
 
@@ -225,7 +238,7 @@ export function SLADisputesPanel({
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-600">
             Filter
           </span>
 
@@ -288,7 +301,7 @@ export function SLADisputesPanel({
               No disputes found
             </p>
 
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-600">
               There are currently no disputes matching this
               filter.
             </p>
@@ -319,12 +332,12 @@ export function SLADisputesPanel({
                         {dispute.status.replace("_", " ")}
                       </Badge>
 
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-600">
                         #{dispute.id.slice(0, 8)}
                       </span>
                     </div>
 
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-600">
                       {new Date(
                         dispute.created_at
                       ).toLocaleString()}
@@ -339,7 +352,7 @@ export function SLADisputesPanel({
 
                   {dispute.resolution_note ? (
                     <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="text-xs font-medium text-slate-500">
+                      <p className="text-xs font-medium text-slate-600">
                         Resolution Note
                       </p>
 
@@ -408,7 +421,7 @@ export function SLADisputesPanel({
         {/* Pagination */}
         {totalPages > 1 ? (
           <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-600">
               Showing page{" "}
               <span className="font-medium">{page}</span> of{" "}
               <span className="font-medium">

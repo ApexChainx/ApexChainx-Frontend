@@ -103,7 +103,10 @@ describe("BulkImportView", () => {
     fireEvent.change(input, {
       target: { files: [file("deep-error.csv", rows.join("\n"))] },
     });
-    expect(await screen.findByText(/Required field "end_time" is empty/)).toBeInTheDocument();
+    // The error appears both in the blocking-error list and as an inline
+    // preview chip (issue #610).
+    const matches = await screen.findAllByText(/Required field "end_time" is empty/);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("button", { name: /upload file/i })).toBeDisabled();
   });
 

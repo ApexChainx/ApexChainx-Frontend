@@ -6,6 +6,7 @@ import CommandPalette from "@/components/CommandPalette";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
+import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { env } from "@/lib/config/env";
 import "@/lib/register-sw";
 import { ReactQueryProvider } from "@/providers/react-query";
@@ -138,7 +139,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
             __html: `
               (function() {
                 function getTheme() {
-                  const stored = localStorage.getItem('theme');
+                  // Issue #619 — read the namespaced key first, falling back
+                  // to the legacy bare "theme" key for pre-migration users.
+                  const stored = localStorage.getItem('apexchain.theme') || localStorage.getItem('theme');
                   if (stored) return stored;
                   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
@@ -171,6 +174,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   </main>
                   <CommandPalette />
                   <OnboardingTour />
+                  <OfflineBanner />
                 </RouteGuard>
               </I18nProvider>
             </ToastProvider>
