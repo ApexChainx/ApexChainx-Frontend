@@ -91,9 +91,8 @@ export const slaEventKeys = {
   },
 
   /**
-   * Webhook endpoints and their delivery history (#597, #623).
+   * Webhook endpoints and their delivery history (issue #597).
    *
-   * Replaces the literal `["webhooks"]` / `["webhook-deliveries", id]` keys.
    * Both the endpoint list and a single endpoint's deliveries live under the
    * shared `sla-events` prefix, so invalidating `webhooks.all` after a CRUD
    * mutation refreshes the deliveries panel too instead of leaving stale rows
@@ -103,7 +102,6 @@ export const slaEventKeys = {
     all: ["sla-events", "webhooks"] as const,
     list: (params?: Record<string, unknown>) =>
       ["sla-events", "webhooks", "list", params] as const,
-    detail: (id: string) => ["sla-events", "webhooks", id] as const,
     deliveries: (webhookId: string) =>
       ["sla-events", "webhooks", "deliveries", webhookId] as const,
   },

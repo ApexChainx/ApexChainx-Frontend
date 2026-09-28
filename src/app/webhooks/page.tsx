@@ -16,6 +16,7 @@ import {
 import WebhookSettings from "@/components/settings/webhook-settings";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
+import { slaEventKeys } from "@/lib/query-keys";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
 
