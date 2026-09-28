@@ -15,7 +15,6 @@ import {
 } from "@/services/webhookService";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
-import { slaEventKeys } from "@/lib/query-keys";
 import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
