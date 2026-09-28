@@ -7,6 +7,7 @@ import { useRef, useState, useCallback, useId } from "react";
 import { bulkImportOutages } from "@/services/bulkImportService";
 import type { BulkImportResult, ImportValidationError } from "@/types/bulkImport";
 import { STELLAR_NETWORK } from "@/lib/explorer";
+import { CSV_UNCLOSED_QUOTE, parseCSV, parseJSONRecords } from "@/lib/bulkImportParser";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -125,62 +126,6 @@ interface FileValidationResult {
 
 type UploadStatus = "idle" | "validating" | "uploading" | "success" | "error" | "cancelled";
 
-// ─── CSV Parsing ─────────────────────────────────────────────────────────────
-interface ParsedCSV {
-  headers: string[];
-  rows: string[][];
-  totalRows: number;
-}
-
-function parseCSV(text: string): ParsedCSV {
-  const lines = text
-    .trim()
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
-  
-  if (lines.length === 0) {
-    return { headers: [], rows: [], totalRows: 0 };
-  }
-
-  // Robust CSV parsing: handles quoted fields containing commas
-  const parseLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
-      
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          current += '"';
-          i++; // Skip escaped quote
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === "," && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
-  const firstLine = lines[0];
-  const headers = firstLine ? parseLine(firstLine).map((h) => h.replace(/^"|"$/g, "")) : [];
-  const rows = lines.slice(1).map(parseLine);
-  
-  return {
-    headers,
-    rows,
-    totalRows: rows.length,
-  };
-}
-
 // ─── Validation ──────────────────────────────────────────────────────────────
 interface CSVValidationResult {
   errors: ImportValidationError[];
@@ -252,27 +197,14 @@ function validateCSV(headers: string[], rows: string[][]): CSVValidationResult {
 
 function validateJSON(text: string): { errors: ImportValidationError[]; parsed?: Record<string, unknown>[] } {
   const errors: ImportValidationError[] = [];
-  let parsed: unknown;
-  
-  try {
-    parsed = JSON.parse(text);
-  } catch (e) {
-    const message = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : "Invalid JSON: could not parse file.";
-    errors.push({ message });
+  const result = parseJSONRecords(text);
+
+  if ("error" in result) {
+    errors.push({ message: result.error });
     return { errors };
   }
 
-  if (!Array.isArray(parsed)) {
-    errors.push({ message: "JSON must be an array of outage records." });
-    return { errors };
-  }
-
-  if (parsed.length === 0) {
-    errors.push({ message: "JSON array is empty." });
-    return { errors };
-  }
-
-  const records = parsed as Record<string, unknown>[];
+  const records = result.records;
   
   // Validate every record (capped for the 500ms budget) so problems in later
   // rows surface in the preview, not after the upload.
@@ -326,14 +258,22 @@ async function buildPreview(file: File): Promise<PreviewState> {
   const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase() as AcceptedExtension;
 
   if (ext === ".csv" || file.type === "text/csv") {
-    const { headers, rows, totalRows } = parseCSV(text);
+    const { headers, rows, totalRows, errors: parseErrors } = parseCSV(text);
     const { errors, warnings: schemaWarnings } = validateCSV(headers, rows);
     const warnings: ImportValidationError[] = [...schemaWarnings];
-    
+
     if (totalRows === 0 && errors.length === 0) {
       warnings.push({ message: "File has a header row but no data rows." });
     }
-    
+
+    // Structural parse failures (e.g. an unclosed quote) are blocking: the
+    // rows after the malformed line cannot be trusted.
+    if (parseErrors.includes(CSV_UNCLOSED_QUOTE)) {
+      errors.push({
+        message: "A quoted field is not closed. Fix the quotes and try again.",
+      });
+    }
+
     return { headers, rows, errors, warnings, totalRows, rowErrors: collectRowErrors(errors), rowNumberOffset: 2 };
   }
 
