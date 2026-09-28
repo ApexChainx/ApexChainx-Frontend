@@ -6,11 +6,18 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import KPICard from "@/components/dashboard/KPICard";
+import DashboardWidgetError from "@/components/dashboard/DashboardWidgetError";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
 import SLATrendChart from "@/components/dashboard/SLATrendChart";
-import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
+import { RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { fetchDashboardMetrics, type DashboardFilters } from "@/services/dashboardService";
+import {
+  fetchDashboardKpis,
+  fetchDashboardMetrics,
+  fetchDashboardTrends,
+  type DashboardFilters,
+  type DashboardKpis,
+} from "@/services/dashboardService";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { DashboardMetrics, TrendPoint } from "@/types/dashboard";
 
@@ -95,14 +102,17 @@ export default function SLADashboardView() {
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }
 
-  const primary = useQuery<DashboardMetrics>({
-    queryKey: slaEventKeys.dashboard(filters),
-    queryFn: () => fetchDashboardMetrics(filters),
+  // Issue #606 — KPI tiles and trend charts are independent widgets backed by
+  // independent requests. A failure in one leaves the other on screen, and its
+  // Retry re-runs just that widget's query.
+  const kpis = useQuery<DashboardKpis, Error>({
+    queryKey: slaEventKeys.dashboardKpis(filters),
+    queryFn: () => fetchDashboardKpis(filters),
     staleTime: 30_000,
     structuralSharing: (oldData: unknown, newData: unknown) => {
-      if (!oldData || !newData) return newData as DashboardMetrics;
-      const o = oldData as DashboardMetrics;
-      const n = newData as DashboardMetrics;
+      if (!oldData || !newData) return newData as DashboardKpis;
+      const o = oldData as DashboardKpis;
+      const n = newData as DashboardKpis;
       if (o.sla_compliance_percentage === n.sla_compliance_percentage &&
           o.penalties.total === n.penalties.total &&
           o.rewards.total === n.rewards.total) {
@@ -110,6 +120,12 @@ export default function SLADashboardView() {
       }
       return n;
     },
+  });
+
+  const trends = useQuery<TrendPoint[], Error>({
+    queryKey: slaEventKeys.dashboardTrends(filters),
+    queryFn: () => fetchDashboardTrends(filters),
+    staleTime: 30_000,
   });
 
   const hasDateRange = useMemo(
@@ -154,7 +170,7 @@ export default function SLADashboardView() {
     router.push(`/payments?${params.toString()}`);
   }, [router]);
 
-  if (primary.isLoading) {
+  if (kpis.isLoading || trends.isLoading) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -163,21 +179,15 @@ export default function SLADashboardView() {
     );
   }
 
-  if (primary.isError || !primary.data) {
-    return (
-      <RouteErrorState
-        title="Dashboard unavailable"
-        description="We could not load the latest analytics right now."
-        primaryAction={{ label: "Retry", onClick: () => void primary.refetch() }}
-      />
-    );
-  }
-
-  const metrics = primary.data;
-  const netBalance = metrics.rewards.total - metrics.penalties.total;
-  const lastUpdated = primary.dataUpdatedAt
-    ? new Date(primary.dataUpdatedAt).toLocaleString()
-    : "Not synced yet";
+  const kpiData = kpis.data ?? null;
+  const trendData = trends.data ?? null;
+  // The composite shape is only used for the export snapshot and the
+  // comparison rendering; individual widgets read their own slice.
+  const metrics: DashboardMetrics | null =
+    kpiData && trendData ? { ...kpiData, trends: trendData } : null;
+  const netBalance = kpiData ? kpiData.rewards.total - kpiData.penalties.total : 0;
+  const lastUpdatedAt = Math.max(kpis.dataUpdatedAt, trends.dataUpdatedAt);
+  const lastUpdated = lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "Not synced yet";
   const cmp = compareModeActive && secondary.data ? secondary.data : null;
 
   return (
@@ -198,8 +208,19 @@ export default function SLADashboardView() {
         >
           {compareModeActive ? "Exit Compare" : "Compare"}
         </button>
-          <button onClick={() => exportSnapshot(metrics)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Export</button>
-          <button onClick={() => void primary.refetch()} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
+          <button
+            onClick={() => { if (metrics) exportSnapshot(metrics); }}
+            disabled={!metrics}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Export
+          </button>
+          <button
+            onClick={() => { void kpis.refetch(); void trends.refetch(); }}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
@@ -235,41 +256,59 @@ export default function SLADashboardView() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="dashboard-kpis">
-        <KPICard
-          title="SLA Compliance"
-          value={`${metrics.sla_compliance_percentage.toFixed(1)}%`}
-          subtitle={cmp ? `vs ${cmp.sla_compliance_percentage.toFixed(1)}% (${delta(metrics.sla_compliance_percentage, cmp.sla_compliance_percentage)}pp)` : "Overall compliance rate"}
-          highlight={metrics.sla_compliance_percentage >= 90 ? "green" : "red"}
+      {kpis.isError || !kpiData ? (
+        <DashboardWidgetError
+          title="SLA metrics"
+          error={kpis.error}
+          onRetry={() => void kpis.refetch()}
+          isRetrying={kpis.isFetching}
         />
-        <KPICard
-          title="Total Penalties"
-          value={`$${metrics.penalties.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.penalties.total.toLocaleString()} (${delta(metrics.penalties.total, cmp.penalties.total)})` : `${metrics.penalties.count} incidents`}
-          highlight="red"
-        />
-        <KPICard
-          title="Total Rewards"
-          value={`$${metrics.rewards.total.toLocaleString()}`}
-          subtitle={cmp ? `vs $${cmp.rewards.total.toLocaleString()} (${delta(metrics.rewards.total, cmp.rewards.total)})` : `${metrics.rewards.count} achievements`}
-          highlight="green"
-        />
-        <KPICard
-          title="Net Balance"
-          value={`${netBalance >= 0 ? "+" : ""}$${netBalance.toLocaleString()}`}
-          subtitle={(() => {
-            if (!cmp) return "Rewards minus penalties";
-            const cmpNet = cmp.rewards.total - cmp.penalties.total;
-            return `vs ${cmpNet >= 0 ? "+" : ""}$${cmpNet.toLocaleString()} (${delta(netBalance, cmpNet)})`;
-          })()}
-          highlight={netBalance >= 0 ? "green" : "red"}
-        />
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="dashboard-kpis">
+          <KPICard
+            title="SLA Compliance"
+            value={`${kpiData.sla_compliance_percentage.toFixed(1)}%`}
+            subtitle={cmp ? `vs ${cmp.sla_compliance_percentage.toFixed(1)}% (${delta(kpiData.sla_compliance_percentage, cmp.sla_compliance_percentage)}pp)` : "Overall compliance rate"}
+            highlight={kpiData.sla_compliance_percentage >= 90 ? "green" : "red"}
+          />
+          <KPICard
+            title="Total Penalties"
+            value={`$${kpiData.penalties.total.toLocaleString()}`}
+            subtitle={cmp ? `vs $${cmp.penalties.total.toLocaleString()} (${delta(kpiData.penalties.total, cmp.penalties.total)})` : `${kpiData.penalties.count} incidents`}
+            highlight="red"
+          />
+          <KPICard
+            title="Total Rewards"
+            value={`$${kpiData.rewards.total.toLocaleString()}`}
+            subtitle={cmp ? `vs $${cmp.rewards.total.toLocaleString()} (${delta(kpiData.rewards.total, cmp.rewards.total)})` : `${kpiData.rewards.count} achievements`}
+            highlight="green"
+          />
+          <KPICard
+            title="Net Balance"
+            value={`${netBalance >= 0 ? "+" : ""}$${netBalance.toLocaleString()}`}
+            subtitle={(() => {
+              if (!cmp) return "Rewards minus penalties";
+              const cmpNet = cmp.rewards.total - cmp.penalties.total;
+              return `vs ${cmpNet >= 0 ? "+" : ""}$${cmpNet.toLocaleString()} (${delta(netBalance, cmpNet)})`;
+            })()}
+            highlight={netBalance >= 0 ? "green" : "red"}
+          />
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
-        <PenaltiesRewardsChart data={metrics.trends} onPenaltyClick={onPenaltyClick} onRewardClick={onRewardClick} />
-      </div>
+      {trends.isError || !trendData ? (
+        <DashboardWidgetError
+          title="Trend charts"
+          error={trends.error}
+          onRetry={() => void trends.refetch()}
+          isRetrying={trends.isFetching}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <SLATrendChart data={trendData} onPointClick={onTrendClick} />
+          <PenaltiesRewardsChart data={trendData} onPenaltyClick={onPenaltyClick} onRewardClick={onRewardClick} />
+        </div>
+      )}
 
       {cmp && cmp.trends.length > 0 ? (
         <div>

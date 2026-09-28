@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 import type { Page } from "@playwright/test";
 
 /**
@@ -153,6 +155,8 @@ export interface WebhookSeed {
   events: string[];
   active?: boolean;
   created_at?: string;
+  /** Signing secret the endpoint verifies delivery signatures with. */
+  secret?: string;
 }
 
 export interface WebhookDeliverySeed {
@@ -225,6 +229,10 @@ export async function mockApi(
     events: seed.events,
     active: seed.active ?? true,
     created_at: seed.created_at ?? new Date(Date.UTC(2026, 0, index + 1, 9)).toISOString(),
+    // Issue #603 — the endpoint's signing secret. `WebhookSettings` generates
+    // it client-side and registers it through PATCH, so the mock can verify
+    // the signature a producer stamps onto a delivery.
+    secret: seed.secret ?? "",
   }));
 
   const webhookDeliveries = (options.webhookDeliveries ?? []).map((seed, index) => ({
@@ -607,6 +615,44 @@ export async function mockApi(
       };
       webhooks.push(created);
       return json(201, created);
+    }
+
+    /**
+     * Issue #603 — a signed test delivery. The producer signs the raw payload
+     * with the endpoint's registered secret; this handler recomputes the
+     * HMAC-SHA256 and records the outcome as a delivery row, which is what the
+     * UI then renders.
+     */
+    const testDeliveryMatch = path.match(/^\/api\/v1\/webhooks\/([^/]+)\/test-delivery$/);
+    if (testDeliveryMatch && method === "POST") {
+      const webhook = webhooks.find((item) => item.id === testDeliveryMatch[1]);
+      if (!webhook) return json(404, { message: "Not found" });
+
+      const body = request.postDataJSON() as {
+        payload?: string;
+        signature?: string;
+        event?: string;
+      };
+      const payload = body.payload ?? "";
+      // Providers conventionally send `sha256=<hex>`; accept a bare hex digest
+      // too so the spec can assert both spellings.
+      const signature = (body.signature ?? "").replace(/^sha256=/, "");
+      const expected = createHmac("sha256", webhook.secret).update(payload).digest("hex");
+      const signatureValid =
+        signature.length === expected.length &&
+        timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
+
+      const delivery = {
+        id: `DEL-${webhookDeliveries.length + 1}`,
+        webhook_id: webhook.id,
+        event: body.event ?? "outage.created",
+        status: signatureValid ? ("success" as const) : ("failed" as const),
+        response_code: signatureValid ? 200 : 401,
+        created_at: new Date().toISOString(),
+      };
+      webhookDeliveries.push(delivery);
+
+      return json(200, { signature_valid: signatureValid, delivery });
     }
 
     const deliveriesMatch = path.match(/^\/api\/v1\/webhooks\/([^/]+)\/deliveries$/);

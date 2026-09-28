@@ -44,6 +44,18 @@ export const slaEventKeys = {
   dashboardCompare: (filters?: Record<string, unknown>) =>
     ["sla-events", "dashboard-compare", filters] as const,
 
+  /**
+   * Issue #606 — the dashboard renders as independent widgets, so the KPI
+   * tiles and the trend charts own separate keys. Retrying one widget
+   * refetches only its own request instead of re-running the whole page.
+   */
+  dashboardKpis: (filters?: Record<string, unknown>) =>
+    ["sla-events", "dashboard-kpis", filters] as const,
+
+  /** Issue #606 — trend-chart widget key; see `dashboardKpis`. */
+  dashboardTrends: (filters?: Record<string, unknown>) =>
+    ["sla-events", "dashboard-trends", filters] as const,
+
   /** SLA calculations & previews */
   sla: {
     all: ["sla-events", "sla"] as const,
