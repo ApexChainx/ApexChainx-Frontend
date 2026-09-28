@@ -156,10 +156,30 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Message listener for SKIP_WAITING (Issue #557)
+// Message listener for SKIP_WAITING and CLEAR_SESSION_CACHE
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data?.type === "CLEAR_SESSION_CACHE") {
+    // Clear page-shell entries but keep static assets
+    caches.keys().then((keys) => {
+      keys.forEach((key) => {
+        if (key.startsWith("apexchain-static-")) {
+          // Clear navigation entries from this cache
+          caches.open(key).then((cache) => {
+            cache.keys().then((requests) => {
+              requests.forEach((req) => {
+                const url = new URL(req.url);
+                if (url.pathname !== "/" && !STATIC_ASSETS.includes(url.pathname)) {
+                  cache.delete(req);
+                }
+              });
+            });
+          });
+        }
+      });
+    });
   }
   if (event.data?.type === "CLEANUP") {
     void cleanupOldEntries();
