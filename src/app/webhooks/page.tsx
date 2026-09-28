@@ -2,7 +2,7 @@
 /** ApexChain Network Operations Intelligence Platform */
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { validateUrl } from "@/lib/validate-url";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,11 +13,33 @@ import {
   fetchWebhookDeliveries,
   retryDelivery,
 } from "@/services/webhookService";
+import WebhookSettings from "@/components/settings/webhook-settings";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
 import { slaEventKeys } from "@/lib/query-keys";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
+
+/** Issue #601 — long delivery histories are paged rather than rendered whole. */
+const DELIVERY_PAGE_SIZE = 10;
+
+const DELIVERY_STATUS_STYLES: Record<string, string> = {
+  success: "bg-green-100 text-green-700",
+  failed: "bg-red-100 text-red-700",
+  pending: "bg-yellow-100 text-yellow-700",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+        DELIVERY_STATUS_STYLES[status] ?? "bg-gray-100 text-gray-600"
+      }`}
+    >
+      {status}
+    </span>
+  );
+}
 
 export default function WebhooksPage() {
   const qc = useQueryClient();
@@ -29,6 +51,11 @@ export default function WebhooksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [deliveryFilter, setDeliveryFilter] = useState("all");
+  const [deliveryPage, setDeliveryPage] = useState(1);
+  // Issue #603 — which endpoint's signing-secret panel is open, so the
+  // operator can generate and register the key the backend verifies with.
+  const [secretForId, setSecretForId] = useState<string | null>(null);
 
   // Issue #623 — webhook reads and invalidations go through the canonical
   // factory keys so they participate in shared sla-events invalidation.
@@ -42,6 +69,23 @@ export default function WebhooksPage() {
     queryFn: () => fetchWebhookDeliveries(selectedWebhook!.id),
     enabled: !!selectedWebhook,
   });
+
+  // Issue #601 — triage filter plus paging so several hundred deliveries stay
+  // scannable instead of rendering as one unbounded list.
+  const filteredDeliveries = useMemo<WebhookDelivery[]>(
+    () =>
+      deliveryFilter === "all"
+        ? deliveries
+        : deliveries.filter((delivery) => delivery.status === deliveryFilter),
+    [deliveries, deliveryFilter],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredDeliveries.length / DELIVERY_PAGE_SIZE));
+
+  const pagedDeliveries = useMemo<WebhookDelivery[]>(() => {
+    const start = (deliveryPage - 1) * DELIVERY_PAGE_SIZE;
+    return filteredDeliveries.slice(start, start + DELIVERY_PAGE_SIZE);
+  }, [filteredDeliveries, deliveryPage]);
 
   const createMutation = useMutation({
     mutationFn: createWebhook,
@@ -68,6 +112,7 @@ export default function WebhooksPage() {
       qc.invalidateQueries({ queryKey: slaEventKeys.webhooks.all });
       if (selectedWebhook) setSelectedWebhook(null);
     },
+    onSettled: () => setPendingDelete(null),
   });
 
   const retryMutation = useMutation({
@@ -232,10 +277,23 @@ export default function WebhooksPage() {
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
-                    onClick={() => setSelectedWebhook(selectedWebhook?.id === wh.id ? null : wh)}
+                    onClick={() => {
+                      setSelectedWebhook(selectedWebhook?.id === wh.id ? null : wh);
+                      setDeliveryFilter("all");
+                      setDeliveryPage(1);
+                    }}
                     className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
                   >
                     {selectedWebhook?.id === wh.id ? "Hide deliveries" : "Deliveries"}
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSecretForId((current) => (current === wh.id ? null : wh.id))
+                    }
+                    aria-expanded={secretForId === wh.id}
+                    className="rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  >
+                    {secretForId === wh.id ? "Hide secret" : "Signing secret"}
                   </button>
                   <button
                     onClick={() => openEdit(wh)}
@@ -244,7 +302,7 @@ export default function WebhooksPage() {
                     Edit
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(wh.id)}
+                    onClick={() => setPendingDelete(wh)}
                     disabled={deleteMutation.isPending}
                     className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
@@ -253,64 +311,127 @@ export default function WebhooksPage() {
                 </div>
               </div>
 
+              {secretForId === wh.id && (
+                <div className="mt-4 border-t pt-4">
+                  <WebhookSettings
+                    key={wh.id}
+                    initialConfig={{ url: wh.url, secret: "", events: wh.events }}
+                    onSave={(config) =>
+                      updateMutation.mutate({
+                        id: wh.id,
+                        payload: {
+                          url: config.url,
+                          events: config.events,
+                          secret: config.secret,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              )}
+
               {selectedWebhook?.id === wh.id && (
                 <div className="mt-4 border-t pt-4">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Delivery history
-                  </h3>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Delivery history
+                    </h3>
+                    <label className="flex items-center gap-2 text-xs text-gray-500">
+                      Last status
+                      <select
+                        value={deliveryFilter}
+                        onChange={(e) => {
+                          setDeliveryFilter(e.target.value);
+                          setDeliveryPage(1);
+                        }}
+                        aria-label="Filter deliveries by last status"
+                        className="rounded border border-gray-200 px-2 py-0.5 text-xs"
+                      >
+                        <option value="all">All</option>
+                        <option value="success">Succeeded</option>
+                        <option value="failed">Failed</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {retryError && (
+                    <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+                      {retryError}
+                    </p>
+                  )}
+
                   {deliveriesLoading ? (
                     <p className="text-xs text-gray-400">Loading…</p>
-                  ) : deliveries.length === 0 ? (
-                    <p className="text-xs text-gray-400">No deliveries yet.</p>
+                  ) : filteredDeliveries.length === 0 ? (
+                    <p className="text-xs text-gray-400" data-testid="deliveries-empty">
+                      {deliveries.length > 0 && deliveryFilter !== "all"
+                        ? `No ${deliveryFilter} deliveries.`
+                        : "No deliveries yet."}
+                    </p>
                   ) : (
                     <>
-                      {retryError && (
-                        <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
-                          {retryError}
-                        </p>
-                      )}
                       <div className="space-y-2">
-                      {deliveries.map((d: WebhookDelivery) => (
-                        <div
-                          key={d.id}
-                          className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={
-                                d.status === "success"
-                                  ? "text-green-600"
-                                  : d.status === "failed"
-                                  ? "text-red-600"
-                                  : "text-yellow-600"
-                              }
-                            >
-                              {d.status}
-                            </span>
-                            <span className="text-gray-500">{d.event}</span>
-                            {d.response_code && (
-                              <span className="text-gray-400">HTTP {d.response_code}</span>
-                            )}
+                        {pagedDeliveries.map((d) => (
+                          <div
+                            key={d.id}
+                            data-testid="delivery-row"
+                            data-status={d.status}
+                            className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs"
+                          >
+                            <div className="flex items-center gap-3">
+                              <StatusBadge status={d.status} />
+                              <span className="text-gray-500">{d.event}</span>
+                              {d.response_code && (
+                                <span className="text-gray-400">HTTP {d.response_code}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">
+                                {new Date(d.created_at).toLocaleString()}
+                              </span>
+                              {d.status === "failed" && (
+                                <button
+                                  onClick={() =>
+                                    retryMutation.mutate({ webhookId: wh.id, deliveryId: d.id })
+                                  }
+                                  disabled={retryMutation.isPending || retryingId === d.id}
+                                  className="rounded border border-blue-200 px-2 py-0.5 text-blue-600 hover:bg-blue-50 disabled:opacity-40"
+                                >
+                                  {retryingId === d.id ? "Retrying…" : "Retry"}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-400">
-                              {new Date(d.created_at).toLocaleString()}
-                            </span>
-                            {d.status === "failed" && (
-                              <button
-                                onClick={() =>
-                                  retryMutation.mutate({ webhookId: wh.id, deliveryId: d.id })
-                                }
-                                disabled={retryMutation.isPending || retryingId === d.id}
-                                className="rounded border border-blue-200 px-2 py-0.5 text-blue-600 hover:bg-blue-50 disabled:opacity-40"
-                              >
-                                {retryingId === d.id ? "Retrying…" : "Retry"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
                       </div>
+
+                      {totalPages > 1 ? (
+                        <nav
+                          aria-label="Delivery history pagination"
+                          className="mt-3 flex items-center justify-between text-xs text-gray-500"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryPage((page) => Math.max(1, page - 1))}
+                            disabled={deliveryPage <= 1}
+                            className="rounded border px-2 py-0.5 disabled:opacity-40"
+                          >
+                            Previous
+                          </button>
+                          <span data-testid="deliveries-page">
+                            Page {deliveryPage} of {totalPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryPage((page) => Math.min(totalPages, page + 1))}
+                            disabled={deliveryPage >= totalPages}
+                            className="rounded border px-2 py-0.5 disabled:opacity-40"
+                          >
+                            Next
+                          </button>
+                        </nav>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -319,6 +440,23 @@ export default function WebhooksPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title="Delete webhook?"
+        message={
+          `Deleting ${pendingDelete?.url ?? "this webhook"} stops delivery for every subscribed ` +
+          "event immediately and cannot be undone."
+        }
+        confirmPhrase={DELETE_CONFIRM_PHRASE}
+        confirmLabel="Delete webhook"
+        loading={deleteMutation.isPending}
+        variant="danger"
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

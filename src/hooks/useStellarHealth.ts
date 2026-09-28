@@ -8,16 +8,15 @@
  * connectivity status and measured latency so the UI can gate action buttons or
  * surface a friendly error to the operator.
  *
- * Issue #624 — Migrated from a hand-rolled useState+useEffect poller onto
- * React Query: the query key comes from the factory (slaEventKeys.stellarHealth)
- * and `refetchInterval` replaces the bespoke setInterval + AbortController
- * teardown. pingHorizon still owns the per-request 5s timeout.
+ * Issue #604 — the periodic re-check is scheduled through the shared
+ * visibility-gated helper, so a backgrounded tab stops pinging Horizon and the
+ * latency reading is reconciled immediately when the tab is foregrounded.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { env } from "@/lib/config/env";
-import { slaEventKeys } from "@/lib/query-keys";
+import { useIntervalWhenVisible } from "@/hooks/useIntervalWhenVisible";
 
 export type StellarHealthStatus = "checking" | "reachable" | "unreachable";
 
@@ -73,23 +72,34 @@ async function pingHorizon(url: string): Promise<number | null> {
  */
 export function useStellarHealth(): StellarHealthState {
   const horizonUrl = getHorizonUrl();
-
-  const query = useQuery({
-    queryKey: slaEventKeys.stellarHealth,
-    queryFn: () => pingHorizon(horizonUrl),
-    refetchInterval: POLL_INTERVAL_MS,
-    // The poller is the single re-check path; keep window focus from
-    // triggering extra pings the old setInterval loop never did.
-    refetchOnWindowFocus: false,
+  const [state, setState] = useState<StellarHealthState>({
+    status: "checking",
+    latencyMs: null,
+    lastChecked: null,
   });
+  const mountedRef = useRef(true);
 
-  // pingHorizon resolves `null` on failure instead of throwing, so `data`
-  // (not `error`) carries the check outcome.
-  const checked = query.data !== undefined;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  return {
-    status: !checked ? "checking" : query.data !== null ? "reachable" : "unreachable",
-    latencyMs: query.data ?? null,
-    lastChecked: checked ? new Date() : null,
-  };
+  const check = useCallback(async () => {
+    const latency = await pingHorizon(horizonUrl);
+    if (!mountedRef.current) return;
+
+    setState({
+      status: latency !== null ? "reachable" : "unreachable",
+      latencyMs: latency,
+      lastChecked: new Date(),
+    });
+  }, [horizonUrl]);
+
+  // Immediate first check, then periodic re-checks — both suspended while the
+  // document is hidden (issue #604).
+  useIntervalWhenVisible(check, POLL_INTERVAL_MS);
+
+  return state;
 }
