@@ -15,10 +15,12 @@ import { ResolveOutageModal } from "@/features/outages/components/ResolveOutageM
 import {
   invalidateOutageListCaches,
   removeOutageFromCache,
-  setOutageDetailCache,
 } from "@/features/outages/hooks/outage-cache";
 import { useDocumentVisibility } from "@/hooks/useDocumentVisibility";
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
+import { useOutageDetail } from "@/features/outages/hooks/useOutageDetail";
+import { slaEventKeys } from "@/lib/query-keys";
+import { getSiteDisplayTitle } from "@/lib/site-display";
 import { explorerLink } from "@/lib/explorer";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 
@@ -56,14 +58,13 @@ export default function OutageDetailsPage() {
   // Issue #570 — the poll loop below suspends itself while this is false.
   const isDocumentVisible = useDocumentVisibility();
 
-  const [outage, setOutage] = useState<Outage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: outage, isLoading, isError, error: queryError, refetch } = useOutageDetail(id);
+
+  const isResolved = outage?.status === "resolved";
+
   const [resolving, setResolving] = useState(false);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolutionPayment, setResolutionPayment] = useState<OutageResolutionPayment | null>(null);
-
-  const isResolved = outage?.status === "resolved";
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,32 +73,56 @@ export default function OutageDetailsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
-
+  // Command palette shortcut for "resolve this outage".
   useEffect(() => {
-    if (!id) return;
+    const handlePaletteResolve = () => {
+      if (!outage || outage.status !== "resolved" && !resolving) {
+        setIsResolveModalOpen(true);
+      }
+    };
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+    window.addEventListener("command-palette:resolve-outage", handlePaletteResolve);
+    return () => {
+      window.removeEventListener("command-palette:resolve-outage", handlePaletteResolve);
+    };
+  }, [outage, resolving]);
 
-    setLoading(true);
-    setError(null);
+  // Poll for updates while the outage is open.
+  //
+  // Issue #570 — a backgrounded tab has no operator reading it, so the
+  // 15-second cadence was pure waste: on a device without OS-level
+  // background throttling this route, the heartbeat and the health checks
+  // stack up into a continuous request stream. The loop is torn down
+  // entirely while `document.hidden` is true and rebuilt on
+  // `visibilitychange`, so the last response the operator saw is the one
+  // they come back to — no burst of catch-up fetches either.
+  useEffect(() => {
+    if (!id || !outage || outage.status === "resolved") return;
+    if (!isDocumentVisible) return;
 
     let mounted = true;
+    const controller = new AbortController();
+    const intervalId = setInterval(() => {
+      // Use refetch from React Query instead of manual fetch
+      void refetch();
+    }, DETAIL_POLL_INTERVAL_MS);
 
-    getOutage(id, { signal: controller.signal })
-      .then((data) => {
-        if (!mounted) return;
-        setOutage(data);
-        // Issue #571 — seed the shared detail cache from the authoritative
-        // fetch so a back-navigation to this route renders immediately and
-        // any other consumer of `slaEventKeys.outages.detail(id)` sees the
-        // same object.
-        setOutageDetailCache(queryClient, data);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
+    return () => {
+      mounted = false;
+      controller.abort();
+      clearInterval(intervalId);
+    };
+  }, [id, outage?.status, isDocumentVisible, refetch]);
+
+  /**
+   * Issue #571 — after any successful mutation the cached list pages are
+   * marked stale. Fired without awaiting so the operator sees their own
+   * edit/resolve land immediately instead of waiting on a refetch, while
+   * the next visit to /outages still reconciles against the server.
+   */
+  function markOutageListsStale() {
+    void invalidateOutageListCaches(queryClient);
+  }
         if ((err as { name?: string }).name === "CanceledError") return;
         if (!mounted) return;
         // Issue #572 — a 404 is authoritative: make sure no previously cached
@@ -141,9 +166,13 @@ export default function OutageDetailsPage() {
   // entirely while `document.hidden` is true and rebuilt on
   // `visibilitychange`, so the last response the operator saw is the one
   // they come back to — no burst of catch-up fetches either.
+  //
+  // Issue #578 — pause the poll while the resolve modal is open to avoid
+  // doubling stale fetches while the operator decides.
   useEffect(() => {
     if (!id || !outage || outage.status === "resolved") return;
     if (!isDocumentVisible) return;
+    if (isResolveModalOpen) return; // Pause while modal is open
 
     let mounted = true;
     const controller = new AbortController();
@@ -164,7 +193,7 @@ export default function OutageDetailsPage() {
       controller.abort();
       clearInterval(intervalId);
     };
-  }, [id, outage?.status, isDocumentVisible]);
+  }, [id, outage?.status, isDocumentVisible, isResolveModalOpen]);
 
   /**
    * Issue #571 — after any successful mutation the cached list pages are
@@ -199,8 +228,9 @@ export default function OutageDetailsPage() {
     try {
       const updated = await updateOutage(id, editForm);
       const next = { ...outage, ...updated };
-      setOutage(next);
-      setOutageDetailCache(queryClient, next);
+      // Invalidate React Query cache
+      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.detail(id) });
+      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.lists });
       markOutageListsStale();
       setEditing(false);
       toast("Outage updated.", "success");
@@ -218,9 +248,10 @@ export default function OutageDetailsPage() {
     try {
       const updated = await resolveOutage(id, { mttr_minutes: mttrMinutes });
       const next: Outage = { ...updated.outage, sla_status: updated.sla };
-      setOutage(next);
+      // Invalidate React Query cache
+      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.detail(id) });
+      queryClient.invalidateQueries({ queryKey: slaEventKeys.outages.lists });
       setResolutionPayment(updated.payment);
-      setOutageDetailCache(queryClient, next);
       markOutageListsStale();
       setIsResolveModalOpen(false);
       toast("Outage resolved successfully.", "success");
@@ -253,33 +284,36 @@ export default function OutageDetailsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <RouteLoadingState
-        title="Loading outage details"
-        description="Pulling the incident timeline, SLA state, and resolution metadata."
-      />
-    );
-  }
+  const loading = isLoading;
+const error = isError ? (queryError?.message ?? "Failed to load outage") : null;
 
-  if (error && !outage) {
-    return (
-      <RouteErrorState
-        title="Error loading outage"
-        description={error}
-        primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }}
-      />
-    );
-  }
+if (loading) {
+  return (
+    <RouteLoadingState
+      title="Loading outage details"
+      description="Pulling the incident timeline, SLA state, and resolution metadata."
+    />
+  );
+}
 
-  if (!outage) {
-    return (
-      <RouteEmptyState
-        title="Outage not found"
-        description="The outage may have been removed or the link may be outdated."
-      />
-    );
-  }
+if (error && !outage) {
+  return (
+    <RouteErrorState
+      title="Error loading outage"
+      description={error}
+      primaryAction={{ label: "Reload page", onClick: () => window.location.reload() }}
+    />
+  );
+}
+
+if (!outage) {
+  return (
+    <RouteEmptyState
+      title="Outage not found"
+      description="The outage may have been removed or the link may be outdated."
+    />
+  );
+}
 
   const timeline = buildTimeline(outage);
 
@@ -381,7 +415,7 @@ export default function OutageDetailsPage() {
                 value={editForm.description ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.description ?? "").length} / 2000
               </div>
             </div>
@@ -394,7 +428,7 @@ export default function OutageDetailsPage() {
                 value={editForm.root_cause ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, root_cause: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.root_cause ?? "").length} / 2000
               </div>
             </div>
@@ -407,7 +441,7 @@ export default function OutageDetailsPage() {
                 value={editForm.resolution_notes ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, resolution_notes: e.target.value }))}
               />
-              <div className="text-right text-xs text-slate-500 mt-1">
+              <div className="text-right text-xs text-slate-600 mt-1">
                 {(editForm.resolution_notes ?? "").length} / 2000
               </div>
             </div>
@@ -449,7 +483,7 @@ export default function OutageDetailsPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Site Name</span>
-              <span className="font-medium">{outage.site_name}</span>
+              <span className="font-medium">{getSiteDisplayTitle(outage.site_name)}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -590,8 +624,8 @@ export default function OutageDetailsPage() {
                   <li key={i} className="relative">
                     <span className="absolute -left-[1.35rem] top-1 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" />
                     <p className="text-sm font-medium text-slate-900">{event.label}</p>
-                    <p className="text-xs text-slate-500">{new Date(event.time).toLocaleString()}</p>
-                    {event.note && <p className="mt-0.5 text-xs text-slate-400">{event.note}</p>}
+                    <p className="text-xs text-slate-600">{new Date(event.time).toLocaleString()}</p>
+                    {event.note && <p className="mt-0.5 text-xs text-slate-600">{event.note}</p>}
                   </li>
                 ))}
               </ol>
@@ -757,7 +791,7 @@ function OutageLocationMap({
         style={{ paddingBottom: "40%" }}
       >
         {/* Fallback layer — visible whenever the iframe fails to paint. */}
-        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-400">
+        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-600">
           Map unavailable — coordinates provided below.
         </div>
         <iframe
@@ -769,7 +803,7 @@ function OutageLocationMap({
         />
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-600">
         Map data ©{" "}
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
           OpenStreetMap

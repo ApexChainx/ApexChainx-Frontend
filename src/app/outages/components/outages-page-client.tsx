@@ -18,6 +18,9 @@ type Outage = {
 
 type Props = {
   data?: Outage[];
+  isFetching?: boolean;
+  searchTerm?: string;
+  debouncedSearch?: string;
 };
 
 // Bulk resolve modal component
@@ -62,7 +65,7 @@ function BulkResolveModal({
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-xl">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Bulk resolve outages</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Confirm to resolve {selectedIds.length} selected outage{selectedIds.length !== 1 ? 's' : ''}.
           </p>
         </div>
@@ -161,7 +164,7 @@ function BulkAssignModal({
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-xl">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Bulk assign outages</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Assign {selectedIds.length} selected outage{selectedIds.length !== 1 ? 's' : ''} to a team member.
           </p>
         </div>
@@ -224,12 +227,11 @@ function BulkAssignModal({
   );
 }
 
-export default function OutagesPageClient({ data = [] }: Props) {
+export default function OutagesPageClient({ data = [], isFetching, searchTerm = "", debouncedSearch = "" }: Props) {
   const queryClient = useQueryClient();
   // -----------------------------
   // State
   // -----------------------------
-  const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "title">("date");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
@@ -237,18 +239,14 @@ export default function OutagesPageClient({ data = [] }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // -----------------------------
-  // Derived Data (Search + Sort)
-  // -----------------------------
-  const filteredData = useMemo(() => {
-    let result = [...data];
+  // The search term shown in the input (from URL)
+  const search = searchTerm;
 
-    // Search
-    if (search) {
-      result = result.filter((item) =>
-        item.title.toLowerCase().includes(search.toLowerCase())
-      );
-    }
+  // -----------------------------
+  // Derived Data (Sort only - search is server-side)
+  // -----------------------------
+  const sortedData = useMemo(() => {
+    let result = [...data];
 
     // Sort
     if (sortBy === "date") {
@@ -264,9 +262,9 @@ export default function OutagesPageClient({ data = [] }: Props) {
     }
 
     return result;
-  }, [data, search, sortBy]);
+  }, [data, sortBy]);
 
-  // Get selected outages for modals
+  // Get selected outages for modals (use original data for ID matching)
   const selectedOutages = useMemo(() => {
     return data.filter(outage => selectedIds.includes(outage.id));
   }, [data, selectedIds]);
@@ -284,10 +282,10 @@ export default function OutagesPageClient({ data = [] }: Props) {
 
   // Select all visible outages
   function toggleSelectAll() {
-    if (selectedIds.length === filteredData.length) {
+    if (selectedIds.length === sortedData.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredData.map(item => item.id));
+      setSelectedIds(sortedData.map(item => item.id));
     }
   }
 
@@ -296,39 +294,91 @@ export default function OutagesPageClient({ data = [] }: Props) {
   }
 
   function handleExport() {
-    logger.info("Export outages requested", { count: filteredData.length });
+    logger.info("Export outages requested", { count: sortedData.length });
   }
 
-  // Bulk resolve handler
+  // Bulk resolve handler with optimistic update
   async function handleBulkResolve(mttrMinutes: number) {
     setIsProcessing(true);
     setError(null);
+
+    const idsToResolve = [...selectedIds];
+
+    await queryClient.cancelQueries({ queryKey: outageKeys.lists });
+
+    const previousData = queryClient.getQueriesData<{ items: Outage[] }>({
+      queryKey: outageKeys.lists,
+    });
+
+    // Optimistically update the cache
+    previousData.forEach(([queryKey, data]) => {
+      if (data) {
+        queryClient.setQueryData(queryKey, {
+          ...data,
+          items: data.items.map((outage) =>
+            idsToResolve.includes(outage.id) ? { ...outage, status: "resolved" } : outage
+          ),
+        });
+      }
+    });
+
     try {
       await Promise.all(
-        selectedIds.map(id => resolveOutage(id, { mttr_minutes: mttrMinutes }))
+        idsToResolve.map((id) => resolveOutage(id, { mttr_minutes: mttrMinutes }))
       );
-      await queryClient.invalidateQueries({ queryKey: outageKeys.all });
+      // Narrow invalidation - only the current list page
+      await queryClient.invalidateQueries({ queryKey: outageKeys.lists, exact: false });
       setSelectedIds([]);
       setBulkResolveOpen(false);
     } catch (err) {
+      // Rollback on error
+      previousData.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       setError(err instanceof Error ? err.message : "Failed to resolve outages. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   }
 
-  // Bulk assign handler
+  // Bulk assign handler with optimistic update
   async function handleBulkAssign(assignee: string) {
     setIsProcessing(true);
     setError(null);
+
+    const idsToAssign = [...selectedIds];
+
+    await queryClient.cancelQueries({ queryKey: outageKeys.lists });
+
+    const previousData = queryClient.getQueriesData<{ items: Outage[] }>({
+      queryKey: outageKeys.lists,
+    });
+
+    // Optimistically update the cache
+    previousData.forEach(([queryKey, data]) => {
+      if (data) {
+        queryClient.setQueryData(queryKey, {
+          ...data,
+          items: data.items.map((outage) =>
+            idsToAssign.includes(outage.id) ? { ...outage, assigned_to: assignee } : outage
+          ),
+        });
+      }
+    });
+
     try {
       await Promise.all(
-        selectedIds.map(id => updateOutage(id, { assigned_to: assignee }))
+        idsToAssign.map((id) => updateOutage(id, { assigned_to: assignee }))
       );
-      await queryClient.invalidateQueries({ queryKey: outageKeys.all });
+      // Narrow invalidation - only the current list page
+      await queryClient.invalidateQueries({ queryKey: outageKeys.lists, exact: false });
       setSelectedIds([]);
       setBulkAssignOpen(false);
     } catch (err) {
+      // Rollback on error
+      previousData.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
       setError(err instanceof Error ? err.message : "Failed to assign outages. Please try again.");
     } finally {
       setIsProcessing(false);
@@ -370,10 +420,30 @@ export default function OutagesPageClient({ data = [] }: Props) {
           placeholder="Search outages..."
           aria-label="Search outages"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            const next = new URLSearchParams(searchParams?.toString() ?? "");
+            const value = e.target.value;
+            if (value) {
+              next.set("search", value);
+            } else {
+              next.delete("search");
+            }
+            next.set("page", "1");
+            router.push(`?${next.toString()}`);
+          }}
           data-tour="outages-search"
           className="border rounded-md px-3 py-2 w-full sm:max-w-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white"
         />
+
+        {isFetching && searchTerm !== debouncedSearch && (
+          <span className="text-xs text-slate-500 flex items-center gap-1" role="status" aria-live="polite">
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Searching…
+          </span>
+        )}
 
         <div className="flex gap-2">
           <select
@@ -406,24 +476,24 @@ export default function OutagesPageClient({ data = [] }: Props) {
       </div>
 
       {/* List header with select all */}
-      {filteredData.length > 0 && (
+      {sortedData.length > 0 && (
         <div className="flex items-center gap-3 px-1">
           <input
             type="checkbox"
-            checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+            checked={selectedIds.length === sortedData.length && sortedData.length > 0}
             onChange={toggleSelectAll}
             aria-label="Select all outages"
             className="h-4 w-4"
           />
           <span className="text-sm text-slate-600 dark:text-slate-400">
-            Select all ({filteredData.length})
+            Select all ({sortedData.length})
           </span>
         </div>
       )}
 
       {/* List */}
       <div className="grid gap-4" data-tour="outages-list">
-        {filteredData.map((item) => (
+        {sortedData.map((item) => (
           <div
             key={item.id}
             className="border rounded-lg p-4 flex items-center justify-between dark:bg-slate-900 dark:border-slate-700"
@@ -431,7 +501,7 @@ export default function OutagesPageClient({ data = [] }: Props) {
             <div>
               <h3 className="font-medium text-slate-900 dark:text-white">{item.title}</h3>
               <div className="flex items-center gap-2 mt-1">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {new Date(item.createdAt).toLocaleString()}
                 </p>
                 {item.assigned_to && (

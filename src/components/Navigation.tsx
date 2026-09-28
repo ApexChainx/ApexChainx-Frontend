@@ -61,7 +61,7 @@ const Navigation = () => {
 
         <div className="text-sm text-slate-600">
           {state === "loading" && (
-            <span className="text-slate-400">{t('settings.loadingSession')}</span>
+            <span className="text-slate-600">{t('settings.loadingSession')}</span>
           )}
           {state === "authenticated" && user && (
             <span className="flex items-center gap-3">

@@ -37,7 +37,7 @@ export default function GlobalError({
         }}
       />
       {process.env.NODE_ENV === "development" && error.digest ? (
-        <div className="mx-auto w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-sm">
+        <div className="mx-auto w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-600 shadow-sm">
           <p className="mb-1 font-semibold text-slate-700">Error digest</p>
           <code className="font-mono">{error.digest}</code>
         </div>
