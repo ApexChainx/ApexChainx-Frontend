@@ -74,15 +74,20 @@ under the shared prefix to begin with.
      all: ["sla-events"] as const,
      // ...existing families...
 
-     /** Webhook deliveries */
+     /** Webhook endpoints & delivery history (issue #597) */
      webhooks: {
        all: ["sla-events", "webhooks"] as const,
        list: (params?: Record<string, unknown>) =>
          ["sla-events", "webhooks", "list", params] as const,
-       detail: (id: string) => ["sla-events", "webhooks", id] as const,
+       deliveries: (webhookId: string) =>
+         ["sla-events", "webhooks", "deliveries", webhookId] as const,
      },
    };
    ```
+
+   This is the shape `src/lib/query-keys.ts` actually ships: the `webhooks`
+   family was registered (and `src/app/webhooks/page.tsx` ported onto it) by
+   issue #597.
 
 2. Follow the existing shape used by `outages`, `payments`, and `disputes`:
    an `all` root, a `list(params)` for filtered/paginated queries, and a
