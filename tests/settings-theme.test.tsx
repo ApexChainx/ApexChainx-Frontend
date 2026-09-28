@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/i18n";
 import SettingsPage from "@/app/setting/page";
+import {
+  LEGACY_THEME_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+} from "@/lib/theme-storage";
 
 // Issue #624 — the page's stellar health poller is React Query-backed now, so
 // a client must be in scope (same harness pattern as payments-view.test.tsx).
@@ -104,5 +108,38 @@ describe("SettingsPage theme effect", () => {
     const addedHandlers = adds.map(([, handler]) => handler);
     const removedHandlers = removes.map(([, handler]) => handler);
     expect(removedHandlers).toEqual(addedHandlers);
+  });
+});
+
+describe("SettingsPage theme storage (Issue #619)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("migrates the legacy 'theme' key to the namespaced key on mount", () => {
+    localStorage.setItem(LEGACY_THEME_STORAGE_KEY, "dark");
+
+    renderSettingsPage();
+
+    // The preference is applied and persisted under the namespaced key.
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+  });
+
+  it("reads the namespaced key directly and applies it", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "light");
+
+    renderSettingsPage();
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
+  });
+
+  it("writes the theme through the storage module (both keys during transition)", () => {
+    renderSettingsPage();
+
+    // The apply effect runs on mount with the default 'system' theme.
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("system");
+    expect(localStorage.getItem(LEGACY_THEME_STORAGE_KEY)).toBe("system");
   });
 });
