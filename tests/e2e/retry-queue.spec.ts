@@ -6,10 +6,13 @@ import { mockApi } from "./mock-api";
  *
  * Covers src/components/payments/retry-queue-view.tsx: the failed-payment
  * table renders against a backend seeded with a failed payment, a row can
- * be selected and bulk-retried through the confirmation dialog (and leaves
- * the list once retried), a single row can be retried directly via its
- * per-item "Retry" button, and the empty state renders when there are no
+ * be selected and bulk-retried through the typed confirmation gate (and
+ * leaves the list once retried), a single row can be retried directly via
+ * its per-item "Retry" button, and the empty state renders when there are no
  * failed payments in the window.
+ *
+ * The batch path itself (several rows, retried exactly once) is covered by
+ * retry-queue-batch.spec.ts.
  */
 
 async function login(page: import("@playwright/test").Page) {
@@ -62,19 +65,22 @@ test.describe("Payment retry queue", () => {
     await rowOne.getByRole("checkbox").check();
     await page.getByRole("button", { name: /Bulk Retry \(1\)/ }).click();
 
+    // Issue #641 — the bulk action is gated behind a typed phrase.
     await expect(
-      page.getByRole("heading", { name: "Confirm Bulk Retry" }),
-    ).toBeVisible();
-    await expect(
-      page.getByText(/Are you sure you want to retry 1 payment/),
+      page.getByRole("heading", { name: "Retry 1 payment?" }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Confirm Retry" }).click();
+    const confirm = page.getByRole("button", { name: "Confirm retry" });
+    await expect(confirm).toBeDisabled();
+    await page.getByPlaceholder("retry payments").fill("retry payments");
+    await expect(confirm).toBeEnabled();
+
+    await confirm.click();
 
     // The dialog closes and the retried row leaves the list; the
     // untouched row remains.
     await expect(
-      page.getByRole("heading", { name: "Confirm Bulk Retry" }),
+      page.getByRole("heading", { name: "Retry 1 payment?" }),
     ).not.toBeVisible();
     await expect(rowOne).not.toBeVisible();
     await expect(rowTwo).toBeVisible();

@@ -1,10 +1,26 @@
 /** ApexChain Frontend Test Suite */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RetryQueueView from "@/components/payments/retry-queue-view";
 import type { Payment } from "@/types/payment";
+
+/**
+ * RetryQueueView reads/writes through React Query (useRetryQueue), so it needs
+ * a provider. Retries are disabled so a rejected mock settles immediately.
+ */
+function renderView() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <RetryQueueView />
+    </QueryClientProvider>,
+  );
+}
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
@@ -45,7 +61,7 @@ describe("RetryQueueView optimistic retry", () => {
       () => new Promise<Payment>((resolve) => { resolveRetry = resolve; }),
     );
 
-    render(<RetryQueueView />);
+    renderView();
     expect(await screen.findByText("failed")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -59,9 +75,19 @@ describe("RetryQueueView optimistic retry", () => {
     expect(inFlightButton).toBeDisabled();
 
     // Reconcile with the server response.
-    mockFetchPayments.mockResolvedValue({ items: [], total: 0 });
-    resolveRetry({ ...failedPayment, status: "pending" });
+    // `resolveRetry` is only assigned once the mutation actually invokes the
+    // service, which happens after `onMutate`'s cancelQueries settles. Wait for
+    // that before resolving, or the settle is a no-op.
+    await waitFor(() => expect(mockRetryPayment).toHaveBeenCalledTimes(1));
 
+    mockFetchPayments.mockResolvedValue({ items: [], total: 0 });
+    await act(async () => {
+      resolveRetry({ ...failedPayment, status: "pending" });
+    });
+
+    // Settling the mutation invalidates the payments family, which refetches
+    // and leaves the queue empty.
+    await waitFor(() => expect(mockFetchPayments).toHaveBeenCalledTimes(2));
     // RouteEmptyState also announces the title via a sr-only live region, so
     // assert on the visible heading rather than raw text.
     await waitFor(() =>
@@ -73,14 +99,15 @@ describe("RetryQueueView optimistic retry", () => {
     mockFetchPayments.mockResolvedValue({ items: [failedPayment], total: 1 });
     mockRetryPayment.mockImplementation(() => new Promise<Payment>(() => {}));
 
-    render(<RetryQueueView />);
+    renderView();
     await screen.findByText("failed");
 
     const retryButton = screen.getByRole("button", { name: "Retry" });
     fireEvent.click(retryButton);
     fireEvent.click(retryButton);
 
-    expect(mockRetryPayment).toHaveBeenCalledTimes(1);
+    // The mutation runs a tick after the click, so the assertion must await.
+    await waitFor(() => expect(mockRetryPayment).toHaveBeenCalledTimes(1));
   });
 
   it("reverts the optimistic state and surfaces an error when the retry fails", async () => {
@@ -88,7 +115,7 @@ describe("RetryQueueView optimistic retry", () => {
     mockRetryPayment.mockRejectedValue(new Error("network down"));
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    render(<RetryQueueView />);
+    renderView();
     await screen.findByText("failed");
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

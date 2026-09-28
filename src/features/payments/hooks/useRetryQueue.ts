@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchPayments, retryPayment } from "@/services/paymentService";
 import { slaEventKeys } from "@/lib/query-keys";
@@ -120,6 +120,9 @@ export function useRetryQueue() {
         newSet.delete(id);
         return newSet;
       });
+      // Reconcile the optimistic pending row with the server: without this the
+      // row stayed on "pending" forever after a successful single retry.
+      invalidatePayments();
     },
   });
 
