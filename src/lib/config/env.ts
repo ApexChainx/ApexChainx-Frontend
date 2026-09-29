@@ -50,6 +50,19 @@ export const env = {
    */
   SLA_CONTRACT_ID: readEnv("NEXT_PUBLIC_SLA_CONTRACT_ID"),
 
+  /**
+   * Issue #640 — canonical (published) SLA Calculator contract id per network.
+   *
+   * These back the settings verification card, which compares the deployment's
+   * `SLA_CONTRACT_ID` against the canonical value for its network. They are
+   * deployment configuration rather than in-repo constants so the card can
+   * reach its Verified state on mainnet once the published id is wired, and so
+   * a missing id renders an explicit "not configured" state instead of being
+   * compared against a placeholder.
+   */
+  SLA_CONTRACT_ID_TESTNET: readEnv("NEXT_PUBLIC_SLA_CONTRACT_ID_TESTNET"),
+  SLA_CONTRACT_ID_MAINNET: readEnv("NEXT_PUBLIC_SLA_CONTRACT_ID_MAINNET"),
+
   /** USDC token address used for payment escrow */
   USDC_TOKEN_ADDRESS:
     readEnv("NEXT_PUBLIC_USDC_TOKEN_ADDRESS") || "",
@@ -61,3 +74,24 @@ export const env = {
   /** Application URL used for metadata and canonical links */
   APP_URL: resolveAppUrl(),
 };
+
+/** Stellar networks the settings card knows how to verify. */
+export type CanonicalSlaNetwork = "testnet" | "mainnet";
+
+/**
+ * Resolve the canonical (published) SLA contract id for a network.
+ *
+ * Returns `undefined` for an unknown network, or for a known network whose
+ * canonical id has not been configured — the card treats that as "cannot
+ * verify" rather than guessing.
+ */
+export function resolveCanonicalSlaContractId(network: string): string | undefined {
+  switch (network.trim().toLowerCase()) {
+    case "testnet":
+      return env.SLA_CONTRACT_ID_TESTNET;
+    case "mainnet":
+      return env.SLA_CONTRACT_ID_MAINNET;
+    default:
+      return undefined;
+  }
+}

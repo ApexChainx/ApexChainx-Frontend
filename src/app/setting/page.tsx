@@ -22,7 +22,7 @@
  *   - notifications.tsx page-level feedback/error banners
  */
 import { useI18n } from "@/i18n/i18n";
-import { env } from "@/lib/config/env";
+import { env, resolveCanonicalSlaContractId } from "@/lib/config/env";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { explorerLink } from "@/lib/explorer";
 import { getThemePreference, setThemePreference } from "@/lib/theme-storage";
@@ -758,13 +758,10 @@ function StellarHealthCard({
 /* Issue #129 — SLA Contract ID Card                                         */
 /* -------------------------------------------------------------------------- */
 
-/** Canonical SLA contract IDs published for each network */
-const CANONICAL_SLA_CONTRACT_IDS: Record<string, string> = {
-  testnet: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-  // TODO: replace the placeholder below with the actual published mainnet
-  //       contract ID from the DOCS.md once it is confirmed.
-  mainnet: "PLACEHOLDER_MAINNET_CONTRACT_ID_CHANGE_ME",
-};
+/**
+ * Issue #640 — canonical ids come from deployment config, so the page no longer
+ * carries its own (placeholder) copy of the table.
+ */
 
 function SLAContractIdCard({
   contractId,
@@ -773,7 +770,7 @@ function SLAContractIdCard({
   contractId?: string | undefined;
   network: string;
 }) {
-  const canonicalId = CANONICAL_SLA_CONTRACT_IDS[network];
+  const canonicalId = resolveCanonicalSlaContractId(network);
   const isConfigured = Boolean(contractId?.trim());
   const isMismatch =
     isConfigured && Boolean(canonicalId) && contractId !== canonicalId;
