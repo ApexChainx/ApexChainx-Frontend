@@ -1,0 +1,30 @@
+name: bundle-budget
+
+# Issue #633 — guards the per-route code splitting. `scripts/check-bundle-budget.mjs`
+# measures each App Router entry's first-load JS from the build manifest and
+# fails when a route grows by more than `tolerancePercent` (10%) over the sizes
+# recorded in bundle-budget.json.
+#
+# `bundle-budget.json` starts empty: routes without a recorded baseline are
+# reported as warnings, so this can be enabled before every route is budgeted.
+# Record real baselines with `npm run check:bundle -- --update` after a local
+# `npm run build`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  budget:
+    name: Per-route JS budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check:bundle

@@ -2,8 +2,12 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
-import CommandPalette from "@/components/CommandPalette";
-import OnboardingTour from "@/components/onboarding/OnboardingTour";
+// Issue #633 — the command palette and onboarding tour are deferred into their
+// own chunks so every route stops shipping them before first paint.
+import {
+  DeferredCommandPalette,
+  DeferredOnboardingTour,
+} from "@/components/shell/deferred-overlays";
 import { ToastProvider } from "@/components/ui/toast";
 import { I18nProvider } from "@/i18n/i18n";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
@@ -172,8 +176,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   <main id="main-content" role="main">
                     {children}
                   </main>
-                  <CommandPalette />
-                  <OnboardingTour />
+                  <DeferredCommandPalette />
+                  <DeferredOnboardingTour />
                   <OfflineBanner />
                 </RouteGuard>
               </I18nProvider>
