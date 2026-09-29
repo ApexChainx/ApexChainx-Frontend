@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useMemo, useRef } from "react";
 
 import { DEFAULT_OUTAGES_PAGE_SIZE, fetchOutages } from "@/lib/outages";
-import { persistedCache, clearOldSchemaVersions } from "@/lib/persisted-cache";
+import { persistedCache, clearOldSchemaVersions, peekCached } from "@/lib/persisted-cache";
 import { debouncedCacheSet } from "@/lib/debounced-cache";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedOutages } from "@/types/outages";
@@ -91,8 +91,23 @@ export function useOutages(params: UseOutagesParams = {}) {
     };
   }, [queryClient, queryKey, cacheKeyStr]);
 
+  // Issue #634 — read the persisted snapshot synchronously, before the first
+  // paint, so a warm repeat visit renders the cached rows immediately instead
+  // of flashing the loading shell while the IndexedDB read and the network
+  // request race the initial render. On a cold first visit the mirror is empty
+  // and the async hydration effect below still fills the query cache.
+  const initialCachedData = useMemo(
+    () => peekCached<PaginatedOutages>(cacheKeyStr) ?? undefined,
+    [cacheKeyStr],
+  );
+
   const query = useQuery<PaginatedOutages, Error>({
     queryKey,
+
+    // Seeded from the synchronous mirror; `initialDataUpdatedAt: 0` keeps it
+    // stale so the network request still runs and the cache reconciles.
+    initialData: initialCachedData,
+    initialDataUpdatedAt: 0,
 
     queryFn: async ({ signal }) => {
       const data = await fetchOutages(normalizedParams as unknown as OutagesQuery, {

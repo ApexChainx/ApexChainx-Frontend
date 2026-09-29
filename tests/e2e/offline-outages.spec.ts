@@ -80,3 +80,49 @@ test("renders the cached outage list after an offline reload", async ({
   // Clean the cache so subsequent runs start cold.
   await wipeIndexedDb(page);
 });
+
+/**
+ * Issue #634 — cache-first paint.
+ *
+ * The previous hydration path read IndexedDB in a `useEffect` and only applied
+ * the snapshot when the query had no data yet, so a warm reload could paint the
+ * "Loading outages" shell first and slip past the cached rows a moment later.
+ * `useOutages` now seeds React Query synchronously from an in-memory mirror of
+ * the persisted cache, so the cached rows are on screen before the network can
+ * answer.
+ *
+ * The next /outages response is throttled far beyond the assertion window,
+ * which makes the network an impossible source for the rows we assert on.
+ */
+test("paints cached rows before the throttled network response arrives", async ({
+  page,
+}) => {
+  await mockApi(page);
+
+  await login(page);
+  await wipeIndexedDb(page);
+
+  // Warm the cache (and the in-memory mirror) with one successful online load.
+  await page.goto("/outages");
+  await expect(page.getByText("Lagos Node 1")).toBeVisible();
+  await page.waitForTimeout(750);
+
+  // Throttle the next /outages response well past the assertion window.
+  let outageRequestSettled = false;
+  await page.route("**/api/v1/outages", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+    outageRequestSettled = true;
+    await route.fallback();
+  });
+
+  await page.reload();
+
+  // The cached row paints while the request is still pending. Before the fix
+  // this window rendered the "Loading outages" shell instead.
+  await expect(page.getByText("Lagos Node 1")).toBeVisible({ timeout: 4_000 });
+  expect(outageRequestSettled).toBe(false);
+  await expect(page.getByText("Loading outages")).toBeHidden();
+
+  // Clean the cache so subsequent runs start cold.
+  await wipeIndexedDb(page);
+});
