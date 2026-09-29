@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "codegen": "openapi-typescript ${OPENAPI_SPEC_URL:-http://localhost:8000/openapi.json} -o src/types/api.generated.ts"
   },
   "dependencies": {
