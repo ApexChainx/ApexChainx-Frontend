@@ -53,6 +53,55 @@ export interface CacheEntry<T = unknown> {
 let hydrationWarningEmitted = false;
 let structuredCloneErrorCount = 0;
 
+export interface MemorySnapshot {
+  data: unknown;
+  expiresAt: number;
+}
+
+/**
+ * Issue #634 — synchronous mirror of the persisted store.
+ *
+ * IndexedDB reads are asynchronous, so hydrating from a `useEffect` can only
+ * apply a snapshot *after* the first paint — which is precisely the spinner
+ * flash the offline-first cache exists to avoid. The mirror remembers the most
+ * recently written or read value per key in memory, so a render that follows
+ * a warm visit can read it synchronously and seed its initial data before any
+ * paint happens.
+ */
+const memoryMirror = new Map<string, MemorySnapshot>();
+
+function rememberSnapshot(fullKey: string, data: unknown, expiresAt: number): void {
+  memoryMirror.set(fullKey, { data, expiresAt });
+}
+
+function forgetSnapshot(fullKey: string): void {
+  memoryMirror.delete(fullKey);
+}
+
+/**
+ * Read the last-known value for `key` synchronously.
+ *
+ * Returns `null` when nothing has been seen in this JS context yet (e.g. the
+ * very first visit, or a cold reload) or when the snapshot has expired.
+ */
+export function peekCached<T>(key: string): T | null {
+  const fullKey = buildKey(key);
+  const snapshot = memoryMirror.get(fullKey);
+  if (!snapshot) return null;
+
+  if (snapshot.expiresAt > 0 && Date.now() > snapshot.expiresAt) {
+    forgetSnapshot(fullKey);
+    return null;
+  }
+
+  return snapshot.data as T;
+}
+
+/** Drop every in-memory snapshot (used by tests, and after a full wipe). */
+export function resetCacheMirror(): void {
+  memoryMirror.clear();
+}
+
 function reportHydrationFailure(operation: string, key: string, error: unknown): void {
   const payload = {
     operation,
@@ -97,6 +146,7 @@ async function purgeNamespace(prefix: string): Promise<void> {
     for (const key of allKeys) {
       if (typeof key === "string" && key.startsWith(`cache:v${CACHE_SCHEMA_VERSION}:${prefix}:`)) {
         store.delete(key);
+        forgetSnapshot(key);
       }
     }
     await new Promise<void>((resolve, reject) => {
@@ -149,6 +199,7 @@ export async function clearOldSchemaVersions(): Promise<void> {
     for (const key of allKeys) {
       if (typeof key === "string" && key.startsWith("cache:v") && !key.startsWith(`cache:v${CACHE_SCHEMA_VERSION}:`)) {
         store.delete(key);
+        forgetSnapshot(key);
       }
     }
     await new Promise<void>((resolve, reject) => {
@@ -168,6 +219,9 @@ export const persistedCache = {
    */
   async set<T>(key: string, data: T, ttlMs = 1000 * 60 * 30): Promise<void> {
     const fullKey = buildKey(key);
+    // Issue #634 — mirror synchronously, before the IndexedDB transaction is
+    // awaited, so the next render can already seed from this value.
+    rememberSnapshot(fullKey, data, ttlMs > 0 ? Date.now() + ttlMs : 0);
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readwrite");
@@ -225,10 +279,13 @@ export const persistedCache = {
       // Check expiration
       if (entry.expiresAt > 0 && Date.now() > entry.expiresAt) {
         // Expired — remove it in the background
+        forgetSnapshot(fullKey);
         void persistedCache.del(key);
         return null;
       }
 
+      // Keep the mirror warm for render-time synchronous reads (Issue #634).
+      rememberSnapshot(fullKey, entry.data, entry.expiresAt);
       return entry.data;
     } catch (err) {
       reportHydrationFailure("get", fullKey, err);
@@ -241,6 +298,7 @@ export const persistedCache = {
    */
   async del(key: string): Promise<void> {
     const fullKey = buildKey(key);
+    forgetSnapshot(fullKey);
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readwrite");
@@ -260,6 +318,7 @@ export const persistedCache = {
    * Remove all entries from the cache.
    */
   async clear(): Promise<void> {
+    resetCacheMirror();
     try {
       const db = await openDb();
       const tx = db.transaction(STORE_NAME, "readwrite");
