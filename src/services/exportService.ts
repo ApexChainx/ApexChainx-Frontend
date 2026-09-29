@@ -3,15 +3,55 @@ import { api } from "@/lib/api";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { ExportFormat, OutageExportFilters } from "../types/export";
 
-function decodeRfc5987(value: string): string {
-  // filename*=UTF-8''<percent-encoded>
-  const eq = value.indexOf("''");
-  const encoded = eq >= 0 ? value.slice(eq + 2) : value;
+// RFC 5987 `filename*=` form: [charset''][language'']percent-encoded-value.
+// The charset/language segments are optional; only the value is kept.
+const RFC_5987_FILENAME_STAR_REGEX =
+  /filename\*\s*=\s*(?:[\w!#$%&+^_`{}~-]+''|'')?([^;\s]+)/i;
+const FILENAME_PARAM_REGEX = /filename\s*=\s*/i;
+
+function decodeExtendedFilename(rawValue: string): string {
+  const separatorIndex = rawValue.indexOf("''");
+  const encoded = separatorIndex >= 0 ? rawValue.slice(separatorIndex + 2) : rawValue;
   try {
     return decodeURIComponent(encoded);
   } catch {
     return encoded;
   }
+}
+
+/**
+ * Extract the raw value following a legacy `filename=` parameter.
+ *
+ * Handles quoted values spanning semicolons and containing backslash-escaped
+ * characters; returns `undefined` for missing, empty, or unterminated values.
+ */
+function extractFilenameParamValue(dispositionHeader: string): string | undefined {
+  const paramMatch = dispositionHeader.match(FILENAME_PARAM_REGEX);
+  if (!paramMatch || paramMatch.index === undefined) {
+    return undefined;
+  }
+
+  const rest = dispositionHeader.slice(paramMatch.index + paramMatch[0].length);
+  if (rest.startsWith('"')) {
+    let index = 1;
+    while (index < rest.length) {
+      const char = rest[index];
+      if (char === "\\") {
+        index += 2;
+        continue;
+      }
+      if (char === '"') {
+        return rest.slice(0, index + 1);
+      }
+      index += 1;
+    }
+    return undefined; // unterminated quoted value
+  }
+
+  const semicolonIndex = rest.indexOf(";");
+  const token = semicolonIndex === -1 ? rest : rest.slice(0, semicolonIndex);
+  const trimmed = token.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 /**
@@ -25,17 +65,26 @@ export function getFilenameFromDisposition(
 ): string | null {
   if (!dispositionHeader) return null;
 
-  const starMatch = dispositionHeader.match(/filename\*\s*=\s*(?:UTF-8'')?([^;\s]+)/i);
+  const starMatch = dispositionHeader.match(RFC_5987_FILENAME_STAR_REGEX);
   if (starMatch?.[1]) {
-    return decodeRfc5987(starMatch[1]);
+    return decodeExtendedFilename(starMatch[1]);
   }
 
-  const plainMatch = dispositionHeader.match(/filename\s*=\s*"?([^";\s]+)"?/i);
-  if (plainMatch?.[1]) {
-    return plainMatch[1];
+  const rawValue = extractFilenameParamValue(dispositionHeader);
+  if (!rawValue) {
+    return null;
   }
 
-  return null;
+  if (rawValue.startsWith('"')) {
+    // extractFilenameParamValue only returns quoted tokens it terminated.
+    const innerValue = rawValue.slice(1, -1);
+    if (innerValue.length === 0) {
+      return null; // empty quoted filename carries no usable name
+    }
+    return innerValue.replace(/\\(.)/g, "$1");
+  }
+
+  return rawValue;
 }
 
 function resolveExportFilename(dispositionHeader: string | undefined, fallbackFormat: ExportFormat): string {
