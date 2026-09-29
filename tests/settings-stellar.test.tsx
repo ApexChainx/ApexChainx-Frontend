@@ -26,6 +26,13 @@ vi.mock("@/hooks/useStellarHealth", () => ({
   useStellarHealth: () => mockHealth,
 }));
 
+// Issue #640 — canonical SLA contract ids are deployment configuration now, so
+// wire the testnet id before the stellar module snapshots its env.
+vi.hoisted(() => {
+  process.env.NEXT_PUBLIC_SLA_CONTRACT_ID_TESTNET =
+    "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+});
+
 import {
   SLAContractIdCard,
   StellarHealthCard,
@@ -113,7 +120,8 @@ describe("SLAContractIdCard", () => {
   it("shows the not-configured state when no id is set", () => {
     render(<SLAContractIdCard network="testnet" />);
 
-    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    // Both the status badge and the resolved-id field read "Not configured".
+    expect(screen.getAllByText("Not configured")).toHaveLength(2);
     expect(screen.getByText("Contract not configured")).toBeInTheDocument();
   });
 });

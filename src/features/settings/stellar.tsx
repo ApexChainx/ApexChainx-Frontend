@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 
 import { useStellarHealth } from "@/hooks/useStellarHealth";
 import type { StellarHealthState } from "@/hooks/useStellarHealth";
+import { resolveCanonicalSlaContractId } from "@/lib/config/env";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 interface StellarHealthContextValue extends StellarHealthState {
@@ -118,14 +119,21 @@ export function StellarHealthCard({ network }: { network: string }) {
   );
 }
 
-// ─── SLA Contract ID Card (Issue #129) ───────────────────────────────────────
-/** Canonical SLA contract IDs published for each network */
-const CANONICAL_SLA_CONTRACT_IDS: Record<string, string> = {
-  testnet: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-  // TODO: replace the placeholder below with the actual published mainnet
-  //       contract ID from the DOCS.md once it is confirmed.
-  mainnet: "PLACEHOLDER_MAINNET_CONTRACT_ID_CHANGE_ME",
-};
+// ─── SLA Contract ID Card (Issue #129, #640) ─────────────────────────────────
+/**
+ * Issue #640 — canonical contract ids are resolved from deployment
+ * configuration (`NEXT_PUBLIC_SLA_CONTRACT_ID_TESTNET` / `..._MAINNET`) via
+ * `resolveCanonicalSlaContractId` rather than hardcoded here.
+ *
+ * The table this replaced hardcoded a placeholder string for mainnet, so a
+ * deployment that set a real `NEXT_PUBLIC_SLA_CONTRACT_ID` was always compared
+ * against that placeholder and rendered a Mismatch badge — no configuration
+ * could reach the Verified state on the network where verification matters
+ * most.
+ *
+ * `tests/settings-sla-contract-id.test.tsx` fails if that placeholder string
+ * ever reappears anywhere under `src/`.
+ */
 
 export function SLAContractIdCard({
   contractId,
@@ -134,7 +142,7 @@ export function SLAContractIdCard({
   contractId?: string | undefined;
   network: string;
 }) {
-  const canonicalId = CANONICAL_SLA_CONTRACT_IDS[network];
+  const canonicalId = resolveCanonicalSlaContractId(network);
   const isConfigured = Boolean(contractId?.trim());
   const isMismatch =
     isConfigured && Boolean(canonicalId) && contractId !== canonicalId;
