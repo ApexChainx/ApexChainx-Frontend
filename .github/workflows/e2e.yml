@@ -1,0 +1,36 @@
+name: e2e
+
+# Issue #639 — the e2e suite now runs a handset-class project alongside the
+# desktop one (see playwright.config.ts), so the core journeys and the
+# responsive smoke spec are exercised at both widths on every change.
+#
+# NOTE: these journeys depend on the app compiling. On a main branch whose
+# routes do not build, this job will report those failures rather than new
+# ones — check the run's trace artifacts before assuming a regression here.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  playwright:
+    name: Playwright (desktop + mobile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-traces
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
