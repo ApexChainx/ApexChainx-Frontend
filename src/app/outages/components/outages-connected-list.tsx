@@ -1,8 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
-import { useSearchParams } from "next/navigation";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useOutagesTableState } from "@/hooks/useOutagesTableState";
 import { RouteLoadingState } from "@/components/ui/route-state";
 import { useOutages } from "@/features/outages/hooks/useOutages";
 import { getSiteDisplayTitle } from "@/lib/site-display";
@@ -29,13 +29,26 @@ const SEARCH_DEBOUNCE_MS = 300;
  * successful fetches are persisted to IndexedDB and the hook hydrates from
  * that store on mount, so an operator who loses connectivity still sees the
  * last-known outage list.
+ *
+ * Issue #638 — search, sort, and the severity/status filters are derived from
+ * the query string rather than held in component memory, so a triage view
+ * survives a reload, can be bookmarked or shared, and is restored by a
+ * back-navigation from an outage detail page. Because the state is *derived*
+ * from the URL (never copied into local state by an effect), the restored
+ * filters are already in place on the first render and the list fetches once —
+ * there is no reconcile-then-refetch double request.
  */
 export default function OutagesConnectedList() {
-  const searchParams = useSearchParams();
-  const rawSearch = searchParams?.get("search") ?? "";
+  const { state, actions } = useOutagesTableState();
+
+  const rawSearch = state.search ?? "";
   const debouncedSearch = useDebounce(rawSearch, SEARCH_DEBOUNCE_MS);
 
-  const { data, isLoading, isFetching } = useOutages({ search: debouncedSearch || undefined });
+  const { data, isLoading, isFetching } = useOutages({
+    search: debouncedSearch || undefined,
+    severity: state.severity,
+    status: state.status,
+  });
 
   const items: ClientOutage[] = (data?.items ?? []).map((outage) => ({
     id: outage.id,
@@ -65,6 +78,9 @@ export default function OutagesConnectedList() {
       isFetching={isFetching}
       searchTerm={rawSearch}
       debouncedSearch={debouncedSearch}
+      sort={{ field: state.sort_field ?? "detected_at", order: state.sort_order }}
+      onSortChange={actions.setSort}
+      onSearchChange={actions.setSearch}
     />
   );
 }

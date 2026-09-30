@@ -3,6 +3,7 @@
 
 import { outageKeys } from "@/features/outages/hooks/useOutageMutations";
 import { logger } from "@/lib/logger";
+import { type SortField, type SortOrder } from "@/lib/urlState";
 import { resolveOutage, updateOutage } from "@/services/outages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -16,11 +17,44 @@ type Outage = {
   assigned_to?: string;
 };
 
+export type OutagesSort = { field: SortField; order: SortOrder };
+
+const DEFAULT_SORT: OutagesSort = { field: "detected_at", order: "desc" };
+const DEFAULT_SORT_VALUE = "detected_at:desc";
+
+/**
+ * Sort choices offered by the list. `detected_at` is the API's timestamp field;
+ * `title` is the list's client-side display key (see urlState.SortField).
+ */
+const SORT_OPTIONS: Array<{ value: string; label: string; sort: OutagesSort }> = [
+  {
+    value: "detected_at:desc",
+    label: "Newest",
+    sort: { field: "detected_at", order: "desc" },
+  },
+  {
+    value: "detected_at:asc",
+    label: "Oldest",
+    sort: { field: "detected_at", order: "asc" },
+  },
+  { value: "title:asc", label: "Title", sort: { field: "title", order: "asc" } },
+];
+
 type Props = {
   data?: Outage[];
   isFetching?: boolean;
   searchTerm?: string;
   debouncedSearch?: string;
+  /**
+   * Controlled sort selection. When omitted the list keeps its own local state,
+   * which keeps the component usable standalone (and in existing tests); the
+   * connected list passes the URL-backed values so the sort survives
+   * navigation (issue #638).
+   */
+  sort?: OutagesSort;
+  onSortChange?: (field: SortField, order: SortOrder) => void;
+  /** Controlled search field. When omitted the input keeps its own value. */
+  onSearchChange?: (value: string) => void;
 };
 
 // Bulk resolve modal component
@@ -227,42 +261,77 @@ function BulkAssignModal({
   );
 }
 
-export default function OutagesPageClient({ data = [], isFetching, searchTerm = "", debouncedSearch = "" }: Props) {
+export default function OutagesPageClient({
+  data = [],
+  isFetching,
+  searchTerm = "",
+  debouncedSearch = "",
+  sort,
+  onSortChange,
+  onSearchChange,
+}: Props) {
   const queryClient = useQueryClient();
   // -----------------------------
   // State
   // -----------------------------
-  const [sortBy, setSortBy] = useState<"date" | "title">("date");
+  const [localSort, setLocalSort] = useState<OutagesSort>(DEFAULT_SORT);
+  const [localSearch, setLocalSearch] = useState(searchTerm);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkResolveOpen, setBulkResolveOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The search term shown in the input (from URL)
-  const search = searchTerm;
+  // The search term shown in the input (URL-backed when controlled).
+  const search = onSearchChange ? searchTerm : localSearch;
+
+  // The active sort comes from the URL when the list is controlled, and from
+  // local state otherwise. Only the primitives are used below so the derived
+  // list does not recompute on every parent render.
+  const activeSort = sort ?? localSort;
+
+  const sortSelectValue =
+    SORT_OPTIONS.find(
+      (option) => option.value === `${activeSort.field}:${activeSort.order}`,
+    )?.value ?? DEFAULT_SORT_VALUE;
+
+  function handleSortChange(nextValue: string) {
+    const option = SORT_OPTIONS.find((candidate) => candidate.value === nextValue);
+    if (!option) return;
+    if (onSortChange) {
+      onSortChange(option.sort.field, option.sort.order);
+    } else {
+      setLocalSort(option.sort);
+    }
+  }
+
+  function handleSearchChange(nextValue: string) {
+    if (onSearchChange) {
+      onSearchChange(nextValue);
+    } else {
+      setLocalSearch(nextValue);
+    }
+  }
 
   // -----------------------------
   // Derived Data (Sort only - search is server-side)
   // -----------------------------
   const sortedData = useMemo(() => {
-    let result = [...data];
+    const result = [...data];
 
-    // Sort
-    if (sortBy === "date") {
+    if (activeSort.field === "title") {
+      result.sort((a, b) => a.title.localeCompare(b.title));
+    } else {
+      const direction = activeSort.order === "asc" ? 1 : -1;
       result.sort(
         (a, b) =>
-          new Date(b.createdAt).getTime() -
-          new Date(a.createdAt).getTime()
+          (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) *
+          direction,
       );
     }
 
-    if (sortBy === "title") {
-      result.sort((a, b) => a.title.localeCompare(b.title));
-    }
-
     return result;
-  }, [data, sortBy]);
+  }, [data, activeSort.field, activeSort.order]);
 
   // Get selected outages for modals (use original data for ID matching)
   const selectedOutages = useMemo(() => {
@@ -420,17 +489,7 @@ export default function OutagesPageClient({ data = [], isFetching, searchTerm = 
           placeholder="Search outages..."
           aria-label="Search outages"
           value={search}
-          onChange={(e) => {
-            const next = new URLSearchParams(searchParams?.toString() ?? "");
-            const value = e.target.value;
-            if (value) {
-              next.set("search", value);
-            } else {
-              next.delete("search");
-            }
-            next.set("page", "1");
-            router.push(`?${next.toString()}`);
-          }}
+          onChange={(e) => handleSearchChange(e.target.value)}
           data-tour="outages-search"
           className="border rounded-md px-3 py-2 w-full sm:max-w-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white"
         />
@@ -447,15 +506,16 @@ export default function OutagesPageClient({ data = [], isFetching, searchTerm = 
 
         <div className="flex gap-2">
           <select
-            value={sortBy}
-            onChange={(e) =>
-              setSortBy(e.target.value as "date" | "title")
-            }
+            value={sortSelectValue}
+            onChange={(e) => handleSortChange(e.target.value)}
             aria-label="Sort outages"
             className="border rounded-md px-3 py-2 dark:bg-slate-800 dark:border-slate-600 dark:text-white"
           >
-            <option value="date">Newest</option>
-            <option value="title">Title</option>
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
 
           <button

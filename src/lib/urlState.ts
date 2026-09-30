@@ -1,9 +1,14 @@
 /** ApexChain Network Operations Intelligence Platform */
 
-export type SortField = "detected_at" | "severity" | "status";
+export type SortField = "detected_at" | "severity" | "status" | "title";
 export type SortOrder = "asc" | "desc";
 
-export const VALID_SORT_FIELDS: SortField[] = ["detected_at", "severity", "status"];
+/**
+ * Sort keys the outages list may persist in the URL. `title` is the list's
+ * client-side display key (derived from `site_name`); the others are API
+ * fields.
+ */
+export const VALID_SORT_FIELDS: SortField[] = ["detected_at", "severity", "status", "title"];
 export const VALID_SORT_ORDERS: SortOrder[] = ["asc", "desc"];
 
 export const MIN_PAGE = 1;
