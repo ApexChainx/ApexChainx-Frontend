@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
     getPreferences,
@@ -61,95 +61,111 @@ export function useFilterPresets() {
   return { presets, savePreset, deletePreset };
 }
 
-// Table state manager — handles URL sync for filters, sort, pagination
-// Data fetching is delegated to useOutages hook (Issue #573)
-export function useOutagesTableState() {
+export interface OutagesTableState {
+  page: number;
+  page_size: number;
+  severity?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+  sort_field?: SortField | undefined;
+  sort_order: SortOrder;
+}
+
+export interface OutagesTableActions {
+  setParam: (key: string, value?: string) => void;
+  setPage: (nextPage: number) => void;
+  setPageSize: (nextPageSize: number) => void;
+  setSeverity: (nextSeverity?: string) => void;
+  setStatus: (nextStatus?: string) => void;
+  setSearch: (nextSearch?: string) => void;
+  setSort: (field: SortField, order: SortOrder) => void;
+  clearSort: () => void;
+}
+
+/**
+ * Table state manager — the query string is the single source of truth for
+ * filters, search, sort, and pagination.
+ *
+ * Issue #638: the outages list used to keep its filter/sort state in component
+ * memory, so a triage view was lost on reload, could not be shared, and was
+ * reset by a back-navigation from an outage detail page. The state is now
+ * *derived* from the URL on every render (never synced into local state via an
+ * effect), which means restored filters are already in place on the first
+ * render and the list fetches exactly once.
+ *
+ * Data fetching is delegated to the useOutages hook (Issue #573).
+ */
+export function useOutagesTableState(): {
+  state: OutagesTableState;
+  actions: OutagesTableActions;
+} {
   const params = useSearchParams();
   const router = useRouter();
 
   const filter = parseOutagesFilter(params || new URLSearchParams());
-  
-  const page = filter.page;
-  const pageSize = filter.page_size;
-  const severity = filter.severity;
-  const status = filter.status;
-  // FE-058: search query
-  const search = filter.search;
-  // FE-059: sort field + order
-  const sortField = filter.sort_field;
-  const sortOrder = filter.sort_order;
+  const currentQuery = params?.toString() ?? "";
 
-  function setParam(key: string, value?: string) {
-    const next = new URLSearchParams(params?.toString() ?? "");
-    if (value) {
-      next.set(key, value);
-    } else {
-      next.delete(key);
-    }
-    router.push(`?${next.toString()}`);
-  }
-
-  function setMultiParam(updates: Record<string, string | undefined>) {
-    const next = new URLSearchParams(params?.toString() ?? "");
-    for (const [key, value] of Object.entries(updates)) {
-      if (value) {
-        next.set(key, value);
-      } else {
-        next.delete(key);
+  /**
+   * Rewrite the current query string. High-frequency updates (`setSearch`,
+   * called on every keystroke) replace the history entry instead of pushing a
+   * new one, so Back returns to the previous page rather than the previous
+   * keystroke.
+   */
+  const navigate = useCallback(
+    (
+      updates: Record<string, string | undefined>,
+      mode: "push" | "replace" = "push",
+    ) => {
+      const next = new URLSearchParams(currentQuery);
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) {
+          next.set(key, value);
+        } else {
+          next.delete(key);
+        }
       }
-    }
-    router.push(`?${next.toString()}`);
-  }
+      const href = `?${next.toString()}`;
+      if (mode === "replace") {
+        router.replace(href, { scroll: false });
+      } else {
+        router.push(href, { scroll: false });
+      }
+    },
+    [currentQuery, router],
+  );
 
-  function setPage(nextPage: number) {
-    setParam("page", String(Math.max(1, nextPage)));
-  }
-
-  function setPageSize(nextPageSize: number) {
-    setMultiParam({ page_size: String(nextPageSize), page: "1" });
-  }
-
-  function setSeverity(nextSeverity?: string) {
-    setMultiParam({ severity: nextSeverity, page: "1" });
-  }
-
-  function setStatus(nextStatus?: string) {
-    setMultiParam({ status: nextStatus, page: "1" });
-  }
-
-  // FE-058
-  function setSearch(nextSearch?: string) {
-    setMultiParam({ search: nextSearch || undefined, page: "1" });
-  }
-
-  // FE-059
-  function setSort(field: SortField, order: SortOrder) {
-    setMultiParam({ sort_field: field, sort_order: order, page: "1" });
-  }
-
-  function clearSort() {
-    setMultiParam({ sort_field: undefined, sort_order: undefined, page: "1" });
-  }
+  const actions = useMemo<OutagesTableActions>(
+    () => ({
+      setParam: (key, value) => navigate({ [key]: value }),
+      setPage: (nextPage) =>
+        navigate({ page: String(Math.max(1, nextPage)) }),
+      setPageSize: (nextPageSize) =>
+        navigate({ page_size: String(nextPageSize), page: "1" }),
+      setSeverity: (nextSeverity) =>
+        navigate({ severity: nextSeverity, page: "1" }),
+      setStatus: (nextStatus) => navigate({ status: nextStatus, page: "1" }),
+      // FE-058
+      setSearch: (nextSearch) =>
+        navigate({ search: nextSearch || undefined, page: "1" }, "replace"),
+      // FE-059
+      setSort: (field, order) =>
+        navigate({ sort_field: field, sort_order: order, page: "1" }),
+      clearSort: () =>
+        navigate({ sort_field: undefined, sort_order: undefined, page: "1" }),
+    }),
+    [navigate],
+  );
 
   return {
     state: {
-      page,
-      page_size: pageSize,
-      severity,
-      status,
-      search,
-      sort_field: sortField,
-      sort_order: sortOrder,
+      page: filter.page,
+      page_size: filter.page_size,
+      severity: filter.severity,
+      status: filter.status,
+      search: filter.search,
+      sort_field: filter.sort_field,
+      sort_order: filter.sort_order,
     },
-    actions: {
-      setParam,
-      setPage,
-      setPageSize,
-      setSeverity,
-      setStatus,
-      setSearch,
-      setSort,
-      clearSort,
-    },
+    actions,
   };
 }

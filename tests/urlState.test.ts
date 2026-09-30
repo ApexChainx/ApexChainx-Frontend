@@ -98,3 +98,38 @@ describe("round trip", () => {
     expect(serialized.get("page_size")).toBe(String(DEFAULT_PAGE_SIZE));
   });
 });
+
+describe("sort parameters (issue #638)", () => {
+  it("parses the list's sort pair", () => {
+    const filter = parseOutagesFilter(
+      makeParams({ sort_field: "title", sort_order: "asc" }),
+    );
+    expect(filter.sort_field).toBe("title");
+    expect(filter.sort_order).toBe("asc");
+  });
+
+  it("drops an unknown sort_field and falls back to desc", () => {
+    const filter = parseOutagesFilter(
+      makeParams({ sort_field: "bogus", sort_order: "sideways" }),
+    );
+    expect(filter.sort_field).toBeUndefined();
+    expect(filter.sort_order).toBe("desc");
+  });
+
+  it.each([
+    ["detected_at", "desc"],
+    ["detected_at", "asc"],
+    ["severity", "asc"],
+    ["title", "asc"],
+  ] as const)("round-trips %s/%s through serialize → parse", (field, order) => {
+    const serialized = serializeOutagesFilter({
+      page: 1,
+      page_size: DEFAULT_PAGE_SIZE,
+      sort_field: field,
+      sort_order: order,
+    });
+    const filter = parseOutagesFilter(serialized);
+    expect(filter.sort_field).toBe(field);
+    expect(filter.sort_order).toBe(order);
+  });
+});

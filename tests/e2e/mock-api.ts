@@ -352,7 +352,18 @@ export async function mockApi(
 
     /* ---------------------------- Outages ---------------------------- */
     if (method === "GET" && path === "/api/v1/outages") {
-      return json(200, { items: outages, total: outages.length });
+      // Issue #638 — the list persists `search` in the URL and the real
+      // endpoint applies it, so the fixture filters the same way. Without a
+      // `search` param the full list is returned, exactly as before.
+      const search = url.searchParams.get("search")?.trim().toLowerCase();
+      const items = search
+        ? outages.filter(
+            (outage) =>
+              outage.site_name.toLowerCase().includes(search) ||
+              outage.id.toLowerCase().includes(search),
+          )
+        : outages;
+      return json(200, { items, total: items.length });
     }
 
     if (method === "POST" && path === "/api/v1/outages") {
