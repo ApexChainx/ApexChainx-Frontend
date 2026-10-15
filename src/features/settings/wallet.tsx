@@ -10,7 +10,7 @@
  * user id, so the provider keeps the form in sync with the session module's
  * `currentUser` (Issue #615 — mirrors the previous single-component behaviour).
  */
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -396,25 +396,30 @@ export function WalletBalancesCard() {
   );
 }
 
-function WalletEmptyState({
-  title,
-  hint,
-  testId,
+// A single token balance row. Memoised so the list does not re-render every
+// row when the surrounding wallet panel re-renders for unrelated reasons
+// (e.g. form input changes) while the row's own values are unchanged.
+const BalanceRow = memo(function BalanceRow({
+  asset,
+  balance,
+  usdValue,
 }: {
-  title: string;
-  hint: string;
-  testId: string;
+  asset: string;
+  balance: string;
+  usdValue: string | null;
 }) {
   return (
-    <div
-      className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-6 text-center"
-      data-testid={testId}
-    >
-      <p className="text-sm font-medium text-slate-700">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-slate-500">{hint}</p>
+    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex flex-col">
+        <span className="font-medium text-slate-900">{asset}</span>
+        {usdValue && (
+          <span className="text-xs text-emerald-600">≈ ${usdValue} USD</span>
+        )}
+      </div>
+      <span className="text-slate-600">{balance}</span>
     </div>
   );
-}
+});
 
 // ─── Wallet status panel ─────────────────────────────────────────────────────
 export function WalletStatusPanel() {
@@ -623,23 +628,14 @@ export function WalletStatusPanel() {
         <h3 className="font-medium text-slate-900">Balances</h3>
         {walletBalance ? (
           <div className="mt-3 grid gap-2">
-            {Object.entries(walletBalance.balances).map(([asset, balance]) => {
-              const usdValue = getUsdValue(asset, balance.balance);
-              return (
-                <div
-                  key={asset}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2"
-                >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="break-all font-medium text-slate-900">{asset}</span>
-                    {usdValue && (
-                      <span className="text-xs text-emerald-600">≈ ${usdValue} USD</span>
-                    )}
-                  </div>
-                  <span className="break-all text-right text-slate-600">{balance.balance}</span>
-                </div>
-              );
-            })}
+            {Object.entries(walletBalance.balances).map(([asset, balance]) => (
+              <BalanceRow
+                key={asset}
+                asset={asset}
+                balance={balance.balance}
+                usdValue={getUsdValue(asset, balance.balance)}
+              />
+            ))}
           </div>
         ) : loadingAction === "wallet-balance" || loadingAction === "wallet-details" ? (
           <div className="mt-3 grid gap-2" data-testid="wallet-balances-panel-skeleton">
