@@ -396,6 +396,26 @@ export function WalletBalancesCard() {
   );
 }
 
+function WalletEmptyState({
+  title,
+  hint,
+  testId,
+}: {
+  title: string;
+  hint: string;
+  testId: string;
+}) {
+  return (
+    <div
+      className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-6 text-center"
+      data-testid={testId}
+    >
+      <p className="text-sm font-medium text-slate-700">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
 // ─── Wallet status panel ─────────────────────────────────────────────────────
 export function WalletStatusPanel() {
   const { t } = useI18n();
@@ -553,7 +573,11 @@ export function WalletStatusPanel() {
               <Skeleton className="h-4 w-1/2" />
             </div>
           ) : (
-            <p className="mt-3 text-slate-500">No wallet loaded yet.</p>
+            <WalletEmptyState
+              testId="wallet-details-empty"
+              title="No wallet loaded yet."
+              hint={'Enter a user ID and choose "Load wallet details" to see the wallet address, funding status, and trustline here.'}
+            />
           )}
         </div>
 
@@ -586,7 +610,11 @@ export function WalletStatusPanel() {
               <Skeleton className="h-4 w-1/2" />
             </div>
           ) : (
-            <p className="mt-3 text-slate-500">Load wallet details to inspect readiness.</p>
+            <WalletEmptyState
+              testId="wallet-readiness-empty"
+              title="Load wallet details to inspect readiness."
+              hint="Readiness reports whether the wallet is active, funded, and trustline-ready before payments are attempted."
+            />
           )}
         </div>
       </div>
@@ -620,7 +648,11 @@ export function WalletStatusPanel() {
             <Skeleton className="h-10 w-full" />
           </div>
         ) : (
-          <p className="mt-3 text-slate-500">No balance data loaded yet.</p>
+          <WalletEmptyState
+            testId="wallet-balances-empty"
+            title="No balance data loaded yet."
+            hint={'Load or link a wallet, then choose "Load balance" to list its asset balances and USD values here.'}
+          />
         )}
       </div>
     </section>
