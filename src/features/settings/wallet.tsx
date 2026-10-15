@@ -628,15 +628,15 @@ export function WalletStatusPanel() {
               return (
                 <div
                   key={asset}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2"
                 >
-                  <div className="flex flex-col">
-                    <span className="font-medium text-slate-900">{asset}</span>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="break-all font-medium text-slate-900">{asset}</span>
                     {usdValue && (
                       <span className="text-xs text-emerald-600">≈ ${usdValue} USD</span>
                     )}
                   </div>
-                  <span className="text-slate-600">{balance.balance}</span>
+                  <span className="break-all text-right text-slate-600">{balance.balance}</span>
                 </div>
               );
             })}
