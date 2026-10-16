@@ -1,22 +1,27 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
-/** ApexChain Network Operations Intelligence Platform */
+
+import { memo } from "react";
 import dynamic from "next/dynamic";
 
-import { LandingView } from "@/components/landing/landing-view";
+import { LandingLoadingFallback } from "@/components/landing/landing-loading";
 
-const SLADashboardView = dynamic(
-  () => import("@/components/dashboard/sla-dashboard-view"),
-  {
-    loading: () => (
-      <div className="flex items-center justify-center p-12">
-        <div className="text-sm text-gray-500">Loading dashboard...</div>
-      </div>
-    ),
-    ssr: false,
-  }
-);
+// The chunk loader lives at module scope so it is created exactly once.
+const loadSLADashboardView = () =>
+  import("@/components/dashboard/sla-dashboard-view");
 
-export default function Dashboard() {
-  return <LandingView view={SLADashboardView} />;
-}
+const SLADashboardView = dynamic(loadSLADashboardView, {
+  loading: () => <LandingLoadingFallback />,
+  ssr: false,
+});
+
+/**
+ * Landing route (#782). `memo` keeps the route from re-rendering when its
+ * parent re-renders for an unrelated reason — the dashboard chunk owned by
+ * `next/dynamic` is left untouched.
+ */
+const Dashboard = memo(function Dashboard() {
+  return <SLADashboardView />;
+});
+
+export default Dashboard;
