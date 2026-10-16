@@ -10,8 +10,7 @@ import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Routes only visible to admin users
-const ADMIN_ROUTES = ["/webhooks", "/config"];
+import { NAV_LINKS, NavLinks } from "@/components/shell/nav-links";
 
 interface NavLink {
   href: string;
@@ -157,5 +156,8 @@ const Navigation = () => {
 // parent (e.g. a layout shell) re-renders for an unrelated reason.
 export default memo(Navigation);
 
-// Export admin route list so RouteGuard can use it
-export { ADMIN_ROUTES };
+// Export admin route list so RouteGuard can use it. Derived from the single
+// source of truth (NAV_LINKS) so it can never drift from what the bar renders.
+export const ADMIN_ROUTES = NAV_LINKS.filter((link) => link.adminOnly).map(
+  (link) => link.href,
+);
