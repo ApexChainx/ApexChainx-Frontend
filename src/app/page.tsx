@@ -3,23 +3,38 @@
 
 import { memo } from "react";
 import dynamic from "next/dynamic";
+import { memo } from "react";
 
-import { LandingLoadingFallback } from "@/components/landing/landing-loading";
-
-// The chunk loader lives at module scope so it is created exactly once.
-const loadSLADashboardView = () =>
-  import("@/components/dashboard/sla-dashboard-view");
-
-const SLADashboardView = dynamic(loadSLADashboardView, {
-  loading: () => <LandingLoadingFallback />,
-  ssr: false,
-});
+import { useI18n } from "@/i18n/i18n";
 
 /**
- * Landing route (#782). `memo` keeps the route from re-rendering when its
- * parent re-renders for an unrelated reason — the dashboard chunk owned by
- * `next/dynamic` is left untouched.
+ * Memoized, translated loading fallback (#789, #791). Defined once at module
+ * scope so `next/dynamic` keeps a stable element type while the chunk loads,
+ * and so the translated subtree is not re-created on every parent render.
  */
+const LandingLoading = memo(function LandingLoading() {
+  const { t } = useI18n();
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center justify-center p-12"
+    >
+      <div className="text-sm text-gray-500">{t("dashboard.loading")}</div>
+    </div>
+  );
+});
+
+const SLADashboardView = dynamic(
+  () => import("@/components/dashboard/sla-dashboard-view"),
+  {
+    loading: () => <LandingLoading />,
+    ssr: false,
+  }
+);
+
+/** Memoized landing route (#791). */
 const Dashboard = memo(function Dashboard() {
   return <SLADashboardView />;
 });
