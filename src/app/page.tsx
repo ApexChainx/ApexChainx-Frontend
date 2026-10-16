@@ -3,6 +3,8 @@
 /** ApexChain Network Operations Intelligence Platform */
 import dynamic from "next/dynamic";
 
+import { LandingView } from "@/components/landing/landing-view";
+
 const SLADashboardView = dynamic(
   () => import("@/components/dashboard/sla-dashboard-view"),
   {
@@ -16,5 +18,5 @@ const SLADashboardView = dynamic(
 );
 
 export default function Dashboard() {
-  return <SLADashboardView />;
+  return <LandingView view={SLADashboardView} />;
 }
