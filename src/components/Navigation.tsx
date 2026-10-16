@@ -1,6 +1,8 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 
+import { Fragment, memo, useCallback, useMemo } from "react";
+
 import { useHealth } from "@/hooks/useHealth";
 import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
@@ -11,10 +13,15 @@ import { usePathname } from "next/navigation";
 // Routes only visible to admin users
 const ADMIN_ROUTES = ["/webhooks", "/config"];
 
+interface NavLink {
+  href: string;
+  label: string;
+  tour?: string;
+}
+
 const Navigation = () => {
   const { state, user, logout } = useSession();
   const { t } = useI18n();
-  const isAdmin = user?.role === "admin";
   const { status, isOffline } = useHealth();
   const pathname = usePathname();
 
@@ -25,6 +32,35 @@ const Navigation = () => {
 
   const currentPageAttrs = (href: string) =>
     isActive(href) ? ({ "aria-current": "page" } as const) : {};
+
+  // Derived once per identity change instead of on every render.
+  const isAdmin = useMemo(() => user?.role === "admin", [user?.role]);
+
+  const handleLogout = useCallback(() => {
+    void logout();
+  }, [logout]);
+
+  // The public link list is rebuilt only when the translator changes, so the
+  // rendered anchor elements keep stable descriptions across re-renders.
+  const publicLinks = useMemo<NavLink[]>(
+    () => [
+      { href: "/", label: t('common.dashboard'), tour: "nav-dashboard" },
+      { href: "/outages", label: t('common.outages'), tour: "nav-outages" },
+      { href: "/bulk-import", label: t('common.bulkImport') },
+      { href: "/payments", label: t('common.payments'), tour: "nav-payments" },
+      { href: "/setting", label: t('common.settings') },
+      { href: "/payments/retry-queue", label: t('common.retryQueue') },
+    ],
+    [t],
+  );
+
+  const adminLinks = useMemo<NavLink[]>(
+    () => [
+      { href: "/config", label: t('common.config') },
+      { href: "/webhooks", label: t('common.webhooks') },
+    ],
+    [t],
+  );
 
   return (
     <>
@@ -59,7 +95,7 @@ const Navigation = () => {
           />
           {STELLAR_NETWORK === "mainnet" && (
             <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-white animate-pulse">
-              MAINNET
+              {t('common.mainnet')}
             </span>
           )}
           <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
@@ -92,7 +128,7 @@ const Navigation = () => {
               <span className="max-w-[12rem] truncate" title={user.email}>{user.email}</span>
               {isAdmin && (
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
-                  admin
+                  {t('common.admin')}
                 </span>
               )}
               <button
@@ -117,7 +153,9 @@ const Navigation = () => {
   );
 };
 
-export default Navigation;
+// Navigation takes no props, but memoizing still lets React skip it when a
+// parent (e.g. a layout shell) re-renders for an unrelated reason.
+export default memo(Navigation);
 
 // Export admin route list so RouteGuard can use it
 export { ADMIN_ROUTES };
