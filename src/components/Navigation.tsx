@@ -8,6 +8,7 @@ import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
 import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 // Routes only visible to admin users
 const ADMIN_ROUTES = ["/webhooks", "/config"];
@@ -22,6 +23,15 @@ const Navigation = () => {
   const { state, user, logout } = useSession();
   const { t } = useI18n();
   const { status, isOffline } = useHealth();
+  const pathname = usePathname();
+
+  // The dashboard ("/") is only current on an exact match; every other route
+  // is "current" for itself and any nested path beneath it.
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname?.startsWith(href) === true;
+
+  const currentPageAttrs = (href: string) =>
+    isActive(href) ? ({ "aria-current": "page" } as const) : {};
 
   // Derived once per identity change instead of on every render.
   const isAdmin = useMemo(() => user?.role === "admin", [user?.role]);
@@ -54,64 +64,76 @@ const Navigation = () => {
 
   return (
     <>
+      {/* First focusable element in the app: lets keyboard users jump past
+          the navigation straight to the page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-blue-700 focus:shadow"
+      >
+        {t('common.skipToContent')}
+      </a>
       {isOffline && (
-        <div className="bg-red-500 text-white text-center py-2 text-sm font-semibold sticky top-0 z-50">
+        <div
+          role="status"
+          aria-live="polite"
+          className="sticky top-0 z-50 bg-red-500 py-2 text-center text-sm font-semibold text-white"
+        >
           {t('errors.offline')}
         </div>
       )}
-      <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }} className="flex items-center justify-between">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <div
-            className={`w-3 h-3 rounded-full mr-2 ${
-              status === "green"
-                ? "bg-green-500"
-                : "bg-red-500"
+      <nav
+        aria-label={t('navigation.primary')}
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-gray-300 px-4 py-3 text-sm sm:px-6 sm:py-4"
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-sm [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-blue-600">
+          <span
+            role="img"
+            aria-label={`${t('navigation.systemHealth')}: ${status}`}
+            className={`mr-2 inline-block h-3 w-3 shrink-0 rounded-full ${
+              status === "green" ? "bg-green-500" : "bg-red-500"
             }`}
-            title={`${t('navigation.systemHealth')}: ${status}`}
           />
           {STELLAR_NETWORK === "mainnet" && (
             <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-white animate-pulse">
               {t('common.mainnet')}
             </span>
           )}
-          {publicLinks.map((link, index) => (
-            <Fragment key={link.href}>
-              {index > 0 && <span>|</span>}
-              <Link
-                href={link.href}
-                {...(link.tour ? { "data-tour": link.tour } : {})}
-              >
-                {link.label}
-              </Link>
-            </Fragment>
-          ))}
+          <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
+          <span aria-hidden="true" className="hidden sm:inline">|</span>
+          <Link href="/outages" data-tour="nav-outages">{t('common.outages')}</Link>
+          <span aria-hidden="true" className="hidden sm:inline">|</span>
+          <Link href="/bulk-import">{t('common.bulkImport')}</Link>
+          <span aria-hidden="true" className="hidden sm:inline">|</span>
+          <Link href="/payments" data-tour="nav-payments">{t('common.payments')}</Link>
+          <span aria-hidden="true" className="hidden sm:inline">|</span>
+          <Link href="/setting">{t('common.settings')}</Link>
+          <span aria-hidden="true" className="hidden sm:inline">|</span>
+          <Link href="/payments/retry-queue">Retry Queue</Link>
           {isAdmin && (
             <>
-              {adminLinks.map((link) => (
-                <Fragment key={link.href}>
-                  <span>|</span>
-                  <Link href={link.href}>{link.label}</Link>
-                </Fragment>
-              ))}
+              <span aria-hidden="true" className="hidden sm:inline">|</span>
+              <Link href="/config">{t('common.config')}</Link>
+              <span aria-hidden="true" className="hidden sm:inline">|</span>
+              <Link href="/webhooks">{t('common.webhooks')}</Link>
             </>
           )}
         </div>
 
-        <div className="text-sm text-slate-600">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-sm text-slate-600">
           {state === "loading" && (
             <span className="text-slate-600">{t('settings.loadingSession')}</span>
           )}
           {state === "authenticated" && user && (
-            <span className="flex items-center gap-3">
-              <span>{user.email}</span>
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="max-w-[12rem] truncate" title={user.email}>{user.email}</span>
               {isAdmin && (
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
                   {t('common.admin')}
                 </span>
               )}
               <button
-                onClick={handleLogout}
-                className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
+                onClick={() => void logout()}
+                className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
                 {t('common.signOut')}
               </button>
@@ -120,7 +142,7 @@ const Navigation = () => {
           {state === "unauthenticated" && (
             <Link
               href="/login"
-              className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
+              className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
               {t('auth.signIn')}
             </Link>
