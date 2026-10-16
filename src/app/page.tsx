@@ -1,6 +1,7 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
-/** ApexChain Network Operations Intelligence Platform */
+
+import { memo } from "react";
 import dynamic from "next/dynamic";
 import { memo } from "react";
 
