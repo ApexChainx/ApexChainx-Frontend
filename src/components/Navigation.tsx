@@ -6,6 +6,7 @@ import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
 import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 // Routes only visible to admin users
 const ADMIN_ROUTES = ["/webhooks", "/config"];
@@ -15,9 +16,26 @@ const Navigation = () => {
   const { t } = useI18n();
   const isAdmin = user?.role === "admin";
   const { status, isOffline } = useHealth();
+  const pathname = usePathname();
+
+  // The dashboard ("/") is only current on an exact match; every other route
+  // is "current" for itself and any nested path beneath it.
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname?.startsWith(href) === true;
+
+  const currentPageAttrs = (href: string) =>
+    isActive(href) ? ({ "aria-current": "page" } as const) : {};
 
   return (
     <>
+      {/* First focusable element in the app: lets keyboard users jump past
+          the navigation straight to the page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-blue-700 focus:shadow"
+      >
+        {t('common.skipToContent')}
+      </a>
       {isOffline && (
         <div
           role="status"
