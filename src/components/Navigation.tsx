@@ -6,6 +6,7 @@ import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
 import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 // Routes only visible to admin users
 const ADMIN_ROUTES = ["/webhooks", "/config"];
@@ -15,16 +16,37 @@ const Navigation = () => {
   const { t } = useI18n();
   const isAdmin = user?.role === "admin";
   const { status, isOffline } = useHealth();
+  const pathname = usePathname();
+
+  // The dashboard ("/") is only current on an exact match; every other route
+  // is "current" for itself and any nested path beneath it.
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname?.startsWith(href) === true;
+
+  const currentPageAttrs = (href: string) =>
+    isActive(href) ? ({ "aria-current": "page" } as const) : {};
 
   return (
     <>
+      {/* First focusable element in the app: lets keyboard users jump past
+          the navigation straight to the page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-blue-700 focus:shadow"
+      >
+        {t('common.skipToContent')}
+      </a>
       {isOffline && (
         <div className="bg-red-500 text-white text-center py-2 text-sm font-semibold sticky top-0 z-50">
           {t('errors.offline')}
         </div>
       )}
-      <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }} className="flex items-center justify-between">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+      <nav
+        aria-label={t('navigation.primary')}
+        style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}
+        className="flex items-center justify-between"
+      >
+        <div className="flex flex-wrap items-center gap-3 text-sm [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-blue-600 [&_a]:focus-visible:rounded">
           <div
             className={`w-3 h-3 rounded-full mr-2 ${
               status === "green"
@@ -38,23 +60,23 @@ const Navigation = () => {
               MAINNET
             </span>
           )}
-          <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
+          <Link href="/" data-tour="nav-dashboard" {...currentPageAttrs("/")}>{t('common.dashboard')}</Link>
           <span>|</span>
-          <Link href="/outages" data-tour="nav-outages">{t('common.outages')}</Link>
+          <Link href="/outages" data-tour="nav-outages" {...currentPageAttrs("/outages")}>{t('common.outages')}</Link>
           <span>|</span>
-          <Link href="/bulk-import">{t('common.bulkImport')}</Link>
+          <Link href="/bulk-import" {...currentPageAttrs("/bulk-import")}>{t('common.bulkImport')}</Link>
           <span>|</span>
-          <Link href="/payments" data-tour="nav-payments">{t('common.payments')}</Link>
+          <Link href="/payments" data-tour="nav-payments" {...currentPageAttrs("/payments")}>{t('common.payments')}</Link>
           <span>|</span>
-          <Link href="/setting">{t('common.settings')}</Link>
+          <Link href="/setting" {...currentPageAttrs("/setting")}>{t('common.settings')}</Link>
           <span>|</span>
-          <Link href="/payments/retry-queue">Retry Queue</Link>
+          <Link href="/payments/retry-queue" {...currentPageAttrs("/payments/retry-queue")}>Retry Queue</Link>
           {isAdmin && (
             <>
               <span>|</span>
-              <Link href="/config">{t('common.config')}</Link>
+              <Link href="/config" {...currentPageAttrs("/config")}>{t('common.config')}</Link>
               <span>|</span>
-              <Link href="/webhooks">{t('common.webhooks')}</Link>
+              <Link href="/webhooks" {...currentPageAttrs("/webhooks")}>{t('common.webhooks')}</Link>
             </>
           )}
         </div>
@@ -73,7 +95,7 @@ const Navigation = () => {
               )}
               <button
                 onClick={() => void logout()}
-                className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
+                className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
                 {t('common.signOut')}
               </button>
@@ -82,7 +104,7 @@ const Navigation = () => {
           {state === "unauthenticated" && (
             <Link
               href="/login"
-              className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100"
+              className="rounded border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
               {t('auth.signIn')}
             </Link>
