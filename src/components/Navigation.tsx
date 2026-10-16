@@ -7,8 +7,7 @@ import { STELLAR_NETWORK } from "@/lib/explorer";
 import { useI18n } from "@/i18n/i18n";
 import Link from "next/link";
 
-// Routes only visible to admin users
-const ADMIN_ROUTES = ["/webhooks", "/config"];
+import { NAV_LINKS, NavLinks } from "@/components/shell/nav-links";
 
 const Navigation = () => {
   const { state, user, logout } = useSession();
@@ -38,25 +37,7 @@ const Navigation = () => {
               MAINNET
             </span>
           )}
-          <Link href="/" data-tour="nav-dashboard">{t('common.dashboard')}</Link>
-          <span>|</span>
-          <Link href="/outages" data-tour="nav-outages">{t('common.outages')}</Link>
-          <span>|</span>
-          <Link href="/bulk-import">{t('common.bulkImport')}</Link>
-          <span>|</span>
-          <Link href="/payments" data-tour="nav-payments">{t('common.payments')}</Link>
-          <span>|</span>
-          <Link href="/setting">{t('common.settings')}</Link>
-          <span>|</span>
-          <Link href="/payments/retry-queue">Retry Queue</Link>
-          {isAdmin && (
-            <>
-              <span>|</span>
-              <Link href="/config">{t('common.config')}</Link>
-              <span>|</span>
-              <Link href="/webhooks">{t('common.webhooks')}</Link>
-            </>
-          )}
+          <NavLinks isAdmin={isAdmin} />
         </div>
 
         <div className="text-sm text-slate-600">
@@ -95,5 +76,8 @@ const Navigation = () => {
 
 export default Navigation;
 
-// Export admin route list so RouteGuard can use it
-export { ADMIN_ROUTES };
+// Export admin route list so RouteGuard can use it. Derived from the single
+// source of truth (NAV_LINKS) so it can never drift from what the bar renders.
+export const ADMIN_ROUTES = NAV_LINKS.filter((link) => link.adminOnly).map(
+  (link) => link.href,
+);
