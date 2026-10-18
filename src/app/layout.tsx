@@ -2,6 +2,9 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+// Issue #830 — memoized, so session heartbeats and query invalidations no
+// longer re-render the sidebar's link tree.
+import Sidebar from "@/components/layout/Sidebar";
 // Issue #633 — the command palette and onboarding tour are deferred into their
 // own chunks so every route stops shipping them before first paint.
 import {
@@ -160,7 +163,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
           }}
         />
       </head>
-      <body>
+      {/* Column flex so the shell fills the viewport. */}
+      <body className="flex min-h-screen flex-col">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-blue-600"
@@ -173,9 +177,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <I18nProvider>
                 <RouteGuard>
                   <Navigation />
-                  <main id="main-content" role="main">
-                    {children}
-                  </main>
+                  <div className="flex min-h-0 flex-1">
+                    <Sidebar />
+                    <main id="main-content" role="main" className="min-w-0 flex-1">
+                      {children}
+                    </main>
+                  </div>
                   <DeferredCommandPalette />
                   <DeferredOnboardingTour />
                   <OfflineBanner />
