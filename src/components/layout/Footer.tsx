@@ -3,32 +3,12 @@
 /**
  * Site-wide footer.
  *
- * Issues #812 (unit tests), #813 (integration tests), #814 (optimize
- * re-renders) and #815 (keyboard navigation).
- *
- * #814 — the footer sits outside `<main>` but inside the session and i18n
- * providers, so it re-rendered on every session heartbeat, every React Query
- * invalidation and every toast in the app: ~40 elements re-diffed several times
- * a minute for output that almost never changes. Three things fix it:
- *
- *   1. `memo` on the three presentational pieces, so a prop-identical render
- *      is skipped outright rather than re-diffed.
- *   2. The link catalogue is module-level data and the admin-filtered view of
- *      it is `useMemo`'d on `[isAdmin]` alone — not on the whole session
- *      object, which is a fresh reference on every heartbeat.
- *   3. `React.memo` on the exported default, so a parent re-render that does
- *      not change `year` does not cascade into the subtree at all.
- *
- * #815 — the footer is a long run of links (12+ on a desktop layout). A keyboard
- * user had to press Tab for every one of them to reach the next section. The
- * link region now implements the WAI-ARIA roving-tabindex pattern: the whole
- * group is a single tab stop, and the arrow keys move between links, `Home`/`End`
- * jump to the ends, and both axes wrap. Plain Tab still leaves the footer
- * normally, so it never traps focus.
+ * Issues #820 (TypeScript strict typing), #821 (i18n translations), #822 (form
+ * validation) and #823 (memoize expensive computations).
  */
 
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import { memo, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 
 import Link from "next/link";
 
@@ -36,50 +16,81 @@ import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
 import {
-  FOOTER_LINK_ATTRIBUTE,
-  flattenFooterLinks,
-  nextFooterLinkIndex,
-  visibleFooterGroups,
-  type FooterLink,
-  type FooterLinkGroup,
-} from "@/components/layout/footer-links";
+  buildFooterSummary,
+} from "@/components/layout/footer-derive";
+import FooterSubscribeForm from "@/components/layout/FooterSubscribeForm";
+import type {
+  FooterDestination,
+  FooterSection,
+  StellarNetworkName,
+  ValidatedEmail,
+} from "@/components/layout/footer-types";
 
-interface FooterLinkItemProps {
-  link: FooterLink;
-  /**
-   * Position in the flattened, DOM-order link list. Only one link is in the tab
-   * order at a time (roving tabindex); the arrow keys move between them.
-   */
-  index: number;
-  /** Index of the single link that is currently tabbable. */
-  activeIndex: number;
+/** The default site-wide catalogue. */
+export const FOOTER_SECTIONS: readonly FooterSection[] = [
+  {
+    id: "platform",
+    titleKey: "footer.groups.platform",
+    links: [
+      { kind: "internal", href: "/", labelKey: "common.dashboard" },
+      { kind: "internal", href: "/outages", labelKey: "common.outages" },
+      { kind: "internal", href: "/payments", labelKey: "common.payments" },
+      {
+        kind: "internal",
+        href: "/payments/retry-queue",
+        labelKey: "common.retryQueue",
+      },
+    ],
+  },
+  {
+    id: "operations",
+    titleKey: "footer.groups.operations",
+    links: [
+      { kind: "internal", href: "/bulk-import", labelKey: "common.bulkImport" },
+      { kind: "internal", href: "/setting", labelKey: "common.settings" },
+      { kind: "internal", href: "/config", labelKey: "common.config", adminOnly: true },
+      { kind: "internal", href: "/webhooks", labelKey: "common.webhooks", adminOnly: true },
+    ],
+  },
+  {
+    id: "resources",
+    titleKey: "footer.groups.resources",
+    links: [
+      {
+        kind: "external",
+        href: "https://github.com/ApexChainx/ApexChainx-Frontend",
+        labelKey: "footer.links.sourceCode",
+        external: true,
+      },
+      {
+        kind: "external",
+        href: "https://stellar.expert",
+        labelKey: "footer.links.stellarExplorer",
+        external: true,
+      },
+    ],
+  },
+];
+
+interface FooterLinkProps {
+  link: FooterDestination;
 }
 
-/**
- * Memoized so moving the roving-tabindex focus from one link to the next
- * re-renders exactly the two links involved (#814) instead of every link in
- * every column.
- */
-const FooterLinkItem = memo(function FooterLinkItem({
-  link,
-  index,
-  activeIndex,
-}: FooterLinkItemProps) {
+function FooterLinkItem({ link }: FooterLinkProps) {
   const { t } = useI18n();
   const label = t(link.labelKey);
-  const tabIndex = index === activeIndex ? 0 : -1;
 
   const className =
-    "rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:focus-visible:outline-blue-400";
+    "rounded text-slate-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-slate-300 dark:focus-visible:outline-blue-400";
 
-  if (link.external) {
+  // The discriminated union makes this branch total: an internal destination is
+  // a route, an external one is an absolute URL that must carry `noopener`.
+  if (link.kind === "external") {
     return (
       <a
         href={link.href}
         target="_blank"
         rel="noopener noreferrer"
-        data-footer-link=""
-        tabIndex={tabIndex}
         className={className}
       >
         {label}
@@ -90,142 +101,76 @@ const FooterLinkItem = memo(function FooterLinkItem({
   }
 
   return (
-    <Link href={link.href} data-footer-link="" tabIndex={tabIndex} className={className}>
+    <Link href={link.href} className={className}>
       {label}
     </Link>
   );
-});
-
-interface FooterLinkColumnProps {
-  group: FooterLinkGroup;
-  activeIndex: number;
-  /** Global offset of this column's first link in the flattened list. */
-  offset: number;
 }
 
-const FooterLinkColumn = memo(function FooterLinkColumn({
-  group,
-  activeIndex,
-  offset,
-}: FooterLinkColumnProps) {
+interface FooterSectionColumnProps {
+  section: FooterSection;
+}
+
+function FooterSectionColumn({ section }: FooterSectionColumnProps) {
   const { t } = useI18n();
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div
+      data-testid={`footer-section-${section.id}`}
+      className="flex min-w-0 flex-col gap-2"
+    >
       <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
-        {t(group.titleKey)}
+        {t(section.titleKey)}
       </h2>
       <ul className="flex min-w-0 flex-col gap-1">
-        {group.links.map((link, linkIndex) => (
+        {section.links.map((link) => (
           <li key={link.href} className="min-w-0 break-words">
-            <FooterLinkItem
-              link={link}
-              index={offset + linkIndex}
-              activeIndex={activeIndex}
-            />
+            <FooterLinkItem link={link} />
           </li>
         ))}
       </ul>
     </div>
   );
-});
-
-interface FooterBrandProps {
-  networkLabel: string;
 }
-
-const FooterBrand = memo(function FooterBrand({ networkLabel }: FooterBrandProps) {
-  const { t } = useI18n();
-
-  return (
-    <div className="flex min-w-0 flex-col gap-2 md:max-w-xs md:shrink">
-      <p className="text-base font-semibold text-slate-900 dark:text-slate-50">
-        {t("footer.brand")}
-      </p>
-      <p className="min-w-0 break-words text-xs text-slate-600 dark:text-slate-400">
-        {t("footer.tagline")}
-      </p>
-      <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-        <span
-          // The dot is decorative; the accessible name carries the network so
-          // the state is announced instead of skipped as a bare glyph.
-          role="img"
-          aria-label={t("footer.network", { network: networkLabel })}
-          className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
-            networkLabel === "mainnet" ? "bg-amber-500" : "bg-emerald-500"
-          }`}
-        />
-        {t("footer.networkLabel")}
-      </p>
-    </div>
-  );
-});
 
 export interface FooterProps {
   /** Overrides the current year so the copyright line is deterministic in tests. */
   year?: number;
+  /** Catalogue to render. Defaults to the site-wide sections. */
+  sections?: readonly FooterSection[];
+  /** Hides the status-updates form (#822). */
+  hideSubscribe?: boolean;
+  /** Persists a status-updates subscription (#822). */
+  onSubscribe?: (email: ValidatedEmail) => Promise<void>;
+  /** Replaces the form entirely, e.g. with an opt-out notice. */
+  subscribeSlot?: ReactNode;
 }
 
-function Footer({ year = new Date().getFullYear() }: FooterProps = {}) {
+function Footer({
+  year = new Date().getFullYear(),
+  sections = FOOTER_SECTIONS,
+  hideSubscribe = false,
+  onSubscribe,
+  subscribeSlot,
+}: FooterProps = {}) {
   const { t } = useI18n();
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
 
-  // Roving tabindex: the index of the single link in the tab order. Arrow keys
-  // move it; it resets to the first link when the visible link set changes.
-  const [activeIndex, setActiveIndex] = useState(0);
-  const linkRegionRef = useRef<HTMLElement | null>(null);
-
-  // #814 — keyed on `isAdmin`, not on the session object. `useSession` returns
-  // a fresh object on every heartbeat, so depending on it would recompute the
-  // catalogue several times a minute for an identical result.
-  const groups = useMemo(() => visibleFooterGroups(isAdmin), [isAdmin]);
-  const flatLinks = useMemo(() => flattenFooterLinks(groups), [groups]);
-
-  // The active index can outlive the link set (e.g. the operator loses admin
-  // and the last column disappears); clamp it back into range.
-  const currentIndex = activeIndex < flatLinks.length ? activeIndex : 0;
-
-  // #815 — roving tabindex. One keydown handler for the whole link region
-  // instead of one per link, so the listener count does not grow with the
-  // catalogue.
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLElement>) => {
-      const region = linkRegionRef.current;
-      if (!region) return;
-
-      const links = Array.from(
-        region.querySelectorAll<HTMLAnchorElement>(`[${FOOTER_LINK_ATTRIBUTE}]`),
-      );
-      if (links.length === 0) return;
-
-      const focusedIndex = links.indexOf(document.activeElement as HTMLAnchorElement);
-      // Only hijack the arrow keys when focus is actually inside the region;
-      // otherwise let the browser handle them normally.
-      if (focusedIndex === -1) return;
-
-      const target = nextFooterLinkIndex(focusedIndex, event.key, links.length);
-      if (target === null) return;
-
-      event.preventDefault();
-      setActiveIndex(target);
-      links[target]?.focus();
-    },
-    [],
+  // #823 — one memoized pass produces the filtered catalogue, the counts and
+  // each column's offset. Keyed on `isAdmin` and `sections` alone: `useSession`
+  // returns a fresh object on every heartbeat, so depending on it would redo all
+  // of this for an identical result.
+  const summary = useMemo(
+    () => buildFooterSummary(sections, isAdmin),
+    [isAdmin, sections],
   );
 
-  // Offsets let each column render its links without re-flattening the list.
-  const columnOffsets = useMemo(() => {
-    const offsets: number[] = [];
-    let running = 0;
-    for (const group of groups) {
-      offsets.push(running);
-      running += group.links.length;
-    }
-    return offsets;
-  }, [groups]);
+  const network: StellarNetworkName = STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
-  const networkLabel = STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
+  // Placeholder sink: the endpoint is wired up in a follow-up. Kept stable so
+  // the form's submit handler does not change identity every render.
+  const handleSubscribe = useCallback(async (_email: ValidatedEmail) => {}, []);
 
   return (
     <footer
@@ -235,25 +180,49 @@ function Footer({ year = new Date().getFullYear() }: FooterProps = {}) {
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
-          <FooterBrand networkLabel={networkLabel} />
+          <div
+            data-testid="footer-brand"
+            className="flex min-w-0 flex-col gap-2 md:max-w-xs md:shrink"
+          >
+            <p className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              {t("footer.brand")}
+            </p>
+            <p className="min-w-0 break-words text-xs text-slate-600 dark:text-slate-400">
+              {t("footer.tagline")}
+            </p>
+            <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span
+                role="img"
+                aria-label={t("footer.network", { network })}
+                className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                  network === "mainnet"
+                    ? "bg-amber-500 dark:bg-amber-400"
+                    : "bg-emerald-600 dark:bg-emerald-400"
+                }`}
+              />
+              {t("footer.networkLabel")}
+            </p>
+          </div>
 
           <nav
-            ref={linkRegionRef}
             aria-label={t("footer.groups.platform")}
             data-testid="footer-links"
-            onKeyDown={handleKeyDown}
+            data-link-count={summary.totalLinks}
             className="grid min-w-0 flex-1 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
           >
-            {groups.map((group, columnIndex) => (
-              <FooterLinkColumn
-                key={group.id}
-                group={group}
-                activeIndex={currentIndex}
-                offset={columnOffsets[columnIndex] ?? 0}
-              />
+            {summary.sections.map((section) => (
+              <FooterSectionColumn key={section.id} section={section} />
             ))}
           </nav>
         </div>
+
+        {!hideSubscribe && (
+          <div className="mt-8 border-t border-slate-200 pt-4 dark:border-slate-700">
+            {subscribeSlot ?? (
+              <FooterSubscribeForm onSubscribe={onSubscribe ?? handleSubscribe} />
+            )}
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700">
           <p className="min-w-0 text-xs text-slate-500 dark:text-slate-400">
@@ -268,8 +237,7 @@ function Footer({ year = new Date().getFullYear() }: FooterProps = {}) {
   );
 }
 
-// #814 — memoized so an unrelated parent re-render (session heartbeat, query
-// invalidation, toast) does not cascade into the footer subtree.
 export default memo(Footer);
 
 export { Footer };
+export type { FooterSection, FooterDestination, ValidatedEmail };
