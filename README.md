@@ -94,9 +94,10 @@ Active App Router routes live under `src/app`:
 The shared shell and providers live in:
 
 - `src/app/layout.tsx` — Root layout with providers
-- `src/components/Navigation.tsx` — Main navigation shell
-- `src/providers/react-query.tsx` — TanStack Query provider
-- `src/providers/session.tsx` — Authentication and session management
+ - `src/components/Navigation.tsx` — Main navigation shell
+ - `src/components/layout/Sidebar.tsx` — Responsive app sidebar
+ - `src/providers/react-query.tsx` — TanStack Query provider
+ - `src/providers/session.tsx` — Authentication and session management
 
 Feature modules are organized under `src/features/` for domain-specific UI and hooks.
 
@@ -105,6 +106,13 @@ The app is offline-first for outage reads: an IndexedDB layer
 (`public/sw.js`) each cache a slice of the data with different lifetimes. See
 [docs/offline-cache.md](./docs/offline-cache.md) for what's cached where, TTLs,
 hydration rules, and the current purge/eviction gaps.
+
+The shell sidebar lives in `src/components/layout/`. It is a static column from
+`lg` up and an off-canvas drawer below that, marks the current route with
+`aria-current` rather than colour alone, reserves its box while the session
+resolves, and is wrapped in its own error boundary so a navigation failure can
+never take the page down with it. See
+[docs/app-shell-sidebar.md](./docs/app-shell-sidebar.md) for the full contract.
 
 ---
 

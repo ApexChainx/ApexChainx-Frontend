@@ -2,6 +2,10 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+// Issue #827 — navigation is the least valuable thing on the page, so it is
+// wrapped in its own boundary and must never be able to take the page down.
+import Sidebar from "@/components/layout/Sidebar";
+import { SidebarErrorBoundary } from "@/components/layout/SidebarErrorBoundary";
 // Issue #633 — the command palette and onboarding tour are deferred into their
 // own chunks so every route stops shipping them before first paint.
 import {
@@ -160,7 +164,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
           }}
         />
       </head>
-      <body>
+      {/* Column flex so the shell fills the viewport and the sidebar can scroll
+          independently of the page (#824). */}
+      <body className="flex min-h-screen flex-col">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-blue-600"
@@ -173,9 +179,15 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <I18nProvider>
                 <RouteGuard>
                   <Navigation />
-                  <main id="main-content" role="main">
-                    {children}
-                  </main>
+                  {/* #827 — navigation failure must not take the page with it. */}
+                  <div className="flex min-h-0 flex-1">
+                    <SidebarErrorBoundary>
+                      <Sidebar />
+                    </SidebarErrorBoundary>
+                    <main id="main-content" role="main" className="min-w-0 flex-1">
+                      {children}
+                    </main>
+                  </div>
                   <DeferredCommandPalette />
                   <DeferredOnboardingTour />
                   <OfflineBanner />
