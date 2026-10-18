@@ -2,6 +2,13 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+// Issue #830 — memoized, so session heartbeats and query invalidations no
+// longer re-render the sidebar's link tree.
+// Issue #827 — navigation is the least valuable thing on the page, so it is
+// wrapped in its own boundary and must never be able to take the page down.
+import Sidebar from "@/components/layout/Sidebar";
+import { SidebarErrorBoundary } from "@/components/layout/SidebarErrorBoundary";
+// Issue #812 — the footer is translated, typed and memoized.
 import Footer from "@/components/layout/Footer";
 // Issue #633 — the command palette and onboarding tour are deferred into their
 // own chunks so every route stops shipping them before first paint.
@@ -161,7 +168,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
           }}
         />
       </head>
-      {/* Column flex so the footer is pushed to the bottom of short pages. */}
+      {/* Column flex so the shell fills the viewport, the sidebar can scroll
+          independently of the page (#824), and the footer is pushed to the
+          bottom of short pages. */}
       <body className="flex min-h-screen flex-col">
         <a
           href="#main-content"
@@ -175,9 +184,15 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <I18nProvider>
                 <RouteGuard>
                   <Navigation />
-                  <main id="main-content" role="main" className="flex-1">
-                    {children}
-                  </main>
+                  {/* #827 — navigation failure must not take the page with it. */}
+                  <div className="flex min-h-0 flex-1">
+                    <SidebarErrorBoundary>
+                      <Sidebar />
+                    </SidebarErrorBoundary>
+                    <main id="main-content" role="main" className="min-w-0 flex-1">
+                      {children}
+                    </main>
+                  </div>
                   <Footer />
                   <DeferredCommandPalette />
                   <DeferredOnboardingTour />
