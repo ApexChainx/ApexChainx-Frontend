@@ -3,10 +3,10 @@
  * Single source of truth for the site-wide footer link catalogue.
  *
  * The footer is rendered on every route, so its link list is declared once as
- * plain data (route + i18n key) instead of being inlined into the component.
- * That keeps the presentational component free of copy decisions and lets any
- * other surface (an about page, a command palette, the docs) reuse the exact
- * same destinations without drifting.
+ * plain data (route + i18n key) rather than being inlined into the component.
+ * Keeping it as data (rather than JSX) is what lets the footer memoize the
+ * rendered link list — the elements can be compared by reference and skipped
+ * when nothing that feeds them actually changed.
  *
  * `labelKey` is resolved at render time through `useI18n().t`, so the footer
  * inherits every locale the app ships without a second lookup table here.
@@ -24,14 +24,17 @@ export interface FooterLink {
   adminOnly?: boolean;
 }
 
-/** A titled column of footer links, rendered as its own labelled `<nav>`. */
+/** A titled column of footer links, rendered under its own heading. */
 export interface FooterLinkGroup {
-  /** Stable id used for the column's heading anchor. */
+  /** Stable id, also used to key the memoized column. */
   id: string;
   /** i18n key for the column heading. */
   titleKey: string;
   links: FooterLink[];
 }
+
+/** Marks the elements the footer's roving-tabindex keyboard handler manages. */
+export const FOOTER_LINK_ATTRIBUTE = "data-footer-link";
 
 export const FOOTER_LINK_GROUPS: readonly FooterLinkGroup[] = [
   {
@@ -90,9 +93,47 @@ export function visibleFooterGroups(
   groups: readonly FooterLinkGroup[] = FOOTER_LINK_GROUPS,
 ): FooterLinkGroup[] {
   return groups
-    .map((group) => ({
-      ...group,
-      links: visibleFooterLinks(group.links, isAdmin),
-    }))
+    .map((group) => ({ ...group, links: visibleFooterLinks(group.links, isAdmin) }))
     .filter((group) => group.links.length > 0);
+}
+
+/**
+ * Flatten the visible groups into the flat, DOM-order list the roving-tabindex
+ * handler walks. Exported so the keyboard logic can be reasoned about (and
+ * tested) without rendering anything.
+ */
+export function flattenFooterLinks(groups: readonly FooterLinkGroup[]): FooterLink[] {
+  return groups.flatMap((group) => [...group.links]);
+}
+
+/**
+ * Resolve the next focused index for a keyboard interaction.
+ *
+ * Implements the WAI-ARIA roving-tabindex pattern: the arrow keys move between
+ * links, `Home`/`End` jump to the ends, and both axes wrap around so a keyboard
+ * user never dead-ends at the boundary. `null` means "not handled" — the
+ * caller should leave the event alone so native behaviour (Tab, typing in a
+ * field) still works.
+ */
+export function nextFooterLinkIndex(
+  currentIndex: number,
+  key: string,
+  total: number,
+): number | null {
+  if (total === 0) return null;
+
+  switch (key) {
+    case "ArrowRight":
+    case "ArrowDown":
+      return (currentIndex + 1) % total;
+    case "ArrowLeft":
+    case "ArrowUp":
+      return (currentIndex - 1 + total) % total;
+    case "Home":
+      return 0;
+    case "End":
+      return total - 1;
+    default:
+      return null;
+  }
 }

@@ -5,15 +5,64 @@ import { Locale, defaultLocale, localeNames, locales } from './config';
 import en from './messages/en.json';
 import es from './messages/es.json';
 import pt from './messages/pt.json';
+// Issue #821 — the footer catalogue lives in its own module because the
+// `messages/*.json` bundles are corrupt in this checkout (binary since
+// `a9de073`) and cannot be parsed or edited. It is merged into every locale
+// below, so `t('footer.…')` resolves exactly like any other key. See the file
+// header for when it can be folded back into `en.json`.
+import { FLATTENED_FOOTER_MESSAGES } from './messages/footer';
 import * as Sentry from '@sentry/nextjs';
 
-const messages = {
-  en,
-  es,
-  pt,
-};
+/**
+ * Fold the flat footer catalogue back into a nested tree so it merges with the
+ * locale bundle the same way its nested siblings do.
+ */
+function nestFooterMessages(flat: Record<string, string>): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  for (const [dottedPath, value] of Object.entries(flat)) {
+    const segments = dottedPath.split('.');
+    let node = root;
+    for (const segment of segments.slice(0, -1)) {
+      const next = node[segment];
+      if (!next || typeof next !== 'object') {
+        node[segment] = {};
+      }
+      node = node[segment] as Record<string, unknown>;
+    }
+    const last = segments[segments.length - 1];
+    if (last !== undefined) {
+      node[last] = value;
+    }
+  }
+  return root;
+}
 
-type Messages = typeof en;
+/** Recursively overlay `override` onto `base` without mutating either. */
+function mergeMessages(base: unknown, override: unknown): unknown {
+  if (override === undefined) return base;
+  if (
+    base === null ||
+    override === null ||
+    typeof base !== 'object' ||
+    typeof override !== 'object' ||
+    Array.isArray(base) ||
+    Array.isArray(override)
+  ) {
+    return override;
+  }
+
+  const merged: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(override as Record<string, unknown>)) {
+    merged[key] = mergeMessages(merged[key], value);
+  }
+  return merged;
+}
+
+const messages = {
+  en: mergeMessages(en, nestFooterMessages(FLATTENED_FOOTER_MESSAGES.en)),
+  es: mergeMessages(es, nestFooterMessages(FLATTENED_FOOTER_MESSAGES.es)),
+  pt: mergeMessages(pt, nestFooterMessages(FLATTENED_FOOTER_MESSAGES.pt)),
+} as Record<Locale, Record<string, unknown>>;
 
 /** Parameters substituted into a message's `{placeholder}` slots. */
 export type TParams = Record<string, string | number>;

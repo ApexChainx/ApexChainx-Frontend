@@ -95,7 +95,8 @@ The shared shell and providers live in:
 
 - `src/app/layout.tsx` — Root layout with providers
  - `src/components/Navigation.tsx` — Main navigation shell
- - `src/components/layout/Footer.tsx` — Site-wide footer (with skeleton + error boundary)
+ - `src/components/layout/Sidebar.tsx` — Responsive app sidebar (grouped, keyboard navigable)
+ - `src/components/layout/Footer.tsx` — Site-wide footer (skeleton + error boundary)
  - `src/providers/react-query.tsx` — TanStack Query provider
  - `src/providers/session.tsx` — Authentication and session management
 
@@ -107,11 +108,32 @@ The app is offline-first for outage reads: an IndexedDB layer
 [docs/offline-cache.md](./docs/offline-cache.md) for what's cached where, TTLs,
 hydration rules, and the current purge/eviction gaps.
 
-The shell footer lives in `src/components/layout/` and is mounted from the root
-layout behind its own error boundary, so a failure in the footer degrades to an
-inline retry instead of taking the page down. See
-[docs/app-shell-footer.md](./docs/app-shell-footer.md) for its responsive
-breakpoints, accessibility contract, and how to add a link.
+The shell sidebar lives in `src/components/layout/`. It is a static column from
+`lg` up and an off-canvas drawer below that, groups destinations into collapsible
+sections, marks the current route with `aria-current` rather than colour alone,
+and uses a roving tabindex so a keyboard user reaches every destination with the
+arrow keys instead of dozens of Tabs. It is memoized so session heartbeats don't
+re-render its link tree, reserves its box while the session resolves, and is
+wrapped in its own error boundary so a navigation failure can never take the page
+down with it. See
+[docs/app-shell-sidebar.md](./docs/app-shell-sidebar.md) for the full contract
+and how to add a destination.
+
+The shell footer lives in `src/components/layout/` and is fully typed, translated
+into all three shipped locales, validates its own input inline, and memoizes its
+catalogue derivation so session heartbeats don't re-run it. It is composed from
+small reusable pieces rather than being a monolith, emits product analytics
+events, renders an explicit empty state when there is nothing to show, and
+declares its own dark-mode colours. Its link region uses a roving tabindex so a
+keyboard user reaches every link with the arrow keys instead of dozens of Tabs.
+It is pinned to the bottom of short pages, reserves its box with a loading
+skeleton while the shell resolves, and is mounted from the root layout behind
+its own error boundary so a failure inside it degrades to an inline retry
+instead of taking the page down.
+See
+[docs/app-shell-footer.md](./docs/app-shell-footer.md) for the full contract,
+its responsive breakpoints, accessibility contract, and how to add a link or
+wire an analytics sink.
 
 ---
 
