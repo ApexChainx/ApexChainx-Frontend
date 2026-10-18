@@ -94,9 +94,10 @@ Active App Router routes live under `src/app`:
 The shared shell and providers live in:
 
 - `src/app/layout.tsx` — Root layout with providers
-- `src/components/Navigation.tsx` — Main navigation shell
-- `src/providers/react-query.tsx` — TanStack Query provider
-- `src/providers/session.tsx` — Authentication and session management
+ - `src/components/Navigation.tsx` — Main navigation shell
+ - `src/components/layout/Footer.tsx` — Site-wide footer (with skeleton + error boundary)
+ - `src/providers/react-query.tsx` — TanStack Query provider
+ - `src/providers/session.tsx` — Authentication and session management
 
 Feature modules are organized under `src/features/` for domain-specific UI and hooks.
 
@@ -105,6 +106,12 @@ The app is offline-first for outage reads: an IndexedDB layer
 (`public/sw.js`) each cache a slice of the data with different lifetimes. See
 [docs/offline-cache.md](./docs/offline-cache.md) for what's cached where, TTLs,
 hydration rules, and the current purge/eviction gaps.
+
+The shell footer lives in `src/components/layout/` and is mounted from the root
+layout behind its own error boundary, so a failure in the footer degrades to an
+inline retry instead of taking the page down. See
+[docs/app-shell-footer.md](./docs/app-shell-footer.md) for its responsive
+breakpoints, accessibility contract, and how to add a link.
 
 ---
 
