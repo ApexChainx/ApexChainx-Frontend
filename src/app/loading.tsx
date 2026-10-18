@@ -1,4 +1,11 @@
-ü
-^Ä(ZŠs^·
-+ê^­«b¢{×¥–(Ç•«_¢¹¿Šjh®Ô¤zW­¢wë¢oÜ¢jhéí³û¢şÉ•ëhŸôhº×¥z÷¥–†Šx,‘é^¶‰ß¢»azV§v)à¥¨"Ë.{¾ü2*ë¢»-…çZ²èj·ek*.¶šuêßŠ[^®Ç­Ò"Ø¥zÆ§vØ^·
-…ªí¥©Ş–Ë(¶ŸŠ»-¥¨§¶f­r¬¶¬…ª^¡ûazZuç\¢{^Ø§²×šv‡ÚéŞ®',¦)çz»-ÊW¦zËïŞÆš+µ×Ÿjém~éÜ¶*'.†Šx+zÛ«Ø¯rV¬°Ö¦zÊZqìº§¦«‰¦î³
+import { RouteLoadingState } from "@/components/ui/route-state";
+/** ApexChain Network Operations Intelligence Platform */
+
+export default function Loading() {
+  return (
+    <RouteLoadingState
+      title="Loading workspace"
+      description="Preparing the latest dashboard and workflow data for you."
+    />
+  );
+}

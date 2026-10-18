@@ -3,7 +3,6 @@
 
 import { memo } from "react";
 import dynamic from "next/dynamic";
-import { memo } from "react";
 
 import { useI18n } from "@/i18n/i18n";
 

@@ -53,7 +53,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 
 import { usePathname } from "next/navigation";
 
@@ -147,7 +147,7 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
 
   // #831 — a single delegated handler covers the whole list, so the listener
   // count does not grow with the destination count.
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
+  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
     const list = listRef.current;
     if (!list) return;
 
@@ -263,7 +263,7 @@ interface SidebarViewProps {
   activeIndex: number;
   onToggle: (groupId: SidebarGroupId) => void;
   onActiveLinkChange: (index: number) => void;
-  onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   listRef: RefObject<HTMLElement | null>;
   isOpen: boolean;
   onToggleDrawer: () => void;

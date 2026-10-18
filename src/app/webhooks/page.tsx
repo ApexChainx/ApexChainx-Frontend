@@ -16,9 +16,12 @@ import {
 import WebhookSettings from "@/components/settings/webhook-settings";
 import { slaEventKeys } from "@/lib/query-keys";
 import type { Webhook, WebhookDelivery } from "@/types/webhook";
-import { slaEventKeys } from "@/lib/query-keys";
+import { ConfirmDialog } from "@/components/payments/ConfirmDialog";
 
 const AVAILABLE_EVENTS = ["outage.created", "outage.resolved", "payment.processed", "sla.breached"];
+
+/** Typed phrase the operator has to reproduce before a delete is accepted. */
+const DELETE_CONFIRM_PHRASE = "delete webhook";
 
 /** Issue #601 — long delivery histories are paged rather than rendered whole. */
 const DELIVERY_PAGE_SIZE = 10;
@@ -44,6 +47,10 @@ function StatusBadge({ status }: { status: string }) {
 export default function WebhooksPage() {
   const qc = useQueryClient();
   const [selectedWebhook, setSelectedWebhook] = useState<Webhook | null>(null);
+  // Issue #599 — deletion is gated behind a typed confirmation, so the state
+  // that holds the webhook awaiting that confirmation lives next to the rest
+  // of the page state.
+  const [pendingDelete, setPendingDelete] = useState<Webhook | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formUrl, setFormUrl] = useState("");
   const [formEvents, setFormEvents] = useState<string[]>([]);

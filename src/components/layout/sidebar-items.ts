@@ -6,7 +6,11 @@
  * behaviour can be reasoned about and unit-tested without rendering anything.
  */
 
-import { visibleNavLinks, type NavLinkItem } from "@/components/shell/nav-links";
+import {
+  NAV_LINKS,
+  visibleNavLinks,
+  type NavLinkItem,
+} from "@/components/shell/nav-links";
 
 /**
  * Stable identifier for a sidebar section. Reusing `NAV_LINKS`'s `adminOnly`

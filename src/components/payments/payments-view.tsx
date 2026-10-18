@@ -22,6 +22,21 @@ const ROWS_PER_PAGE_OPTIONS = [10, 100, 500] as const;
 export default function PaymentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // FE-069: filter state
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // FE-072: sort + density
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [density, setDensity] = useState<TableDensity>(() => {
+    const prefs = getPreferences();
+    return prefs.tableDensity || "default";
+  });
+
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(

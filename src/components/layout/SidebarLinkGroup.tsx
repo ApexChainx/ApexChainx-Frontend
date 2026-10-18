@@ -38,7 +38,7 @@ export interface SidebarGroupProps {
    * it, so a route change re-renders this group through props rather than
    * being swallowed by `React.memo`. Falls back to the router hook.
    */
-  pathname?: string;
+  pathname?: string | undefined;
 }
 
 export const SidebarLinkGroup = memo(function SidebarGroup({

@@ -19,20 +19,6 @@ import type {
 } from "@/components/layout/footer-types";
 
 /**
- * Minimal structural input, so the caller may pass its own readonly catalogue
- * without widening it to the full `FooterSection` type first.
- */
-export interface FooterSectionLike {
-  readonly id: string;
-  readonly titleKey: string;
-  readonly links: readonly {
-    readonly href: string;
-    readonly labelKey: string;
-    readonly adminOnly?: boolean;
-  }[];
-}
-
-/**
  * Derive everything the footer renders from a catalogue and an audience, in one
  * pass.
  *
@@ -40,7 +26,7 @@ export interface FooterSectionLike {
  * a bare heading — a heading with nothing under it reads as a rendering bug.
  */
 export function buildFooterSummary(
-  sections: readonly FooterSectionLike[],
+  sections: readonly FooterSection[],
   isAdmin: boolean,
 ): FooterSummary {
   const visible: FooterSection[] = [];

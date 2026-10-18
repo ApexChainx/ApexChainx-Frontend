@@ -33,7 +33,7 @@ export const slaEventKeys = {
   all: ["sla-events"] as const,
 
   /** Dashboard analytics */
-  dashboard: (filters?: Record<string, unknown>) =>
+  dashboard: (filters?: object) =>
     ["sla-events", "dashboard", filters] as const,
 
   /**
@@ -41,7 +41,7 @@ export const slaEventKeys = {
    * literal ["dashboard-metrics-compare", filters] key so the compare view
    * participates in shared invalidation).
    */
-  dashboardCompare: (filters?: Record<string, unknown>) =>
+  dashboardCompare: (filters?: object) =>
     ["sla-events", "dashboard-compare", filters] as const,
 
   /**
@@ -49,11 +49,11 @@ export const slaEventKeys = {
    * tiles and the trend charts own separate keys. Retrying one widget
    * refetches only its own request instead of re-running the whole page.
    */
-  dashboardKpis: (filters?: Record<string, unknown>) =>
+  dashboardKpis: (filters?: object) =>
     ["sla-events", "dashboard-kpis", filters] as const,
 
   /** Issue #606 — trend-chart widget key; see `dashboardKpis`. */
-  dashboardTrends: (filters?: Record<string, unknown>) =>
+  dashboardTrends: (filters?: object) =>
     ["sla-events", "dashboard-trends", filters] as const,
 
   /** SLA calculations & previews */
