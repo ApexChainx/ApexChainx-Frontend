@@ -2,6 +2,9 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+// Issue #814 — memoized, so session heartbeats and query invalidations no
+// longer re-render the footer subtree on every tick.
+import Footer from "@/components/layout/Footer";
 // Issue #633 — the command palette and onboarding tour are deferred into their
 // own chunks so every route stops shipping them before first paint.
 import {
@@ -160,7 +163,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
           }}
         />
       </head>
-      <body>
+      {/* Column flex so the footer is pushed to the bottom of short pages. */}
+      <body className="flex min-h-screen flex-col">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-blue-600"
@@ -173,9 +177,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <I18nProvider>
                 <RouteGuard>
                   <Navigation />
-                  <main id="main-content" role="main">
+                  <main id="main-content" role="main" className="flex-1">
                     {children}
                   </main>
+                  <Footer />
                   <DeferredCommandPalette />
                   <DeferredOnboardingTour />
                   <OfflineBanner />
