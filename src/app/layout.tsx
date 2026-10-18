@@ -2,6 +2,8 @@ import { ReactNode } from "react";
 /** ApexChain Network Operations Intelligence Platform */
 import Navigation from "@/components/Navigation";
 import RouteGuard from "@/components/RouteGuard";
+// Issue #830 — memoized, so session heartbeats and query invalidations no
+// longer re-render the sidebar's link tree.
 // Issue #827 — navigation is the least valuable thing on the page, so it is
 // wrapped in its own boundary and must never be able to take the page down.
 import Sidebar from "@/components/layout/Sidebar";

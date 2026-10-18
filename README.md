@@ -95,7 +95,7 @@ The shared shell and providers live in:
 
 - `src/app/layout.tsx` — Root layout with providers
  - `src/components/Navigation.tsx` — Main navigation shell
- - `src/components/layout/Sidebar.tsx` — Responsive app sidebar
+ - `src/components/layout/Sidebar.tsx` — Responsive app sidebar (grouped, keyboard navigable)
  - `src/providers/react-query.tsx` — TanStack Query provider
  - `src/providers/session.tsx` — Authentication and session management
 
@@ -108,11 +108,15 @@ The app is offline-first for outage reads: an IndexedDB layer
 hydration rules, and the current purge/eviction gaps.
 
 The shell sidebar lives in `src/components/layout/`. It is a static column from
-`lg` up and an off-canvas drawer below that, marks the current route with
-`aria-current` rather than colour alone, reserves its box while the session
-resolves, and is wrapped in its own error boundary so a navigation failure can
-never take the page down with it. See
-[docs/app-shell-sidebar.md](./docs/app-shell-sidebar.md) for the full contract.
+`lg` up and an off-canvas drawer below that, groups destinations into collapsible
+sections, marks the current route with `aria-current` rather than colour alone,
+and uses a roving tabindex so a keyboard user reaches every destination with the
+arrow keys instead of dozens of Tabs. It is memoized so session heartbeats don't
+re-render its link tree, reserves its box while the session resolves, and is
+wrapped in its own error boundary so a navigation failure can never take the page
+down with it. See
+[docs/app-shell-sidebar.md](./docs/app-shell-sidebar.md) for the full contract
+and how to add a destination.
 
 ---
 
