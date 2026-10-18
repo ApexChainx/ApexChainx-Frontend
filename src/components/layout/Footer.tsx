@@ -1,122 +1,228 @@
 "use client";
 /** ApexChain Network Operations Intelligence Platform */
 /**
- * Site-wide footer (Issues #816–#819).
+ * Site-wide footer.
  *
- * The footer is now a *composition* of reusable pieces rather than a monolith.
- * Everything it renders — the brand block, each link column, the empty state,
- * the legal row — is a separate exported component taking plain props, so an
- * about page, an error screen or an embed can borrow any of them without
- * copying markup. This component is the default wiring of those pieces for the
- * site shell, not the only place they can be used.
- *
- * #816 — footer interactions are recorded as analytics events
- * #817 — a footer with nothing to show renders a designed empty state
- * #818 — colours are declared for both colour schemes
- * #819 — the footer is extracted into reusable, prop-driven components
+ * Issues #820 (TypeScript strict typing), #821 (i18n translations), #822 (form
+ * validation) and #823 (memoize expensive computations).
  */
 
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
+
+import Link from "next/link";
 
 import { useI18n } from "@/i18n/i18n";
 import { useSession } from "@/hooks/useSession";
 import { STELLAR_NETWORK } from "@/lib/explorer";
-import { FOOTER_EVENTS, trackFooterEvent } from "@/lib/footer-analytics";
-import { FooterBrand } from "@/components/layout/FooterBrand";
-import FooterEmptyState from "@/components/layout/FooterEmptyState";
-import { FooterLinkSection } from "@/components/layout/FooterLinkSection";
 import {
-  FOOTER_SECTIONS,
-  visibleFooterSections,
-  type FooterSection,
-} from "@/components/layout/footer-sections";
+  buildFooterSummary,
+} from "@/components/layout/footer-derive";
+import FooterSubscribeForm from "@/components/layout/FooterSubscribeForm";
+import type {
+  FooterDestination,
+  FooterSection,
+  StellarNetworkName,
+  ValidatedEmail,
+} from "@/components/layout/footer-types";
+
+/** The default site-wide catalogue. */
+export const FOOTER_SECTIONS: readonly FooterSection[] = [
+  {
+    id: "platform",
+    titleKey: "footer.groups.platform",
+    links: [
+      { kind: "internal", href: "/", labelKey: "common.dashboard" },
+      { kind: "internal", href: "/outages", labelKey: "common.outages" },
+      { kind: "internal", href: "/payments", labelKey: "common.payments" },
+      {
+        kind: "internal",
+        href: "/payments/retry-queue",
+        labelKey: "common.retryQueue",
+      },
+    ],
+  },
+  {
+    id: "operations",
+    titleKey: "footer.groups.operations",
+    links: [
+      { kind: "internal", href: "/bulk-import", labelKey: "common.bulkImport" },
+      { kind: "internal", href: "/setting", labelKey: "common.settings" },
+      { kind: "internal", href: "/config", labelKey: "common.config", adminOnly: true },
+      { kind: "internal", href: "/webhooks", labelKey: "common.webhooks", adminOnly: true },
+    ],
+  },
+  {
+    id: "resources",
+    titleKey: "footer.groups.resources",
+    links: [
+      {
+        kind: "external",
+        href: "https://github.com/ApexChainx/ApexChainx-Frontend",
+        labelKey: "footer.links.sourceCode",
+        external: true,
+      },
+      {
+        kind: "external",
+        href: "https://stellar.expert",
+        labelKey: "footer.links.stellarExplorer",
+        external: true,
+      },
+    ],
+  },
+];
+
+interface FooterLinkProps {
+  link: FooterDestination;
+}
+
+function FooterLinkItem({ link }: FooterLinkProps) {
+  const { t } = useI18n();
+  const label = t(link.labelKey);
+
+  const className =
+    "rounded text-slate-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:text-slate-300 dark:focus-visible:outline-blue-400";
+
+  // The discriminated union makes this branch total: an internal destination is
+  // a route, an external one is an absolute URL that must carry `noopener`.
+  if (link.kind === "external") {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {label}
+        <span className="sr-only"> ({t("footer.opensInNewTab")})</span>
+        <span aria-hidden="true">↗</span>
+      </a>
+    );
+  }
+
+  return (
+    <Link href={link.href} className={className}>
+      {label}
+    </Link>
+  );
+}
+
+interface FooterSectionColumnProps {
+  section: FooterSection;
+}
+
+function FooterSectionColumn({ section }: FooterSectionColumnProps) {
+  const { t } = useI18n();
+
+  return (
+    <div
+      data-testid={`footer-section-${section.id}`}
+      className="flex min-w-0 flex-col gap-2"
+    >
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+        {t(section.titleKey)}
+      </h2>
+      <ul className="flex min-w-0 flex-col gap-1">
+        {section.links.map((link) => (
+          <li key={link.href} className="min-w-0 break-words">
+            <FooterLinkItem link={link} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export interface FooterProps {
   /** Overrides the current year so the copyright line is deterministic in tests. */
   year?: number;
   /** Catalogue to render. Defaults to the site-wide sections. */
   sections?: readonly FooterSection[];
-  /** Replaces the default empty state (#817). */
-  emptyState?: ReactNode;
-  /** Set false to suppress analytics (#816), e.g. in an embed or a test. */
-  trackEvents?: boolean;
+  /** Hides the status-updates form (#822). */
+  hideSubscribe?: boolean;
+  /** Persists a status-updates subscription (#822). */
+  onSubscribe?: (email: ValidatedEmail) => Promise<void>;
+  /** Replaces the form entirely, e.g. with an opt-out notice. */
+  subscribeSlot?: ReactNode;
 }
 
 function Footer({
   year = new Date().getFullYear(),
   sections = FOOTER_SECTIONS,
-  emptyState,
-  trackEvents = true,
+  hideSubscribe = false,
+  onSubscribe,
+  subscribeSlot,
 }: FooterProps = {}) {
   const { t } = useI18n();
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
-  const hasTrackedView = useRef(false);
 
-  // Keyed on `isAdmin` alone: `useSession` returns a fresh object on every
-  // heartbeat, so depending on it would recompute the catalogue for an
-  // identical result several times a minute.
-  const visibleSections = useMemo(
-    () => visibleFooterSections(isAdmin, sections),
+  // #823 — one memoized pass produces the filtered catalogue, the counts and
+  // each column's offset. Keyed on `isAdmin` and `sections` alone: `useSession`
+  // returns a fresh object on every heartbeat, so depending on it would redo all
+  // of this for an identical result.
+  const summary = useMemo(
+    () => buildFooterSummary(sections, isAdmin),
     [isAdmin, sections],
   );
 
-  const linkCount = useMemo(
-    () => visibleSections.reduce((total, section) => total + section.links.length, 0),
-    [visibleSections],
-  );
+  const network: StellarNetworkName = STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
-  // #816 — one `footer.view` per mount, not one per render. Without the ref
-  // guard the effect would re-fire on every session heartbeat.
-  useEffect(() => {
-    if (!trackEvents || hasTrackedView.current) return;
-    hasTrackedView.current = true;
-    trackFooterEvent(FOOTER_EVENTS.view, { linkCount });
-  }, [trackEvents, linkCount]);
-
-  // #817 — an empty catalogue is an explicit, designed state, not a blank box.
-  useEffect(() => {
-    if (!trackEvents || linkCount > 0) return;
-    trackFooterEvent(FOOTER_EVENTS.empty, { linkCount });
-  }, [trackEvents, linkCount]);
-
-  const network = STELLAR_NETWORK === "mainnet" ? "mainnet" : "testnet";
-  const brand = useMemo(
-    () => ({ nameKey: "footer.brand", taglineKey: "footer.tagline" }),
-    [],
-  );
+  // Placeholder sink: the endpoint is wired up in a follow-up. Kept stable so
+  // the form's submit handler does not change identity every render.
+  const handleSubscribe = useCallback(async (_email: ValidatedEmail) => {}, []);
 
   return (
     <footer
       aria-label={t("footer.landmark")}
       data-testid="site-footer"
-      data-theme="responsive"
-      // #818 — the surface itself carries an explicit dark scheme rather than
-      // relying on inherited tokens, so the footer stays legible whichever
-      // surface it is embedded in.
       className="mt-auto w-full border-t border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
-          <FooterBrand brand={brand} network={network} />
+          <div
+            data-testid="footer-brand"
+            className="flex min-w-0 flex-col gap-2 md:max-w-xs md:shrink"
+          >
+            <p className="text-base font-semibold text-slate-900 dark:text-slate-50">
+              {t("footer.brand")}
+            </p>
+            <p className="min-w-0 break-words text-xs text-slate-600 dark:text-slate-400">
+              {t("footer.tagline")}
+            </p>
+            <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span
+                role="img"
+                aria-label={t("footer.network", { network })}
+                className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                  network === "mainnet"
+                    ? "bg-amber-500 dark:bg-amber-400"
+                    : "bg-emerald-600 dark:bg-emerald-400"
+                }`}
+              />
+              {t("footer.networkLabel")}
+            </p>
+          </div>
 
-          {linkCount === 0 ? (
-            <div className="min-w-0 flex-1">
-              {emptyState ?? <FooterEmptyState />}
-            </div>
-          ) : (
-            <nav
-              aria-label={t("footer.groups.platform")}
-              data-testid="footer-links"
-              className="grid min-w-0 flex-1 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-            >
-              {visibleSections.map((section) => (
-                <FooterLinkSection key={section.id} section={section} />
-              ))}
-            </nav>
-          )}
+          <nav
+            aria-label={t("footer.groups.platform")}
+            data-testid="footer-links"
+            data-link-count={summary.totalLinks}
+            className="grid min-w-0 flex-1 grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            {summary.sections.map((section) => (
+              <FooterSectionColumn key={section.id} section={section} />
+            ))}
+          </nav>
         </div>
+
+        {!hideSubscribe && (
+          <div className="mt-8 border-t border-slate-200 pt-4 dark:border-slate-700">
+            {subscribeSlot ?? (
+              <FooterSubscribeForm onSubscribe={onSubscribe ?? handleSubscribe} />
+            )}
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700">
           <p className="min-w-0 text-xs text-slate-500 dark:text-slate-400">
@@ -134,21 +240,4 @@ function Footer({
 export default memo(Footer);
 
 export { Footer };
-
-/*
- * Reusable pieces (#819). Import them directly:
- *
- *   import { FooterBrand } from "@/components/layout/FooterBrand";
- *   import { FooterLinkSection } from "@/components/layout/FooterLinkSection";
- *   import { FooterEmptyState } from "@/components/layout/FooterEmptyState";
- *   import { visibleFooterSections } from "@/components/layout/footer-sections";
- *
- * They are re-exported here as a convenience for consumers that already import
- * the footer; a `footer/` barrel directory is deliberately avoided so the
- * module specifier can never collide with `Footer.tsx` on a case-insensitive
- * filesystem.
- */
-export { FooterBrand } from "@/components/layout/FooterBrand";
-export { FooterLinkSection } from "@/components/layout/FooterLinkSection";
-export { FooterEmptyState } from "@/components/layout/FooterEmptyState";
-export { visibleFooterSections } from "@/components/layout/footer-sections";
+export type { FooterSection, FooterDestination, ValidatedEmail };

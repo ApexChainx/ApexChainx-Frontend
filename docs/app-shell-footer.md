@@ -1,149 +1,187 @@
 # App Shell Footer
 
-> Issues #816–#819 — the footer had no analytics, no empty state, no dark-mode
-> colours of its own, and was a monolith nothing could reuse. This document is
-> the reference for the components in `src/components/layout/`.
+> Issues #820–#823 — the footer was untyped English copy with no validation and
+> a derivation pass that ran on every session heartbeat. This document is the
+> reference for the components in `src/components/layout/`.
 
 ## Components
 
 | File | Purpose |
 |------|---------|
-| `src/components/layout/Footer.tsx` | The default composition for the site shell |
-| `src/components/layout/FooterBrand.tsx` | Brand block (reusable) |
-| `src/components/layout/FooterLinkSection.tsx` | One link column (reusable, analytics-wired) |
-| `src/components/layout/FooterEmptyState.tsx` | Empty state (reusable) |
-| `src/components/layout/footer-sections.ts` | Section catalogue, types, admin filtering |
-| `src/lib/footer-analytics.ts` | Event names, `trackFooterEvent`, the swappable sink |
+| `src/components/layout/Footer.tsx` | The footer |
+| `src/components/layout/footer-types.ts` | Strict types (#820) |
+| `src/components/layout/footer-derive.ts` | Memoized catalogue derivation (#823) |
+| `src/components/layout/footer-validation.ts` | Email validation (#822) |
+| `src/components/layout/FooterSubscribeForm.tsx` | Status-updates form (#822) |
+| `src/i18n/messages/footer.ts` | Footer message catalogue (#821) |
 
 The footer is mounted once, in `src/app/layout.tsx`, directly after `<main>`.
 
-## Reusable extraction (#819)
+## TypeScript strict typing (#820)
 
-The footer used to be a monolith: brand block, link columns, legal line and
-analytics wiring were all inlined into one component. Nothing could be reused
-from it — an about page, an error screen or an embed could not borrow the link
-columns without copying the markup, and the copy diverged on every reuse.
+The footer used `string` for everything that is actually a closed set — the
+network, a link's destination kind, the operator's audience — so `"mainnetn"`
+or a typo in a `role` compiled fine and only failed at runtime, as a badge in
+the wrong colour or a column that never appeared.
 
-Everything the footer renders is now a separate exported component taking plain
-props and knowing nothing about routes, sessions or copy decisions. The footer
-is the *default composition* of those pieces, not the only place they exist.
+### Destinations are a discriminated union
 
 ```typescript
-// Reuse a single piece anywhere:
-import { FooterLinkSection } from "@/components/layout/FooterLinkSection";
-import { FooterEmptyState } from "@/components/layout/FooterEmptyState";
-import { FooterBrand } from "@/components/layout/FooterBrand";
-
-// Or compose your own footer from the default catalogue:
-import Footer from "@/components/layout/Footer";
-<Footer sections={mySections} year={2026} />
+export type FooterDestination =
+  | { kind: "internal"; href: `/${string}`; labelKey: string; adminOnly?: boolean }
+  | { kind: "external"; href: `http${string}` | `https${string}`; labelKey: string; external: true };
 ```
 
-`Footer` accepts `sections`, `emptyState`, `year` and `trackEvents`, so a caller
-can supply a different catalogue, a different empty state, or suppress
-analytics (an embed, a test).
+An optional `external: boolean` flag cannot stop `target="_blank"` ending up on a
+router link, or a relative URL reaching an `href` without a scheme — the two
+variants are indistinguishable to the checker. With a union the renderer is
+**total**: the external branch is only reachable when `href` is an absolute URL,
+and the template-literal types (`/${string}`, `https${string}`) make a malformed
+destination a compile error.
 
-> There is deliberately **no `footer/` barrel directory**. A directory named
-> `footer` alongside `Footer.tsx` makes the module specifier ambiguous on a
-> case-insensitive filesystem (macOS, Windows). The pieces are re-exported from
-> `Footer.tsx` instead, which is unambiguous everywhere.
-
-## Analytics events (#816)
-
-The app had no first-party analytics, so there was no way to answer "which
-footer links do operators actually use?" — and guessing from server logs misses
-client-side navigation entirely, because an in-app route change never reaches
-the access log.
-
-`src/lib/footer-analytics.ts` is dependency-free and emits four events:
-
-| Event | When |
-|-------|------|
-| `footer.view` | Once per mount (guarded by a ref, so not once per render) |
-| `footer.link_click` | An operator activates a link |
-| `footer.empty_state` | The footer rendered with nothing to show |
-| `footer.group_expand` | Reserved for a collapsible column |
-
-### Wiring a real sink
+### Validated values are branded
 
 ```typescript
-import { setAnalyticsSink } from "@/lib/footer-analytics";
-
-setAnalyticsSink((event, properties) => {
-  navigator.sendBeacon("/api/analytics", JSON.stringify({ event, properties }));
-});
+export type ValidatedEmail = string & { readonly __brand: "ValidatedEmail" };
 ```
 
-Until a sink is registered, events still go to a **Sentry breadcrumb** — the
-project's existing reporting channel — so a support ticket reads as "clicked
-Payments, then Settings, then hit the failure".
+The brand is a compile-time fiction with no runtime cost. `validateEmail` is the
+only thing that can produce one, so the submit handler physically cannot receive
+an address that was never checked.
 
-### Rules the module enforces
+### Closed sets
 
-- **Never throws.** Analytics must not be able to break the surface it is
-  measuring; a failing sink is swallowed after being logged.
-- **No network call.** A sink plugs in behind `setAnalyticsSink`; no call site
-  changes.
-- **External URLs are not recorded as routes.** `sanitiseHref` strips query
-  strings and fragments and drops absolute URLs entirely, so operator-identifying
-  query strings can never leak into an event payload.
-- **Events are a closed set.** `FOOTER_EVENTS` is `as const` and the properties
-  type is deliberately narrow, which keeps the payload cheap to reason about.
+`StellarNetworkName` (`"mainnet" | "testnet"`) and `FooterAudience`
+(`"admin" | "operator"`) replace bare booleans and `string`s, so call sites read
+as `buildFooterSummary(sections, isAdmin)` rather than
+`buildFooterSummary(sections, true)` and widening the model later is a type error
+at every site.
 
-## Empty state (#817)
+The project's `tsconfig.json` already runs `strict`, `noUncheckedIndexedAccess`
+and `exactOptionalPropertyTypes`; these types are written to be sound under all
+three.
 
-When every link is filtered out, the footer used to render a bare heading with
-nothing under it — which reads as a rendering bug rather than as "there is
-nothing here yet".
+## i18n translations (#821)
 
-`FooterEmptyState` renders an explicit, designed state instead: a polite
-`role="status"` region that says what is missing and points at where it gets
-configured. The link grid is removed entirely rather than rendered empty, and
-the brand and legal rows still render around it — an empty catalogue is a
-content state, not a broken component.
+The footer's copy was hardcoded English inside the component, so the entire
+footer was unreadable to the Spanish- and Portuguese-speaking operators the app
+already ships locales for. Nothing in the footer went through `t()`.
 
-`visibleFooterSections` also **drops sections left empty by admin filtering**, so
-a non-admin operator never sees a heading with nothing under it — they see the
-empty state.
+### Why the catalogue lives in `src/i18n/messages/footer.ts`
 
-## Dark mode (#818)
+The locale bundles in `src/i18n/messages/*.json` are **corrupt in this
+checkout** — binary blobs, not JSON, since commit `a9de073`. They cannot be
+parsed, edited or imported, which is why every existing test in this repo mocks
+`@/i18n/i18n` rather than using the real provider.
 
-The footer sits on the app's main surface, where a light-only palette fails:
+Rather than leave the footer untranslatable, its copy lives in a well-formed,
+typed catalogue that `I18nProvider` merges into every locale. `t("footer.tagline")`
+therefore resolves exactly like any other key, and `footer.ts` becomes redundant
+the moment the bundles are restored.
 
-- The footer surface declares `dark:bg-slate-900` / `dark:border-slate-700`
-  explicitly rather than relying on inherited tokens, so it stays legible
-  whichever surface it is embedded in.
-- **Links declare per-scheme colours.** The app-wide default link blue drops
-  below the WCAG AA 4.5:1 contrast ratio on the dark surface, so footer links
-  use `text-slate-700` / `dark:text-slate-300` and a scheme-aware focus ring.
-- The network badge uses `dark:` variants of its fill — amber for mainnet
-  ("handle with care"), emerald for testnet ("safe to test against"). Both stay
-  above 3:1 against the light and dark footer surfaces.
-- The empty state, brand block and legal row all carry `dark:` variants.
+### Keys are nested, not dotted
 
-Run `npm run check:contrast` after changing any of these colours.
+`t()` takes a dotted path, so the catalogue is authored nested and flattened at
+the point of use:
+
+```typescript
+const flat = flattenFooterMessages(FOOTER_MESSAGES.en);
+flat["footer.subscribe.invalid"]; // "That does not look like a valid email address."
+```
+
+Keeping it nested in source is what lets `Record<Locale, FooterMessages>` enforce
+**at compile time** that all three locales define exactly the same keys. A
+missing `pt` translation is a type error, not a runtime surprise.
+
+## Form validation (#822)
+
+The status-updates form had no validation at all: an empty or malformed address
+was posted straight to the API, the operator saw a generic failure toast, and
+the reason was never surfaced inline. They had no way to tell a typo in their
+address from a broken subscription service.
+
+Validation is now client-side and inline, next to the field:
+
+- **Empty is `required`, not `invalid`** — the operator is told what is missing,
+  not that what they typed is malformed.
+- The regex rejects the mistakes people actually make (missing `@`, trailing
+  dot, missing TLD, spaces) and **nothing stricter**, so it never rejects an
+  address that would actually have worked. The address is verified by the
+  confirmation email it triggers.
+- The error clears **as soon as the operator edits the field**, rather than
+  making them submit again to find out they fixed it.
+- A **service failure is not a validation failure**: the typed address survives
+  so the operator can retry, and the field stays valid.
+- `aria-invalid` and `aria-describedby` are wired to the message; the submit
+  button reflects the in-flight state and is disabled while submitting.
+
+`validateEmail` returns a discriminated union, so the failure branch cannot be
+forgotten:
+
+```typescript
+const result = validateEmail(value);
+if (!result.ok) { setErrorCode(result.code); return; }
+await onSubscribe(result.value); // typed as ValidatedEmail
+```
+
+## Memoized derivations (#823)
+
+Everything the footer derives from its catalogue used to be recomputed inline on
+every render: filtering admin-only links, flattening to a single list,
+accumulating counts, and walking the list to work out each column's offset. The
+footer is inside the session provider, so this ran on every heartbeat and every
+query invalidation — several array allocations and multiple passes over the
+catalogue, a few times a minute, for a result that only changes when the
+catalogue or the audience does.
+
+`buildFooterSummary` is now a **single pure pass** producing all of it:
+
+```typescript
+interface FooterSummary {
+  sections: readonly FooterSection[];
+  totalLinks: number;
+  sectionCount: number;
+  isEmpty: boolean;
+  sectionOffsets: readonly number[];  // global offset of each section's first link
+}
+```
+
+Two details that matter:
+
+- **The memo is keyed on `[isAdmin, sections]` — not on the session object.**
+  `useSession` returns a fresh object reference on every heartbeat, so depending
+  on it would redo the whole derivation for an identical result.
+- **`sectionOffsets` accumulates only for sections that survive the filter**, so
+  the offsets always describe the rendered DOM rather than the input catalogue.
+
+Sections left with no visible destinations are dropped rather than rendered as a
+bare heading — a heading with nothing under it reads as a rendering bug.
 
 ## Tests
 
-`tests/footer-analytics-darkmode.test.tsx` covers all four issues: event
-emission and de-duplication, href scrubbing, sink failure isolation, the
-Sentry breadcrumb path, the empty state and its admin-filtering interaction, the
-dark-mode class contract, and reuse of each piece outside the shell.
+`tests/footer-i18n-validation.test.tsx` covers all four issues. Unlike the other
+footer suites it drives the **real** `I18nProvider`, because proving that the
+footer is genuinely translated in all three locales is the whole point of #821.
 
-The i18n provider is mocked (`t` echoes the key) — the `src/i18n/messages/*.json`
-bundles are corrupt in this checkout (binary since commit `a9de073`), so the
-test runner cannot import them.
+It asserts, among other things, that all three locales define an identical key
+set, that the copy genuinely differs per locale, that no `footer.*` key is
+reported missing, and that the derived link count is 10 for an admin and 8 for
+an operator.
 
 ## Adding a footer link
 
-Links are plain data in `src/components/layout/footer-sections.ts`:
+Links are plain typed data in `FOOTER_SECTIONS` in `Footer.tsx`:
 
 ```typescript
-{ href: "/outages", labelKey: "common.outages" }
-{ href: "https://example.com", labelKey: "footer.links.example", external: true }
-{ href: "/config", labelKey: "common.config", adminOnly: true }
+{ kind: "internal", href: "/outages", labelKey: "common.outages" }
+{ kind: "internal", href: "/config", labelKey: "common.config", adminOnly: true }
+{ kind: "external", href: "https://example.com", labelKey: "footer.links.example", external: true }
 ```
 
 `labelKey` is resolved through `useI18n().t` at render time. `adminOnly` links
-are filtered out for non-admin operators by `visibleFooterSections`, which
-mirrors `visibleNavLinks` in the navigation bar — the two surfaces cannot drift.
+are filtered out for non-admin operators, mirroring `visibleNavLinks` in the
+navigation bar — the two surfaces cannot drift.
+
+New user-facing strings belong in **all three** locales in
+`src/i18n/messages/footer.ts`; the `Record<Locale, FooterMessages>` type will
+fail to compile if one is missing.
