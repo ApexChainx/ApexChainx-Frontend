@@ -46,9 +46,9 @@ function isAdministrationLink(link: NavLinkItem): boolean {
  */
 export function groupSidebarLinks(
   isAdmin: boolean,
-  links: readonly NavLinkItem[] = [],
+  links: readonly NavLinkItem[] = NAV_LINKS,
 ): SidebarGroup[] {
-  const visible = visibleNavLinks(isAdmin, links.length > 0 ? links : NAV_LINKS);
+  const visible = visibleNavLinks(isAdmin, [...links]);
 
   const operations = visible.filter((link) => !isAdministrationLink(link));
   const administration = visible.filter(isAdministrationLink);

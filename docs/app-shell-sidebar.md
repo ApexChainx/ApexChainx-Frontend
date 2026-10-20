@@ -20,6 +20,11 @@
 The sidebar is mounted once, in `src/app/layout.tsx`, beside `<main>` and inside
 `<SidebarErrorBoundary>`.
 
+`Sidebar` also accepts an optional `links` catalogue and `defaultOpen` prop, so
+other shells can reuse the same accessible navigation behavior with a tailored
+destination list. Passing an empty list renders a localized status message;
+omitting `links` uses the app's shared `NAV_LINKS` catalogue.
+
 Destinations come from `NAV_LINKS` in `src/components/shell/nav-links.ts` — the
 same single source of truth the top navigation bar uses, so the two surfaces
 cannot drift.
@@ -54,6 +59,23 @@ Four details make the drawer behave:
   offered a control that does nothing.
 
 The transition is disabled under `prefers-reduced-motion`.
+
+The static and drawer surfaces, including their links, controls, focus rings,
+and empty state, declare dark-mode colors explicitly.
+
+## Empty state (#833)
+
+When the caller supplies no visible destinations, the navigation landmark shows
+a localized status message in a bordered panel instead of a blank sidebar.
+Empty catalogues are preserved as empty (they do not fall back to app routes).
+
+## Analytics (#832)
+
+`src/lib/sidebar-analytics.ts` exposes a small swappable sink and Sentry
+breadcrumb integration. The sidebar records its initial visible/empty state,
+destination clicks, and group expansion changes. Recorded routes have query
+strings and fragments removed, external URLs are omitted, and sink failures
+never interfere with navigation.
 
 ## Accessibility (#825)
 
