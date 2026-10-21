@@ -39,6 +39,7 @@ export interface SidebarGroupProps {
    * being swallowed by `React.memo`. Falls back to the router hook.
    */
   pathname?: string | undefined;
+  onLinkClick?: (href: string) => void;
 }
 
 export const SidebarLinkGroup = memo(function SidebarGroup({
@@ -49,6 +50,7 @@ export const SidebarLinkGroup = memo(function SidebarGroup({
   activeIndex,
   onActiveLinkChange,
   pathname: pathnameProp,
+  onLinkClick,
 }: SidebarGroupProps) {
   const { t } = useI18n();
   const pathnameFromRouter = usePathname();
@@ -100,6 +102,7 @@ export const SidebarLinkGroup = memo(function SidebarGroup({
                   {...(link.tour ? { "data-tour": link.tour } : {})}
                   {...(isCurrent(link.href) ? { "aria-current": "page" as const } : {})}
                   {...{ [SIDEBAR_LINK_ATTRIBUTE]: "" }}
+                  onClick={() => onLinkClick?.(link.href)}
                   // Roving tabindex: exactly one link is in the tab order.
                   tabIndex={globalIndex === activeIndex ? 0 : -1}
                   onFocus={() => onActiveLinkChange(globalIndex)}

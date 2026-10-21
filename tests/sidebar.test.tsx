@@ -321,4 +321,16 @@ describe("Sidebar rendering", () => {
       "data-tour",
     );
   });
+
+  it("renders an explicit empty state for a reusable sidebar with no destinations", () => {
+    render(<Sidebar links={[]} />);
+    expect(screen.getByTestId("sidebar-empty-state")).toHaveAttribute("role", "status");
+    expect(document.querySelectorAll(`[${SIDEBAR_LINK_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+
+  it("supports a caller-provided destination catalogue", () => {
+    render(<Sidebar links={[{ href: "/custom", labelKey: "custom.destination" }]} />);
+    expect(screen.getByRole("link", { name: "custom.destination" })).toHaveAttribute("href", "/custom");
+    expect(screen.queryByRole("link", { name: "common.dashboard" })).not.toBeInTheDocument();
+  });
 });
