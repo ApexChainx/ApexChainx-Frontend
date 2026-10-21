@@ -62,6 +62,8 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useSession } from "@/hooks/useSession";
 import { NAV_LINKS } from "@/components/shell/nav-links";
 import { SidebarLinkGroup } from "@/components/layout/SidebarLinkGroup";
+import type { NavLinkItem } from "@/components/shell/nav-links";
+import { SIDEBAR_EVENTS, trackSidebarEvent } from "@/lib/sidebar-analytics";
 import {
   SIDEBAR_LINK_ATTRIBUTE,
   flattenSidebarLinks,
@@ -102,9 +104,11 @@ function useIsDesktop(): boolean {
 export interface SidebarProps {
   /** Starts the drawer open — for a host that owns its own trigger. */
   defaultOpen?: boolean;
+  /** Optional destination catalogue for embedding the sidebar in another shell. */
+  links?: readonly NavLinkItem[];
 }
 
-function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
+function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS }: SidebarProps = {}) {
   const { user } = useSession();
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
@@ -114,7 +118,8 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
   // #830 — keyed on `isAdmin` alone. `useSession` returns a fresh object on
   // every heartbeat, so depending on it would regroup the whole tree several
   // times a minute for an identical result.
-  const groups = useMemo(() => groupSidebarLinks(isAdmin, NAV_LINKS), [isAdmin]);
+  const groups = useMemo(() => groupSidebarLinks(isAdmin, destinationLinks), [isAdmin, destinationLinks]);
+  const linkCount = useMemo(() => groups.reduce((count, group) => count + group.links.length, 0), [groups]);
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<SidebarGroupId>>(
     () => new Set<SidebarGroupId>(),
@@ -176,12 +181,16 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
       const next = new Set(previous);
       if (next.has(groupId)) next.delete(groupId);
       else next.add(groupId);
+      trackSidebarEvent(SIDEBAR_EVENTS.groupToggle, { groupId, expanded: !previous.has(groupId) });
       return next;
     });
   }, []);
 
   const handleActiveLinkChange = useCallback((index: number) => {
     setActiveIndex(index);
+  }, []);
+  const handleLinkClick = useCallback((href: string) => {
+    trackSidebarEvent(SIDEBAR_EVENTS.linkClick, { href });
   }, []);
 
   // --- #824 — responsive shell -------------------------------------------
@@ -207,6 +216,13 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
     }
     setIsOpen(false);
   }, [pathname]);
+
+  const hasTrackedInitialState = useRef(false);
+  useEffect(() => {
+    if (hasTrackedInitialState.current) return;
+    hasTrackedInitialState.current = true;
+    trackSidebarEvent(linkCount === 0 ? SIDEBAR_EVENTS.empty : SIDEBAR_EVENTS.view, { linkCount });
+  }, [linkCount]);
 
   // Growing past the breakpoint turns the sidebar into a static column, so any
   // leftover drawer state must not keep it hidden.
@@ -236,6 +252,7 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
       pathname={pathname}
       isDesktop={isDesktop}
       groups={groups}
+      linkCount={linkCount}
       groupOffsets={groupOffsets}
       // The set's identity only changes when a group is actually toggled, so
       // the memoized view is not invalidated on every root re-render.
@@ -243,6 +260,7 @@ function SidebarRoot({ defaultOpen = false }: SidebarProps = {}) {
       activeIndex={currentIndex}
       onToggle={handleToggle}
       onActiveLinkChange={handleActiveLinkChange}
+      onLinkClick={handleLinkClick}
       onKeyDown={handleKeyDown}
       listRef={listRef}
       isOpen={isOpen}
@@ -258,11 +276,13 @@ interface SidebarViewProps {
   pathname: string | undefined;
   isDesktop: boolean;
   groups: ReturnType<typeof groupSidebarLinks>;
+  linkCount: number;
   groupOffsets: number[];
   collapsedSet: ReadonlySet<SidebarGroupId>;
   activeIndex: number;
   onToggle: (groupId: SidebarGroupId) => void;
   onActiveLinkChange: (index: number) => void;
+  onLinkClick: (href: string) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   listRef: RefObject<HTMLElement | null>;
   isOpen: boolean;
@@ -276,11 +296,13 @@ const SidebarView = memo(function SidebarView({
   pathname,
   isDesktop,
   groups,
+  linkCount,
   groupOffsets,
   collapsedSet,
   activeIndex,
   onToggle,
   onActiveLinkChange,
+  onLinkClick,
   onKeyDown,
   listRef,
   isOpen,
@@ -312,8 +334,19 @@ const SidebarView = memo(function SidebarView({
           offset={groupOffsets[index] ?? 0}
           activeIndex={activeIndex}
           onActiveLinkChange={onActiveLinkChange}
+          onLinkClick={onLinkClick}
         />
       ))}
+      {linkCount === 0 && (
+        <div
+          role="status"
+          data-testid="sidebar-empty-state"
+          className="m-2 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
+        >
+          <span className="mb-2 block text-lg" aria-hidden="true">🧭</span>
+          <p className="font-medium text-slate-800 dark:text-slate-100">{t("navigation.emptyState")}</p>
+        </div>
+      )}
     </nav>
   );
 
@@ -373,7 +406,7 @@ const SidebarView = memo(function SidebarView({
         data-state={isOpen ? "open" : "closed"}
         className={[
           "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col",
-          "border-r border-slate-200 bg-white shadow-xl",
+          "border-r border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900",
           "transition-transform duration-200 ease-out motion-reduce:transition-none",
           isOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
