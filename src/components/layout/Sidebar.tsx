@@ -53,7 +53,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, RefObject } from "react";
 
 import { usePathname } from "next/navigation";
 
@@ -62,7 +62,6 @@ import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useSession } from "@/hooks/useSession";
 import { NAV_LINKS } from "@/components/shell/nav-links";
 import { SidebarLinkGroup } from "@/components/layout/SidebarLinkGroup";
-import type { NavLinkItem } from "@/components/shell/nav-links";
 import { SIDEBAR_EVENTS, trackSidebarEvent } from "@/lib/sidebar-analytics";
 import {
   SIDEBAR_LINK_ATTRIBUTE,
@@ -70,6 +69,8 @@ import {
   groupSidebarLinks,
   nextSidebarLinkIndex,
   type SidebarGroupId,
+  type SidebarGroup,
+  type SidebarLink,
 } from "@/components/layout/sidebar-items";
 
 /** Viewport at or above which the sidebar becomes a static column. */
@@ -103,12 +104,12 @@ function useIsDesktop(): boolean {
 
 export interface SidebarProps {
   /** Starts the drawer open — for a host that owns its own trigger. */
-  defaultOpen?: boolean;
+  readonly defaultOpen?: boolean;
   /** Optional destination catalogue for embedding the sidebar in another shell. */
-  links?: readonly NavLinkItem[];
+  readonly links?: readonly SidebarLink[];
 }
 
-function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS }: SidebarProps = {}) {
+function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS }: SidebarProps = {}): ReactElement {
   const { user } = useSession();
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
@@ -161,7 +162,8 @@ function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS 
     );
     if (items.length === 0) return;
 
-    const focusedIndex = items.indexOf(document.activeElement as HTMLAnchorElement);
+    const focusedElement = document.activeElement;
+    const focusedIndex = items.findIndex((item) => item === focusedElement);
     // Only hijack the arrows when focus is inside the list; from anywhere else
     // the browser keeps its normal behaviour.
     if (focusedIndex === -1) return;
@@ -273,11 +275,11 @@ function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS 
 }
 
 interface SidebarViewProps {
-  pathname: string | undefined;
+  pathname: string | null | undefined;
   isDesktop: boolean;
-  groups: ReturnType<typeof groupSidebarLinks>;
+  groups: readonly SidebarGroup[];
   linkCount: number;
-  groupOffsets: number[];
+  groupOffsets: readonly number[];
   collapsedSet: ReadonlySet<SidebarGroupId>;
   activeIndex: number;
   onToggle: (groupId: SidebarGroupId) => void;
@@ -310,7 +312,7 @@ const SidebarView = memo(function SidebarView({
   onClose,
   drawerId,
   drawerRef,
-}: SidebarViewProps) {
+}: Readonly<SidebarViewProps>): ReactElement {
   const { t } = useI18n();
 
   const focusRing =

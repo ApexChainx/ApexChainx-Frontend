@@ -29,6 +29,25 @@ Destinations come from `NAV_LINKS` in `src/components/shell/nav-links.ts` — th
 same single source of truth the top navigation bar uses, so the two surfaces
 cannot drift.
 
+## Strict typing (#836)
+
+`SidebarProps` accepts an optional boolean `defaultOpen` and a readonly array
+of `SidebarLink` destinations. `SidebarLink` is a readonly view of the shared
+`NavLinkItem` contract: `href` and `labelKey` are required strings; `tour` and
+`adminOnly` are optional. Replace catalogue values instead of mutating them.
+Grouping and flattening return readonly arrays, and group callbacks accept
+only `SidebarGroupId` (`"operations" | "administration"`).
+
+The view and link groups accept an unavailable (`null` or `undefined`) pathname
+without selecting a current link. Keyboard handling compares the focused DOM
+element with managed anchors without asserting that it is an anchor.
+
+`tests/sidebar-types.test.ts` checks the public types and rejected inputs through
+`npm run typecheck`. Run `npm test -- tests/sidebar.test.tsx
+tests/sidebar-integration.test.tsx tests/sidebar-responsive-a11y.test.tsx
+tests/sidebar-types.test.ts` for runtime regression coverage. Vitest alone does
+not validate the compile-time assertions; run both commands.
+
 ## Responsive layout (#824)
 
 The sidebar was a fixed 256px column at every width. Below `lg` it squeezed the

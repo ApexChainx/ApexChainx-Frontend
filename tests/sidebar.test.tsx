@@ -7,10 +7,10 @@
  * The i18n message bundles are corrupted in this checkout, so the provider is
  * mocked and `t` echoes the key.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const route = vi.hoisted(() => ({ current: "/outages" }));
+const route = vi.hoisted((): { current: string | null } => ({ current: "/outages" }));
 
 vi.mock("@/i18n/i18n", () => ({
   useI18n: () => ({ t: (key: string) => key, locale: "en" }),
@@ -259,6 +259,22 @@ describe("SidebarLinkGroup", () => {
 });
 
 describe("Sidebar rendering", () => {
+  it("handles an unavailable pathname without marking a current link", () => {
+    route.current = null;
+    render(<Sidebar />);
+    expect(screen.getByRole("navigation").querySelector('[aria-current="page"]')).toBeNull();
+  });
+
+  it("leaves arrow keys on disclosure buttons unhandled", () => {
+    render(<Sidebar />);
+    const heading = screen.getByRole("button", { name: /sidebar.groups.operations/ });
+    heading.focus();
+    expect(fireEvent.keyDown(heading, { key: "ArrowDown" })).toBe(true);
+    expect(heading).toHaveFocus();
+    const links = screen.getByRole("navigation").querySelectorAll("a");
+    expect(Array.from(links).filter((link) => link.tabIndex === 0)).toHaveLength(1);
+  });
+
   it("renders a labelled navigation landmark distinct from the top bar", () => {
     render(<Sidebar />);
     expect(screen.getByRole("navigation", { name: "navigation.secondary" })).toBeInTheDocument();
