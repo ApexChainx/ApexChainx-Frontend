@@ -15,6 +15,7 @@
  */
 
 import { memo, useCallback, useId } from "react";
+import type { ReactElement } from "react";
 
 import Link from "next/link";
 
@@ -38,7 +39,7 @@ export interface SidebarGroupProps {
    * it, so a route change re-renders this group through props rather than
    * being swallowed by `React.memo`. Falls back to the router hook.
    */
-  pathname?: string | undefined;
+  pathname?: string | null | undefined;
   onLinkClick?: (href: string) => void;
 }
 
@@ -51,7 +52,7 @@ export const SidebarLinkGroup = memo(function SidebarGroup({
   onActiveLinkChange,
   pathname: pathnameProp,
   onLinkClick,
-}: SidebarGroupProps) {
+}: Readonly<SidebarGroupProps>): ReactElement {
   const { t } = useI18n();
   const pathnameFromRouter = usePathname();
   const pathname = pathnameProp ?? pathnameFromRouter;

@@ -19,12 +19,15 @@ import {
  */
 export type SidebarGroupId = "operations" | "administration";
 
+/** Sidebar consumers may read destinations, but must not mutate the catalogue. */
+export type SidebarLink = Readonly<NavLinkItem>;
+
 /** A titled, collapsible run of sidebar destinations. */
 export interface SidebarGroup {
   readonly id: SidebarGroupId;
   /** i18n key for the group heading, resolved at render time. */
   readonly titleKey: string;
-  readonly links: readonly NavLinkItem[];
+  readonly links: readonly SidebarLink[];
 }
 
 /**
@@ -46,8 +49,8 @@ function isAdministrationLink(link: NavLinkItem): boolean {
  */
 export function groupSidebarLinks(
   isAdmin: boolean,
-  links: readonly NavLinkItem[] = NAV_LINKS,
-): SidebarGroup[] {
+  links: readonly SidebarLink[] = NAV_LINKS,
+): readonly SidebarGroup[] {
   const visible = visibleNavLinks(isAdmin, [...links]);
 
   const operations = visible.filter((link) => !isAdministrationLink(link));
@@ -68,7 +71,7 @@ export function groupSidebarLinks(
 }
 
 /** Flatten the groups into the DOM-order list the keyboard handler walks. */
-export function flattenSidebarLinks(groups: readonly SidebarGroup[]): NavLinkItem[] {
+export function flattenSidebarLinks(groups: readonly SidebarGroup[]): readonly SidebarLink[] {
   return groups.flatMap((group) => [...group.links]);
 }
 

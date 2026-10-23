@@ -27,6 +27,12 @@ interface MockUser {
   role: string;
 }
 
+interface MockSession {
+  state: string;
+  user: MockUser;
+  logout: () => void;
+}
+
 const session = vi.hoisted(() => ({
   user: { id: "u1", email: "operator@apexchain.com", role: "admin" } as MockUser,
   /** Bumped to emulate a heartbeat: new session object, identical content. */
@@ -35,6 +41,11 @@ const session = vi.hoisted(() => ({
 
 const route = vi.hoisted(() => ({ current: "/outages" }));
 const i18n = vi.hoisted(() => ({ tCalls: 0 }));
+
+const { SessionContext } = await vi.hoisted(async () => {
+  const { createContext } = await import("react");
+  return { SessionContext: createContext<MockSession | null>(null) };
+});
 
 vi.mock("@/i18n/i18n", () => ({
   useI18n: () => {
@@ -50,12 +61,7 @@ vi.mock("@/i18n/i18n", () => ({
 }));
 
 vi.mock("@/hooks/useSession", async () => {
-  const { createContext, useContext } = await import("react");
-  const SessionContext = createContext<{
-    state: string;
-    user: MockUser;
-    logout: () => void;
-  } | null>(null);
+  const { useContext } = await import("react");
   return {
     // Mirrors the real hook, which reads the provider in `src/providers/session`.
     useSession: () => {
@@ -72,7 +78,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import Sidebar from "@/components/layout/Sidebar";
-import { SessionContext } from "@/hooks/useSession";
 import { SIDEBAR_LINK_ATTRIBUTE } from "@/components/layout/sidebar-items";
 
 /** The provider stack the root layout mounts the sidebar inside. */
@@ -82,8 +87,8 @@ function Shell({
   sessionVersion = session.sessionVersion,
 }: {
   children: ReactNode;
-  user?: MockUser;
-  sessionVersion?: number;
+  user?: MockUser | undefined;
+  sessionVersion?: number | undefined;
 }) {
   return (
     <SessionContext.Provider
