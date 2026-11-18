@@ -13,7 +13,7 @@ async function flushMicrotasks() {
 describe("debouncedCacheSet", () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   });
 
   afterEach(() => {
@@ -60,6 +60,7 @@ describe("debouncedCacheSet", () => {
 
     await vi.advanceTimersByTimeAsync(600);
 
+    await expect(write1).rejects.toThrow("Cancelled");
     const result = await persistedCache.get("key-1");
     expect(result).toBeNull();
   });

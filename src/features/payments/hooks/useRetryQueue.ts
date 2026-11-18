@@ -22,15 +22,8 @@ const OPTIMISTIC_PENDING_STATUS: PaymentStatus = "pending";
 
 export function useRetryQueue() {
   const queryClient = useQueryClient();
-  const refreshKey = useRef(0);
 
-  const filters = useMemo(
-    () => ({
-      ...DEFAULT_FILTERS,
-      _refreshKey: refreshKey.current,
-    }),
-    [],
-  );
+  const filters = useMemo(() => ({ ...DEFAULT_FILTERS }), []);
 
   const queryKey = useMemo(
     () => slaEventKeys.payments.list(filters as Record<string, unknown>),
@@ -79,7 +72,6 @@ export function useRetryQueue() {
   );
 
   const invalidatePayments = useCallback(() => {
-    refreshKey.current += 1;
     queryClient.invalidateQueries({ queryKey: slaEventKeys.payments.all });
   }, [queryClient]);
 

@@ -44,7 +44,10 @@ function mockStagedImport(recorded: BulkImportProgress[]) {
 }
 
 describe("BulkImportView", () => {
-  beforeEach(() => mockBulkImport.mockReset());
+  beforeEach(() => {
+    mockBulkImport.mockClear();
+    mockBulkImport.mockImplementation(async () => ({ imported: 0, skipped: 0, errors: [] }));
+  });
 
   it("renders upload area with disabled button", () => {
     render(<BulkImportView />);
@@ -187,7 +190,7 @@ describe("BulkImportView", () => {
   it("cancels an in-flight import from the strip and restores the submit button", async () => {
     let observedSignal: AbortSignal | null = null;
     mockBulkImport.mockImplementation(
-      async (_file: File, options?: { signal?: AbortSignal }) => {
+      async (_file: File, options?: { signal?: AbortSignal; onProgress?: (p: { stage: string; processed: number; total: number; percent: number }) => void }) => {
         observedSignal = options?.signal ?? null;
         options?.onProgress?.({ stage: "submitting", processed: 10, total: 100, percent: 50 });
         await new Promise((_, reject) => {

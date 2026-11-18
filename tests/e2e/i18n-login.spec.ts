@@ -9,7 +9,7 @@ import { mockApi } from "./mock-api";
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -30,7 +30,7 @@ test.describe("Locale persists onto the login and register screens", () => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Iniciar sesión" })).toBeVisible();
     await expect(page.getByText("Introduce tus credenciales para continuar.")).toBeVisible();
-    await expect(page.getByText("Correo electrónico")).toBeVisible();
+    await expect(page.locator("#main-content").getByText("Correo electrónico")).toBeVisible();
     await expect(page.getByText("Contraseña", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeVisible();
     await expect(page.getByText("¿No tienes cuenta?")).toBeVisible();

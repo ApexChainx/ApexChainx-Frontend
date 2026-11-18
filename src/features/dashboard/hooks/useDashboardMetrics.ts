@@ -30,6 +30,7 @@ export function useDashboardMetrics(filters: DashboardFilters = {}): DashboardMe
   const queryClient = useQueryClient();
   const hydratedRef = useRef(false);
   const [hydratedFromCache, setHydratedFromCache] = useState(false);
+  const [servedCachedFallback, setServedCachedFallback] = useState(false);
 
   const normalizedFilters = useMemo<DashboardFilters>(
     () => ({
@@ -78,12 +79,21 @@ export function useDashboardMetrics(filters: DashboardFilters = {}): DashboardMe
   const query = useQuery<DashboardMetrics, Error>({
     queryKey,
     queryFn: async () => {
-      const data = await fetchDashboardMetrics(normalizedFilters);
+      try {
+        const data = await fetchDashboardMetrics(normalizedFilters);
 
-      // Persist with debouncing
-      void debouncedCacheSet(cacheKeyStr, data, CACHE_TTL_MS, CACHE_WRITE_DEBOUNCE_MS);
+        // Persist with debouncing
+        void debouncedCacheSet(cacheKeyStr, data, CACHE_TTL_MS, CACHE_WRITE_DEBOUNCE_MS);
 
-      return data;
+        return data;
+      } catch (error) {
+        const cached = await persistedCache.get<DashboardMetrics>(cacheKeyStr);
+        if (cached) {
+          setServedCachedFallback(true);
+          return cached;
+        }
+        throw error;
+      }
     },
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
@@ -113,7 +123,8 @@ export function useDashboardMetrics(filters: DashboardFilters = {}): DashboardMe
   // operator should be told the figures are cached from the first failed
   // attempt rather than after the retry budget is exhausted.
   const isStaleSnapshot =
-    hydratedFromCache && query.data != null && (query.isError || query.failureCount > 0);
+    (hydratedFromCache && query.data != null && (query.isError || query.failureCount > 0)) ||
+    servedCachedFallback;
 
   return { ...query, isStaleSnapshot };
 }

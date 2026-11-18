@@ -22,7 +22,7 @@ const HEX_SECRET = /^[0-9a-f]{32,}$/;
 function renderSettings(secret?: string) {
   return render(
     <WebhookSettings
-      initialConfig={secret ? { url: "https://example.com/hook", secret, events: [] } : undefined}
+      {...(secret ? { initialConfig: { url: "https://example.com/hook", secret, events: [] } } : {})}
     />,
   );
 }

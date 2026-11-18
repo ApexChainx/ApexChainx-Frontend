@@ -9,7 +9,7 @@ test.describe("Registration flow", () => {
 
     // Sign up with a fresh account.
     await page.goto("/register");
-    await page.getByLabel("Email").fill("new-operator@example.com");
+    await page.getByLabel("Email", { exact: true }).fill("new-operator@example.com");
     await page.getByLabel("Password", { exact: true }).fill("password123");
     await page.getByLabel("Confirm password").fill("password123");
     await page.getByRole("button", { name: /Create account/i }).click();

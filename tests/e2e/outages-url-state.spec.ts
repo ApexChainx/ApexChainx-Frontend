@@ -13,7 +13,7 @@ import { mockApi } from "./mock-api";
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -38,7 +38,7 @@ test.describe("Outages list URL state (#638)", () => {
     // Navigate away and back, as an operator triaging an incident would.
     // Select the nav item by href rather than accessible name so the journey
     // does not depend on the active locale (the nav is fully translated).
-    await page.locator('a[href="/payments"]').click();
+    await page.locator('a[href="/payments"]').first().click();
     await expect(page).toHaveURL(/\/payments$/);
 
     await page.goBack();

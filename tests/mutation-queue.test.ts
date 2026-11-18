@@ -14,7 +14,7 @@ describe("mutationQueue", () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
     // Reset queue state
-    (mutationQueue as { state?: { queue: unknown[] } }).state = { queue: [], isReplaying: false };
+    (mutationQueue as unknown as { state: { queue: unknown[]; isReplaying: boolean } }).state = { queue: [], isReplaying: false };
   });
 
   afterEach(() => {
@@ -33,7 +33,7 @@ describe("mutationQueue", () => {
 
     const pending = mutationQueue.getPending();
     expect(pending).toHaveLength(1);
-    expect(pending[0].idempotencyKey).toBe("key-1");
+    expect(pending[0]?.idempotencyKey).toBe("key-1");
 
     await mutationQueue.replay();
 
@@ -58,7 +58,7 @@ describe("mutationQueue", () => {
     });
 
     expect(mutationQueue.getPending()).toHaveLength(1);
-    expect(mutationQueue.getPending()[0].payload).toEqual({ value: "second" });
+    expect(mutationQueue.getPending()[0]?.payload).toEqual({ value: "second" });
   });
 
   it("retries on failure up to max retries", async () => {
@@ -79,13 +79,13 @@ describe("mutationQueue", () => {
     await mutationQueue.replay();
     expect(executor).toHaveBeenCalledTimes(1);
     expect(mutationQueue.getPending()).toHaveLength(1);
-    expect(mutationQueue.getPending()[0].retries).toBe(1);
+    expect(mutationQueue.getPending()[0]?.retries).toBe(1);
 
     // Second attempt
     await mutationQueue.replay();
     expect(executor).toHaveBeenCalledTimes(2);
     expect(mutationQueue.getPending()).toHaveLength(1);
-    expect(mutationQueue.getPending()[0].retries).toBe(2);
+    expect(mutationQueue.getPending()[0]?.retries).toBe(2);
 
     // Third attempt (success)
     await mutationQueue.replay();
@@ -123,26 +123,26 @@ describe("mutationQueue", () => {
     await flushMicrotasks();
 
     // Read from IndexedDB directly
-    const cached = await persistedCache.get<{ queue: unknown[] }>("mutation-queue");
+    const cached = await persistedCache.get<unknown[]>("mutation-queue");
     expect(cached).toBeDefined();
-    expect(cached?.length).toBe(1);
+    expect(cached).toHaveLength(1);
   });
 
   it("loads queue from IndexedDB on init", async () => {
     // Pre-populate queue in IndexedDB
     await persistedCache.set("mutation-queue", [
-      { idempotencyKey: "loaded-key", type: "testType", payload: { value: "loaded" }, timestamp: Date.now(), retries: 0 },
+      { idempotencyKey: "loaded-key", type: "loadedType", payload: { value: "loaded" }, timestamp: Date.now(), retries: 0 },
     ], 0);
 
     await flushMicrotasks();
 
     // Re-initialize queue (simulates page reload)
-    (mutationQueue as { state?: { queue: unknown[] } }).state = { queue: [], isReplaying: false };
+    (mutationQueue as unknown as { state: { queue: unknown[]; isReplaying: boolean } }).state = { queue: [], isReplaying: false };
     await mutationQueue.init();
 
     const pending = mutationQueue.getPending();
     expect(pending).toHaveLength(1);
-    expect(pending[0].idempotencyKey).toBe("loaded-key");
+    expect(pending[0]?.idempotencyKey).toBe("loaded-key");
   });
 
   it("clears queue on logout", async () => {

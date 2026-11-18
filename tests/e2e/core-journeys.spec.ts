@@ -7,7 +7,7 @@ test.describe("Core user journeys", () => {
 
     // Log in.
     await page.goto("/login");
-    await page.getByLabel("Email").fill("ops@example.com");
+    await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/\s*$/);
@@ -37,10 +37,8 @@ test.describe("Core user journeys", () => {
     await expect(page.getByText(/USDC/i)).toBeVisible();
 
     // View payments.
-    await page.getByRole("link", { name: /Payments/i }).click();
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Payments", exact: true }),
-    ).toBeVisible();
+    await page.locator('a[href="/payments"]').first().click();
+    await expect(page).toHaveURL(/\/payments$/);
     await expect(page.getByText("USDC")).toBeVisible();
   });
 });

@@ -53,6 +53,11 @@ export interface CacheEntry<T = unknown> {
 let hydrationWarningEmitted = false;
 let structuredCloneErrorCount = 0;
 
+export function resetHydrationTelemetry(): void {
+  hydrationWarningEmitted = false;
+  structuredCloneErrorCount = 0;
+}
+
 export interface MemorySnapshot {
   data: unknown;
   expiresAt: number;
@@ -102,6 +107,14 @@ export function resetCacheMirror(): void {
   memoryMirror.clear();
 }
 
+function hasSentryCapture(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof (window as unknown as { Sentry?: { captureException?: unknown } }).Sentry
+      ?.captureException === "function"
+  );
+}
+
 function reportHydrationFailure(operation: string, key: string, error: unknown): void {
   const payload = {
     operation,
@@ -111,10 +124,10 @@ function reportHydrationFailure(operation: string, key: string, error: unknown):
   };
 
   // Report to Sentry if available
-  if (typeof window !== "undefined" && (window as { Sentry?: { captureException: (err: Error) => void } }).Sentry) {
+  if (hasSentryCapture()) {
     const sentryError = new Error(`IndexedDB ${operation} failed for key: ${key}`);
     sentryError.cause = error instanceof Error ? error : new Error(String(error));
-    (window as { Sentry: { captureException: (err: Error) => void } }).Sentry.captureException(sentryError);
+    (globalThis as unknown as { Sentry: { captureException: (err: Error) => void } }).Sentry.captureException(sentryError);
   }
 
   // One-time console warning
@@ -242,6 +255,7 @@ export const persistedCache = {
       });
       db.close();
     } catch (err) {
+      if (!hasSentryCapture()) console.warn("[persisted-cache] set failed:", err);
       reportHydrationFailure("set", fullKey, err);
     }
   },
@@ -288,7 +302,34 @@ export const persistedCache = {
       rememberSnapshot(fullKey, entry.data, entry.expiresAt);
       return entry.data;
     } catch (err) {
+      if (!hasSentryCapture()) console.warn("[persisted-cache] get failed:", err);
       reportHydrationFailure("get", fullKey, err);
+      return null;
+    }
+  },
+
+  /**
+   * Read a cached value even when its TTL has elapsed.
+   *
+   * Used by offline-first routes that would rather render last-known data with
+   * a stale indicator than blank the screen when the network is unavailable.
+   */
+  async getStale<T>(key: string): Promise<T | null> {
+    const fullKey = buildKey(key);
+    try {
+      const db = await openDb();
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.get(fullKey);
+      const entry = await new Promise<CacheEntry<T> | undefined>(
+        (resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        },
+      );
+      db.close();
+      return entry?.schemaVersion === CACHE_SCHEMA_VERSION ? entry.data : null;
+    } catch {
       return null;
     }
   },
@@ -310,6 +351,7 @@ export const persistedCache = {
       });
       db.close();
     } catch (err) {
+      if (!hasSentryCapture()) console.warn("[persisted-cache] del failed:", err);
       reportHydrationFailure("del", fullKey, err);
     }
   },
@@ -330,6 +372,7 @@ export const persistedCache = {
       });
       db.close();
     } catch (err) {
+      if (!hasSentryCapture()) console.warn("[persisted-cache] clear failed:", err);
       reportHydrationFailure("clear", "all", err);
     }
   },

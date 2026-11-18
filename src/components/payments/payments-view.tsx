@@ -99,9 +99,10 @@ export default function PaymentsView() {
     data,
     isFetching,
     isError,
+    error,
     refetch,
   } = useQuery({
-    queryKey: slaEventKeys.payments.list(filters),
+    queryKey: slaEventKeys.payments.list(filters as unknown as Record<string, unknown>),
     queryFn: () => fetchPayments(filters),
   });
 
@@ -134,8 +135,10 @@ export default function PaymentsView() {
     }
   }
 
-  const loading = isLoading;
-  const error = isError ? (queryError?.message ?? "Failed to load payments.") : null;
+  const loading = isFetching && !data;
+  const errorMessage = isError
+    ? (error instanceof Error ? error.message : "Failed to load payments.")
+    : null;
 
   return (
     <div className="space-y-4 p-6">

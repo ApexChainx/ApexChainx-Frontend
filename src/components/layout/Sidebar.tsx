@@ -87,6 +87,7 @@ function useIsDesktop(): boolean {
     // be tracked. Falling back to the static column is the safer default: it
     // never hides navigation behind a control that may not work.
     if (typeof window.matchMedia !== "function") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDesktop(true);
       return;
     }
@@ -229,7 +230,10 @@ function SidebarRoot({ defaultOpen = false, links: destinationLinks = NAV_LINKS 
   // Growing past the breakpoint turns the sidebar into a static column, so any
   // leftover drawer state must not keep it hidden.
   useEffect(() => {
-    if (isDesktop) setIsOpen(false);
+    if (isDesktop) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOpen(false);
+    }
   }, [isDesktop]);
 
   // Focus is trapped only while the drawer genuinely covers the page.

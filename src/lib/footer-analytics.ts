@@ -118,7 +118,7 @@ export function trackFooterEvent(
     category: "footer",
     message: event,
     level: "info",
-    data: safe,
+    data: safe as Record<string, unknown>,
   });
 
   if (!sink) return;

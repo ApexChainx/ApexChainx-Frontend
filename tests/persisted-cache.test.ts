@@ -207,6 +207,12 @@ describe("persistedCache", () => {
       const db = (globalThis as { indexedDB: IDBFactory }).indexedDB;
       const request = db.open("apexchain-cache", 2);
       await new Promise<void>((resolve, reject) => {
+        request.onupgradeneeded = () => {
+          const dbInstance = request.result;
+          if (!dbInstance.objectStoreNames.contains("query-cache")) {
+            dbInstance.createObjectStore("query-cache", { keyPath: "key" });
+          }
+        };
         request.onsuccess = () => {
           const dbInstance = request.result;
           const tx = dbInstance.transaction("query-cache", "readwrite");
@@ -236,6 +242,12 @@ describe("persistedCache", () => {
       const db = (globalThis as { indexedDB: IDBFactory }).indexedDB;
       const request = db.open("apexchain-cache", 2);
       await new Promise<void>((resolve, reject) => {
+        request.onupgradeneeded = () => {
+          const dbInstance = request.result;
+          if (!dbInstance.objectStoreNames.contains("query-cache")) {
+            dbInstance.createObjectStore("query-cache", { keyPath: "key" });
+          }
+        };
         request.onsuccess = () => {
           const dbInstance = request.result;
           const tx = dbInstance.transaction("query-cache", "readwrite");

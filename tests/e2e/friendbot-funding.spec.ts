@@ -9,9 +9,19 @@ test.describe("Friendbot funding (issue #620)", () => {
     // The settings page's Horizon health poller gates the fund button on
     // reachability — fulfil the probe so the button is enabled without
     // depending on external network access.
-    await page.route("**://horizon-testnet.stellar.org/**", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
-    );
+    await page.route(/https?:\/\/horizon-testnet\.stellar\.org(?:\/.*)?$/, (route) => {
+      console.log("HORIZON_ROUTE_HIT", route.request().url());
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: "{}",
+      });
+    },
+  );
+
+    page.on("request", (r) => { if (r.url().includes("horizon")) console.log("HORIZON_REQUEST", r.url()); });
+    page.on("requestfailed", (r) => { if (r.url().includes("horizon")) console.log("HORIZON_FAILED", r.url(), r.failure()?.errorText); });
 
     // Count friendbot hits at the network level so the "no request before
     // confirm" and "exactly one request" assertions are unconditional.
@@ -22,12 +32,12 @@ test.describe("Friendbot funding (issue #620)", () => {
 
     // Log in so the session is established before hitting /settings.
     await page.goto("/login");
-    await page.getByLabel("Email").fill("ops@example.com");
+    await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/\s*$/);
 
-    await page.goto("/settings");
+    await page.goto("/setting");
     await expect(
       page.getByRole("heading", { name: /settings and wallet control/i }),
     ).toBeVisible();

@@ -16,7 +16,7 @@ const CORRELATION_ID = "corr-e2e-606";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -35,6 +35,7 @@ async function failEndpoint(page: Page, endpoint: string): Promise<void> {
       contentType: "application/json",
       headers: {
         "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
         "Access-Control-Expose-Headers": "x-correlation-id",
         "x-correlation-id": CORRELATION_ID,
       },
@@ -64,7 +65,7 @@ test.describe("dashboard widget failures (#606)", () => {
     // ...while the healthy widget and the page shell stay on screen.
     await expect(page.getByRole("heading", { name: "SLA Compliance Trend" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Penalties vs Rewards Over Time" })).toBeVisible();
-    await expect(page.getByText("SLA Compliance")).toHaveCount(0);
+    await expect(page.getByText("SLA Compliance", { exact: true })).toHaveCount(0);
 
     const dashboardUrl = page.url();
 
@@ -72,7 +73,7 @@ test.describe("dashboard widget failures (#606)", () => {
     await page.unroute(KPI_ENDPOINT);
     await page.getByRole("button", { name: "Retry SLA metrics" }).click();
 
-    await expect(page.getByText("SLA Compliance")).toBeVisible();
+    await expect(page.getByText("SLA Compliance", { exact: true })).toBeVisible();
     await expect(page.getByText("Total Rewards")).toBeVisible();
     await expect(panel).toHaveCount(0);
 
@@ -95,7 +96,7 @@ test.describe("dashboard widget failures (#606)", () => {
     await expect(panel).toContainText(CORRELATION_ID);
 
     // The metrics tiles are unaffected by the chart failure.
-    await expect(page.getByText("SLA Compliance")).toBeVisible();
+    await expect(page.getByText("SLA Compliance", { exact: true })).toBeVisible();
     await expect(page.getByText("Total Penalties")).toBeVisible();
     await expect(page.getByRole("heading", { name: "SLA Compliance Trend" })).toHaveCount(0);
 

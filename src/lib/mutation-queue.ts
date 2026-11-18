@@ -42,12 +42,12 @@ interface MutationQueueState {
   isReplaying: boolean;
 }
 
-let state: MutationQueueState = {
+const state: MutationQueueState = {
   queue: [],
   isReplaying: false,
 };
 
-let subscribers = new Set<(queue: QueuedMutation[]) => void>();
+const subscribers = new Set<(queue: QueuedMutation[]) => void>();
 
 function notifySubscribers(): void {
   subscribers.forEach((cb) => cb(state.queue));
@@ -72,7 +72,7 @@ type MutationExecutor<T> = (payload: T) => Promise<void>;
 const executors = new Map<string, MutationExecutor<unknown>>();
 
 export function registerMutationExecutor<T>(type: string, executor: MutationExecutor<T>): void {
-  executors.set(type, executor);
+  executors.set(type, executor as MutationExecutor<unknown>);
 }
 
 export const mutationQueue = {
@@ -119,15 +119,20 @@ export const mutationQueue = {
     const existingIndex = state.queue.findIndex((m) => m.idempotencyKey === mutation.idempotencyKey);
     if (existingIndex >= 0) {
       // Update existing mutation with new payload (latest wins)
+      const existing = state.queue[existingIndex]!;
       state.queue[existingIndex] = {
-        ...state.queue[existingIndex],
-        payload: mutation.payload,
+        ...existing,
+        type: mutation.type,
+        idempotencyKey: mutation.idempotencyKey,
+        payload: mutation.payload as unknown,
         timestamp: Date.now(),
         retries: 0,
       };
     } else {
       state.queue.push({
-        ...mutation,
+        type: mutation.type,
+        idempotencyKey: mutation.idempotencyKey,
+        payload: mutation.payload as unknown,
         timestamp: Date.now(),
         retries: 0,
       });

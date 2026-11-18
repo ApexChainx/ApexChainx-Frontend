@@ -4,6 +4,9 @@ import { defaultExclude, defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    environmentOptions: {
+      jsdom: { url: "http://localhost/" },
+    },
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     // `*.spec.ts` files under tests/ are Playwright tests and must only be

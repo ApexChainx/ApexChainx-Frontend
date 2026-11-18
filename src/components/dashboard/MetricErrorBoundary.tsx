@@ -3,6 +3,7 @@
 
 import {
   Component,
+  Fragment,
   useEffect,
   useRef,
   type ErrorInfo,
@@ -26,11 +27,14 @@ export interface MetricErrorBoundaryProps {
   children: ReactNode;
   /** Re-runs the widget's data source when the operator retries. */
   onRetry?: () => void;
+  /** Changes when fresh data arrives; lets a successful retry clear the fallback. */
+  resetKey?: unknown;
   className?: string;
 }
 
 interface MetricErrorBoundaryState {
   error: Error | null;
+  retryNonce: number;
 }
 
 function MetricErrorFallback({
@@ -80,9 +84,9 @@ export class MetricErrorBoundary extends Component<
   MetricErrorBoundaryProps,
   MetricErrorBoundaryState
 > {
-  state: MetricErrorBoundaryState = { error: null };
+  state: MetricErrorBoundaryState = { error: null, retryNonce: 0 };
 
-  static getDerivedStateFromError(error: Error): MetricErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<MetricErrorBoundaryState> {
     return { error };
   }
 
@@ -94,10 +98,14 @@ export class MetricErrorBoundary extends Component<
     );
   }
 
+  componentDidUpdate(prevProps: MetricErrorBoundaryProps): void {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState((state) => ({ error: null, retryNonce: state.retryNonce + 1 }));
+    }
+  }
+
   private handleRetry = (): void => {
-    // Clear the error first so the children get another chance to render, then
-    // let the owner refresh the underlying widget.
-    this.setState({ error: null });
+    this.setState((state) => ({ error: null, retryNonce: state.retryNonce + 1 }));
     this.props.onRetry?.();
   };
 
@@ -109,12 +117,12 @@ export class MetricErrorBoundary extends Component<
           title={this.props.title}
           message={error.message || "This metric could not be displayed."}
           onRetry={this.handleRetry}
-          className={this.props.className}
+          {...(this.props.className ? { className: this.props.className } : {})}
         />
       );
     }
 
-    return this.props.children;
+    return <Fragment key={this.state.retryNonce}>{this.props.children}</Fragment>;
   }
 }
 

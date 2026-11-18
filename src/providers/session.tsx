@@ -193,10 +193,14 @@ export function SessionProvider({
    */
 
   const setAuthenticated = useCallback(
-    (sessionUser: SessionUser) => {
+    (sessionUser: SessionUser | null) => {
       wasAuthenticatedRef.current = true;
-      setSessionFlag(sessionUser.id);
-      userRef.current = sessionUser;
+      if (sessionUser) {
+        setSessionFlag(sessionUser.id);
+        userRef.current = sessionUser;
+      } else {
+        userRef.current = null;
+      }
       setUser(sessionUser);
       setState("authenticated");
     },

@@ -16,7 +16,7 @@ const CACHE_DB = "apexchain-cache";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -50,13 +50,12 @@ test.describe("Offline detail page and dashboard", () => {
     await page.waitForTimeout(750);
 
     // Offline phase: every /api/v1/outages/OUT-001 request is aborted
-    await page.route("**/api/v1/outages/OUT-001", (route) =>
+    await page.route(/\/api\/v1\/outages\/OUT-001(?:\?|$)/, (route) =>
       route.abort("internetdisconnected")
     );
 
     await page.reload();
 
-    // The cached outage detail still renders, straight from IndexedDB
     await expect(page.getByRole("heading", { name: /Outage OUT-001/i })).toBeVisible();
     await expect(page.getByText("Lagos Node 1")).toBeVisible();
 
@@ -71,13 +70,13 @@ test.describe("Offline detail page and dashboard", () => {
     // Load the dashboard online so the fetch populates IndexedDB
     await page.goto("/");
     await expect(page.getByRole("heading", { name: /SLA Analytics Dashboard/i })).toBeVisible();
-    await expect(page.getByText("SLA Compliance")).toBeVisible();
+    await expect(page.locator("#main-content").getByText("SLA Compliance", { exact: true })).toBeVisible();
 
     // Give the fire-and-forget IndexedDB write time to land
     await page.waitForTimeout(750);
 
     // Offline phase: every /api/v1/sla/analytics/dashboard request is aborted
-    await page.route("**/api/v1/sla/analytics/dashboard", (route) =>
+    await page.route(/\/api\/v1\/sla\/analytics\/dashboard(?:\?|$)/, (route) =>
       route.abort("internetdisconnected")
     );
 
@@ -85,7 +84,7 @@ test.describe("Offline detail page and dashboard", () => {
 
     // The cached dashboard still renders from IndexedDB
     await expect(page.getByRole("heading", { name: /SLA Analytics Dashboard/i })).toBeVisible();
-    await expect(page.getByText("SLA Compliance")).toBeVisible();
+    await expect(page.locator("#main-content").getByText("SLA Compliance", { exact: true })).toBeVisible();
 
     // Issue #605 — the tiles come from the persisted snapshot, so the page
     // must label them as cached rather than presenting them as live figures.
@@ -107,7 +106,7 @@ test.describe("Offline detail page and dashboard", () => {
     await page.waitForTimeout(750);
 
     // Go offline and advance time past TTL
-    await page.route("**/api/v1/outages/OUT-001", (route) =>
+    await page.route(/\/api\/v1\/outages\/OUT-001(?:\?|$)/, (route) =>
       route.abort("internetdisconnected")
     );
 

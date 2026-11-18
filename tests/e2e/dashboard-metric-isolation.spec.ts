@@ -17,7 +17,7 @@ const KPI_ENDPOINT = "**/api/v1/sla/analytics/dashboard";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -33,7 +33,10 @@ async function serveMalformedKpis(page: Page): Promise<void> {
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      headers: { "Access-Control-Allow-Origin": origin },
+      headers: {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Credentials": "true",
+        },
       body: JSON.stringify({
         total_outages: 5,
         total_violations: 1,
@@ -69,7 +72,7 @@ test.describe("dashboard metric isolation (#607)", () => {
     await expect(fallback).toContainText("Total Penalties unavailable");
 
     // The healthy tiles are all still on screen, next to the failing one.
-    await expect(page.getByText("SLA Compliance")).toBeVisible();
+    await expect(page.getByText("SLA Compliance", { exact: true })).toBeVisible();
     await expect(page.getByText("80.0%")).toBeVisible();
     await expect(page.getByText("Total Rewards")).toBeVisible();
     await expect(page.getByText("$40", { exact: true })).toBeVisible();

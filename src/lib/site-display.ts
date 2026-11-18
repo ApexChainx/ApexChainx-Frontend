@@ -43,7 +43,7 @@ export function getSiteDisplay(siteName: string): SiteDisplayConfig {
   const normalized = siteName.toLowerCase().trim();
   return SITE_DISPLAY_MAP[normalized] ?? {
     siteName,
-    displayTitle: siteName.charAt(0).toUpperCase() + siteName.slice(1).replace(/-/g, " "),
+    displayTitle: siteName.charAt(0).toUpperCase() + siteName.slice(1),
     shortCode: siteName.slice(0, 3).toUpperCase(),
   };
 }

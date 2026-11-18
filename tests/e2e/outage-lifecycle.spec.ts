@@ -7,7 +7,7 @@ test.describe("Full outage lifecycle journey", () => {
 
     // Log in
     await page.goto("/login");
-    await page.getByLabel("Email").fill("ops@example.com");
+    await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/\s*$/);
@@ -28,7 +28,7 @@ test.describe("Full outage lifecycle journey", () => {
     // 2. EDIT - Edit the outage
     await page.getByRole("button", { name: "Edit" }).click();
     await expect(page.getByRole("heading", { name: "Edit Outage" })).toBeVisible();
-    await page.getByPlaceholder("e.g. Lagos Node 1").fill("Full Lifecycle Test Site (Edited)");
+    await page.getByLabel("Site Name").fill("Full Lifecycle Test Site (Edited)");
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect(page.getByText("Full Lifecycle Test Site (Edited)")).toBeVisible();
 
@@ -38,7 +38,7 @@ test.describe("Full outage lifecycle journey", () => {
     await page.getByRole("button", { name: /Confirm resolution/i }).click();
     await expect(page.getByText(/Resolution Payment/i)).toBeVisible();
     await expect(page.getByText(/USDC/i)).toBeVisible();
-    await expect(page.getByText("Outage Resolved")).toBeVisible();
+    await expect(page.getByText("Outage resolved", { exact: true })).toBeVisible();
 
     // 4. VERIFY LIST INVALIDATION - Go back to list and verify the outage shows as resolved
     await page.goto("/outages");

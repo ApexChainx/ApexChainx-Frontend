@@ -106,8 +106,7 @@ export function useOutages(params: UseOutagesParams = {}) {
 
     // Seeded from the synchronous mirror; `initialDataUpdatedAt: 0` keeps it
     // stale so the network request still runs and the cache reconciles.
-    initialData: initialCachedData,
-    initialDataUpdatedAt: 0,
+    ...(initialCachedData ? { initialData: initialCachedData, initialDataUpdatedAt: 0 } : {}),
 
     queryFn: async ({ signal }) => {
       const data = await fetchOutages(normalizedParams as unknown as OutagesQuery, {

@@ -23,18 +23,22 @@ export function normalizeApiError(err: unknown): NormalizedApiError {
         detail?: string | { msg: string }[];
         message?: string;
         correlationId?: string;
+        correlation_id?: string;
         requestId?: string;
       };
       headers?: Record<string, string | null | undefined>;
     };
     message?: string;
+    correlationId?: string;
   };
 
   const status = e?.response?.status;
 
   const correlationId =
+    e?.correlationId ??
     e?.response?.headers?.["x-correlation-id"] ??
     e?.response?.data?.correlationId ??
+    e?.response?.data?.correlation_id ??
     e?.response?.data?.requestId;
 
   const rawDetail = e?.response?.data?.detail;
@@ -79,7 +83,10 @@ export class ApiError extends Error {
   public readonly originalError: unknown;
 
   constructor(normalized: NormalizedApiError, originalError?: unknown) {
-    super(normalized.message);
+    super(
+      normalized.message,
+      originalError === undefined ? undefined : { cause: originalError }
+    );
     this.name = "ApiError";
     this.kind = normalized.kind;
     this.status = normalized.status;
@@ -92,9 +99,9 @@ export class ApiError extends Error {
     }
   }
 
-  static fromError(err: unknown): ApiError {
+  static fromError(err: unknown, originalError: unknown = err): ApiError {
     const normalized = normalizeApiError(err);
-    return new ApiError(normalized, err);
+    return new ApiError(normalized, originalError);
   }
 }
 

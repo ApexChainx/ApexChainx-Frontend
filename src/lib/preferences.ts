@@ -124,6 +124,19 @@ export async function updatePreferences(
   // Notify subscribers
   subscribers.forEach((sub) => sub(currentPreferences));
 
+  if (mutationQueue.hasPending()) {
+    // A PUT replaces the whole preferences object, so supersede the queued
+    // snapshot with the newest state and replay it once instead of sending
+    // a redundant second write.
+    await mutationQueue.enqueue({
+      idempotencyKey: "sync-preferences",
+      type: "syncPreferences",
+      payload: currentPreferences,
+    });
+    await mutationQueue.replay();
+    return currentPreferences;
+  }
+
   try {
     // This fresh full-state write supersedes any queued snapshots (a PUT
     // replaces the whole preferences object), so drop them instead of
@@ -132,6 +145,7 @@ export async function updatePreferences(
     // rejected as CSRF-invalid otherwise) and is retried through the 401
     // refresh flow when the session expired mid-flight.
     await api.put(ENDPOINTS.preferences.base, currentPreferences);
+    await mutationQueue.remove("sync-preferences");
   } catch (e) {
     const status = (e as { response?: { status?: number } })?.response?.status;
     if (status === 401 || status === 403) {

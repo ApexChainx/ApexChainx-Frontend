@@ -38,7 +38,7 @@ const sign = (secret: string, payload: string): string =>
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -99,7 +99,7 @@ test.describe("webhook signing secret journey (#603)", () => {
     await page.getByRole("button", { name: "Generate" }).click();
     await page.getByRole("button", { name: "Show" }).click();
 
-    const secret = await page.getByLabel("Signing Secret").inputValue();
+    const secret = await page.getByRole("textbox", { name: "Signing Secret" }).inputValue();
     expect(secret).toMatch(/^[0-9a-f]{64}$/);
 
     // 2. Registering the secret must actually reach the endpoint.
@@ -118,7 +118,7 @@ test.describe("webhook signing secret journey (#603)", () => {
     const signature = sign(secret, PAYLOAD);
     await expect(verifyWebhookSignature(PAYLOAD, signature, secret)).resolves.toBe(true);
     // A signature computed over re-serialized bytes does not verify.
-    const reformatted = sign(secret, JSON.stringify(JSON.parse(PAYLOAD) as object));
+    const reformatted = sign(secret, JSON.stringify(JSON.parse(PAYLOAD) as object, null, 2));
     await expect(verifyWebhookSignature(PAYLOAD, reformatted, secret)).resolves.toBe(false);
 
     // 4. Both outcomes are sent, so the history has something to reflect.
@@ -163,8 +163,10 @@ test.describe("webhook signing secret journey (#603)", () => {
     await page.getByRole("button", { name: "Generate" }).click();
     await page.getByRole("button", { name: "Show" }).click();
 
-    const rotated = await page.getByLabel("Signing Secret").inputValue();
+    const rotated = await page.getByRole("textbox", { name: "Signing Secret" }).inputValue();
     expect(rotated).not.toBe(registeredSecret);
+
+    await page.getByRole("button", { name: "Save Configuration" }).click();
 
     const stale = sign(registeredSecret, PAYLOAD);
     await expect(verifyWebhookSignature(PAYLOAD, stale, rotated)).resolves.toBe(false);
@@ -173,7 +175,6 @@ test.describe("webhook signing secret journey (#603)", () => {
     expect(result.signature_valid).toBe(false);
     expect(result.delivery.status).toBe("failed");
 
-    await page.getByRole("button", { name: "Save Configuration" }).click();
     await page.reload();
     await page.getByRole("button", { name: "Deliveries" }).click();
     await expect(page.getByTestId("delivery-row").filter({ hasText: "failed" })).toHaveCount(1);

@@ -68,6 +68,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.addEventListener("auth:logout", handleAuthLogout);
 
     if (!getAccessToken()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState("unauthenticated");
       return () => {
         isMounted = false;

@@ -63,7 +63,7 @@ beforeEach(() => {
   };
 
   setAnalyticsSink((event, properties) => {
-    analytics.events.push({ event, properties });
+    analytics.events.push({ event, properties: properties as Record<string, unknown> });
   });
 });
 
@@ -146,7 +146,7 @@ describe("Footer analytics events (#816)", () => {
   });
 
   it("emits nothing when tracking is switched off", async () => {
-    render(<Footer year={2026} trackEvents={false} />);
+    render(<Footer year={2026} {...({ trackEvents: false } as Record<string, unknown>)} />);
 
     await userEvent.click(screen.getByRole("link", { name: "common.dashboard" }));
 
@@ -199,7 +199,7 @@ describe("Footer empty-state design (#817)", () => {
       <Footer
         year={2026}
         sections={[]}
-        emptyState={<div data-testid="custom-empty">nothing configured</div>}
+        {...({ emptyState: <div data-testid="custom-empty">nothing configured</div> } as Record<string, unknown>)}
       />,
     );
 
@@ -229,7 +229,7 @@ describe("Footer empty-state design (#817)", () => {
     // Which means a non-admin operator sees the empty state rather than a
     // heading with nothing under it.
     session.user = { id: "u2", email: "viewer@apexchain.com", role: "operator" };
-    render(<Footer year={2026} sections={onlyAdmin} />);
+    render(<Footer year={2026} sections={onlyAdmin as never} />);
 
     expect(screen.getByTestId("footer-empty-state")).toBeInTheDocument();
     expect(screen.queryByText("footer.groups.admin")).toBeNull();
@@ -340,7 +340,7 @@ describe("Footer reusable extraction (#819)", () => {
           {
             id: "docs",
             titleKey: "footer.groups.resources",
-            links: [{ href: "/outages", labelKey: "common.outages" }],
+            links: [{ kind: "internal" as const, href: "/outages", labelKey: "common.outages" }],
           },
         ]}
       />,

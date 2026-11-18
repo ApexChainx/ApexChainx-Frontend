@@ -10,24 +10,27 @@
  * stays a pure composition of feature modules.
  */
 import { useEffect, useState } from "react";
+import {
+  getThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from "@/lib/theme-storage";
 
 // ─── Theme settings ──────────────────────────────────────────────────────────
 export function AppearanceSettings() {
-  const [theme, setTheme] = useState<string>("system");
+  const [theme, setTheme] = useState<ThemePreference>("system");
 
   // Initialize theme from localStorage
   useEffect(() => {
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme) {
-      setTheme(storedTheme);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTheme(getThemePreference());
   }, []);
 
   // Update theme when it changes
   useEffect(() => {
     const root = document.documentElement;
 
-    function applyTheme(currentTheme: string) {
+    function applyTheme(currentTheme: ThemePreference) {
       if (currentTheme === 'dark') {
         root.classList.add('dark');
       } else if (currentTheme === 'light') {
@@ -44,7 +47,6 @@ export function AppearanceSettings() {
     }
 
     applyTheme(theme);
-    localStorage.setItem('theme', theme);
 
     // Listen for system preference changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -60,13 +62,18 @@ export function AppearanceSettings() {
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, [theme]);
 
+  function selectTheme(value: ThemePreference) {
+    setThemePreference(value);
+    setTheme(value);
+  }
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-900 p-6 shadow-sm">
       <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Appearance Settings</h2>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Customize your visual theme preference.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <button
-          onClick={() => setTheme("light")}
+          onClick={() => selectTheme("light")}
           className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
             theme === "light"
               ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
@@ -79,7 +86,7 @@ export function AppearanceSettings() {
           <span className="text-sm font-medium text-slate-900 dark:text-white">Light</span>
         </button>
         <button
-          onClick={() => setTheme("dark")}
+          onClick={() => selectTheme("dark")}
           className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
             theme === "dark"
               ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
@@ -92,7 +99,7 @@ export function AppearanceSettings() {
           <span className="text-sm font-medium text-slate-900 dark:text-white">Dark</span>
         </button>
         <button
-          onClick={() => setTheme("system")}
+          onClick={() => selectTheme("system")}
           className={`flex flex-col items-center gap-3 rounded-lg border-2 p-4 transition-all ${
             theme === "system"
               ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"

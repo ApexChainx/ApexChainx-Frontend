@@ -115,7 +115,7 @@ function PaymentCells({ payment, cell, width }: { payment: Payment; cell: string
           {payment.type}
         </span>
       </td>
-      <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-600" : "text-green-600"}`} style={style}>
+      <td className={`${cell} font-semibold ${payment.type === "penalty" ? "text-red-600" : "text-green-700"}`} style={style}>
         {payment.type === "penalty" ? "-" : "+"}${payment.amount.toLocaleString()}
       </td>
       <td className={`${cell} text-gray-600`} style={style}>

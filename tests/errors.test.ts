@@ -66,7 +66,7 @@ describe("ApiError", () => {
     const original = new Error("network error");
     const apiError = ApiError.fromError(
       error(500, { message: "Server error" }, "network error"),
-      original
+      original,
     );
     expect(apiError.originalError).toBe(original);
     expect(apiError.cause).toBe(original);

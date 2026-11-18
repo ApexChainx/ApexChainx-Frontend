@@ -155,6 +155,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
   // Clear stale action feedback whenever the drawer switches to another payment.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActionState(null);
   }, [paymentId]);
 
@@ -233,7 +234,7 @@ export function PaymentDetailDrawer({ paymentId, onClose }: Props) {
 
   const isActionLoading = actionState?.status === "loading";
   const amountPrefix = payment?.type === "penalty" ? "-" : "+";
-  const amountColor = payment?.type === "penalty" ? "text-red-600" : "text-green-600";
+  const amountColor = payment?.type === "penalty" ? "text-red-600" : "text-green-700";
 
   return (
     <>

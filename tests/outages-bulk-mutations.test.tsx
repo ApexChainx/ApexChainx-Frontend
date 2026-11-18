@@ -55,7 +55,7 @@ const createOutage = (overrides: Partial<{
   site_name: overrides.site_name ?? "Test Site",
   status: overrides.status ?? "open",
   createdAt: overrides.createdAt ?? "2026-03-27T08:00:00.000Z",
-  assigned_to: overrides.assigned_to,
+  ...(overrides.assigned_to === undefined ? {} : { assigned_to: overrides.assigned_to }),
 });
 
 describe("OutagesPageClient bulk mutations", () => {

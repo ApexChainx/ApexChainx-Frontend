@@ -36,7 +36,8 @@ export function debouncedCacheSet<T>(
   debounceMs = DEFAULT_DEBOUNCE_MS
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Store the latest write for this key
+    // A superseded write is settled now; only the latest value reaches storage.
+    pendingWrites.get(key)?.resolve();
     pendingWrites.set(key, { key, data, ttlMs, resolve, reject });
 
     // Schedule flush

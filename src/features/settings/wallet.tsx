@@ -64,6 +64,23 @@ interface WalletSettingsContextValue {
 
 const WalletSettingsContext = createContext<WalletSettingsContextValue | null>(null);
 
+
+
+function WalletEmptyState(props: { testId?: string; title?: string; description?: string; hint?: string; actionLabel?: string; onAction?: () => void }) {
+  const text = props.description ?? props.hint;
+  return (
+    <div data-testid={props.testId} className="rounded-xl border border-dashed border-slate-300 p-6 text-center">
+      <h3 className="text-sm font-semibold text-slate-900">{props.title ?? "No wallets connected"}</h3>
+      {text ? <p className="mt-1 text-sm text-slate-500">{text}</p> : null}
+      {props.onAction && props.actionLabel ? (
+        <button type="button" onClick={props.onAction} className="mt-3 rounded-lg border px-3 py-1.5 text-sm">
+          {props.actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function useWalletSettings(): WalletSettingsContextValue {
   const ctx = useContext(WalletSettingsContext);
   if (!ctx) {
@@ -97,6 +114,7 @@ export function WalletSettingsProvider({ children }: { children: ReactNode }) {
   // did when the page was a single component (Issue #615).
   useEffect(() => {
     if (!currentUser?.id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWalletForm((current) =>
       current.user_id === currentUser.id ? current : { ...current, user_id: currentUser.id },
     );

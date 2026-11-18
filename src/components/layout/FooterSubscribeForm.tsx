@@ -106,7 +106,7 @@ export function FooterSubscribeForm({ onSubscribe }: FooterSubscribeFormProps) {
           }}
           aria-invalid={errorCode !== null}
           aria-describedby={errorMessage ? errorId : `${fieldId}-hint`}
-          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:outline-blue-400"
+          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:outline-blue-400"
         />
 
         <button

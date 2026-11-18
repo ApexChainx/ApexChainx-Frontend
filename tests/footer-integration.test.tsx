@@ -17,7 +17,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import type { ReactNode } from "react";
+import type { Context, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface MockUser {
@@ -71,7 +71,13 @@ vi.mock("@/hooks/useSession", async () => {
 vi.mock("@/lib/explorer", () => ({ STELLAR_NETWORK: "testnet" }));
 
 import Footer from "@/components/layout/Footer";
-import { SessionContext } from "@/hooks/useSession";
+import * as sessionModule from "@/hooks/useSession";
+
+const SessionContext = (
+  sessionModule as unknown as {
+    SessionContext: Context<{ state: string; user: MockUser; logout: () => void } | null>;
+  }
+).SessionContext;
 
 /** The provider stack the root layout mounts the footer inside. */
 function Shell({
@@ -80,8 +86,8 @@ function Shell({
   sessionVersion = session.sessionVersion,
 }: {
   children: ReactNode;
-  user?: MockUser;
-  sessionVersion?: number;
+  user?: MockUser | undefined;
+  sessionVersion?: number | undefined;
 }) {
   return (
     <SessionContext.Provider

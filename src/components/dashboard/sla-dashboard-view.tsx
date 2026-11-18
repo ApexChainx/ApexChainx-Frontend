@@ -5,6 +5,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
+import DashboardWidgetError from "@/components/dashboard/DashboardWidgetError";
 import KPICard from "@/components/dashboard/KPICard";
 import MetricErrorBoundary from "@/components/dashboard/MetricErrorBoundary";
 import PenaltiesRewardsChart from "@/components/dashboard/PenaltiesRewardsChart";
@@ -12,9 +13,11 @@ import SLATrendChart from "@/components/dashboard/SLATrendChart";
 import { RouteErrorState, RouteLoadingState } from "@/components/ui/route-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
+  fetchDashboardKpis,
   fetchDashboardMetrics,
   fetchDashboardTrends,
   type DashboardFilters,
+  type DashboardKpis,
 } from "@/services/dashboardService";
 import { useDashboardMetrics } from "@/features/dashboard/hooks/useDashboardMetrics";
 import { slaEventKeys } from "@/lib/query-keys";
@@ -179,7 +182,15 @@ export default function SLADashboardView() {
   // the shared factory, writes successful snapshots to IndexedDB, and hydrates
   // them on mount so the landing page survives an offline reload.
   const primary = useDashboardMetrics(filters);
-  const retryMetrics = useCallback(() => void primary.refetch(), [primary]);
+  const kpis = useQuery<DashboardKpis, Error>({
+    queryKey: slaEventKeys.dashboardKpis(filters),
+    queryFn: () => fetchDashboardKpis(filters),
+    staleTime: 30_000,
+    retry: 2,
+  });
+  const retryMetrics = useCallback(() => {
+    void Promise.all([primary.refetch(), kpis.refetch()]);
+  }, [primary, kpis]);
 
   const trends = useQuery<TrendPoint[], Error>({
     queryKey: slaEventKeys.dashboardTrends(filters),
@@ -229,7 +240,15 @@ export default function SLADashboardView() {
     router.push(`/payments?${params.toString()}`);
   }, [router]);
 
-  if (primary.isLoading && !primary.data) {
+  const metrics: DashboardMetrics | null =
+    primary.data ??
+    (kpis.data
+      ? { ...kpis.data, trends: trends.data ?? [] }
+      : null);
+
+  const hasWidgetFailure = Boolean(kpis.error || trends.error);
+
+  if (primary.isLoading && !primary.data && !hasWidgetFailure) {
     return (
       <RouteLoadingState
         title="Loading dashboard"
@@ -241,7 +260,7 @@ export default function SLADashboardView() {
   // With no data at all there is nothing to isolate — hand off to the route
   // error state. A snapshot-backed render falls through to the tiles below and
   // is flagged as stale instead.
-  if (!primary.data) {
+  if (!metrics && !hasWidgetFailure) {
     return (
       <RouteErrorState
         title="Dashboard unavailable"
@@ -251,8 +270,7 @@ export default function SLADashboardView() {
     );
   }
 
-  const metrics = primary.data;
-  const lastUpdated = primary.dataUpdatedAt
+  const lastUpdated = primary.dataUpdatedAt || kpis.dataUpdatedAt
     ? new Date(primary.dataUpdatedAt).toLocaleString()
     : "Not synced yet";
   const cmp = compareModeActive && secondary.data ? secondary.data : null;
@@ -269,7 +287,7 @@ export default function SLADashboardView() {
             Issue #605 — the tiles below come from the persisted snapshot rather
             than a live request, so say so instead of presenting it as current.
           */}
-          {primary.isStaleSnapshot ? (
+          {(primary.isStaleSnapshot || (kpis.data != null && kpis.isError)) ? (
             <span
               data-testid="dashboard-snapshot-badge"
               className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800"
@@ -287,7 +305,7 @@ export default function SLADashboardView() {
         >
           {compareModeActive ? "Exit Compare" : "Compare"}
         </button>
-          <button onClick={() => exportSnapshot(metrics)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Export</button>
+          <button onClick={() => metrics && exportSnapshot(metrics)} disabled={!metrics} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">Export</button>
           <button onClick={retryMetrics} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Refresh</button>
         </div>
       </div>
@@ -325,23 +343,63 @@ export default function SLADashboardView() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="dashboard-kpis">
-        <MetricErrorBoundary title="SLA Compliance" onRetry={retryMetrics}>
-          <ComplianceTile metrics={metrics} comparison={cmp} />
-        </MetricErrorBoundary>
-        <MetricErrorBoundary title="Total Penalties" onRetry={retryMetrics}>
-          <PenaltiesTile metrics={metrics} comparison={cmp} />
-        </MetricErrorBoundary>
-        <MetricErrorBoundary title="Total Rewards" onRetry={retryMetrics}>
-          <RewardsTile metrics={metrics} comparison={cmp} />
-        </MetricErrorBoundary>
-        <MetricErrorBoundary title="Net Balance" onRetry={retryMetrics}>
-          <NetBalanceTile metrics={metrics} comparison={cmp} />
-        </MetricErrorBoundary>
+        {kpis.error ? (
+          <DashboardWidgetError
+            title="SLA metrics"
+            error={kpis.error}
+            onRetry={retryMetrics}
+            isRetrying={kpis.isFetching}
+            className="sm:col-span-2 lg:col-span-4"
+          />
+        ) : metrics ? (
+          <>
+            <MetricErrorBoundary
+              title="SLA Compliance"
+              onRetry={retryMetrics}
+              resetKey={primary.dataUpdatedAt || kpis.dataUpdatedAt}
+            >
+              <ComplianceTile metrics={metrics} comparison={cmp} />
+            </MetricErrorBoundary>
+            <MetricErrorBoundary
+              title="Total Penalties"
+              onRetry={retryMetrics}
+              resetKey={primary.dataUpdatedAt || kpis.dataUpdatedAt}
+            >
+              <PenaltiesTile metrics={metrics} comparison={cmp} />
+            </MetricErrorBoundary>
+            <MetricErrorBoundary
+              title="Total Rewards"
+              onRetry={retryMetrics}
+              resetKey={primary.dataUpdatedAt || kpis.dataUpdatedAt}
+            >
+              <RewardsTile metrics={metrics} comparison={cmp} />
+            </MetricErrorBoundary>
+            <MetricErrorBoundary
+              title="Net Balance"
+              onRetry={retryMetrics}
+              resetKey={primary.dataUpdatedAt || kpis.dataUpdatedAt}
+            >
+              <NetBalanceTile metrics={metrics} comparison={cmp} />
+            </MetricErrorBoundary>
+          </>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
-        <PenaltiesRewardsChart data={metrics.trends} onPenaltyClick={onPenaltyClick} onRewardClick={onRewardClick} />
+        {trends.error ? (
+          <DashboardWidgetError
+            title="Trend charts"
+            error={trends.error}
+            onRetry={retryMetrics}
+            isRetrying={trends.isFetching}
+            className="lg:col-span-2"
+          />
+        ) : metrics ? (
+          <>
+            <SLATrendChart data={metrics.trends} onPointClick={onTrendClick} />
+            <PenaltiesRewardsChart data={metrics.trends} onPenaltyClick={onPenaltyClick} onRewardClick={onRewardClick} />
+          </>
+        ) : null}
       </div>
 
       {cmp && cmp.trends.length > 0 ? (

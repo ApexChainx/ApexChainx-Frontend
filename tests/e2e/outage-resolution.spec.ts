@@ -9,7 +9,7 @@ test.describe("Outage resolution flow", () => {
 
     // Log in so the session is established before hitting protected pages.
     await page.goto("/login");
-    await page.getByLabel("Email").fill("ops@example.com");
+    await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
     await page.getByLabel("Password").fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/\s*$/);

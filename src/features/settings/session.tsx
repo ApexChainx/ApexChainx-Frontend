@@ -20,6 +20,7 @@ import { ENDPOINTS } from "@/lib/endpoints";
 
 import { useSettingsNotifications } from "./notifications";
 import type { AuthSessionResponse, AuthUser } from "./types";
+import type { SessionUser } from "@/types/session";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getErrorMessage(error: unknown) {
@@ -42,7 +43,7 @@ interface AuthLoginForm {
 // ─── Context ─────────────────────────────────────────────────────────────────
 interface SessionSettingsContextValue {
   sessionState: string;
-  sessionUser: AuthUser | null;
+  sessionUser: SessionUser | null;
   logout: () => Promise<{ serverRevoked: boolean }>;
   session: AuthSessionResponse | null;
   currentUser: AuthUser | null;
@@ -151,7 +152,7 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
     try {
       const response = await api.post<AuthUser>(ENDPOINTS.auth.register, registerForm);
       setCurrentUser(response.data);
-      setFeedback("Account registered successfully.");
+      notifyFeedback("Account registered successfully.");
     } catch (issue) {
       notifyError(getErrorMessage(issue));
     }
@@ -165,7 +166,7 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
       const response = await api.post<AuthSessionResponse>(ENDPOINTS.auth.login, loginForm);
       setSession(response.data);
       setCurrentUser(response.data.user);
-      setFeedback("Signed in successfully.");
+      notifyFeedback("Signed in successfully.");
     } catch (issue) {
       notifyError(getErrorMessage(issue));
     }
@@ -187,7 +188,7 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
         },
       });
       setCurrentUser(response.data);
-      setFeedback("Session refreshed from the backend.");
+      notifyFeedback("Session refreshed from the backend.");
     } catch (issue) {
       notifyError(getErrorMessage(issue));
     }
@@ -197,7 +198,7 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
     if (!session?.access_token) {
       setSession(null);
       setCurrentUser(null);
-      setFeedback("Local session cleared.");
+      notifyFeedback("Local session cleared.");
       return;
     }
 
@@ -216,17 +217,11 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
       );
       setSession(null);
       setCurrentUser(null);
-      setFeedback("Logged out successfully.");
+      notifyFeedback("Logged out successfully.");
     } catch (issue) {
       notifyError(getErrorMessage(issue));
     }
   }, [api, session?.access_token, notifyError, notifyFeedback]);
-
-  // Local feedback setter that reports to the page-level banner.
-  const setFeedback = useCallback(
-    (message: string) => notifyFeedback(message),
-    [notifyFeedback],
-  );
 
   const value = useMemo<SessionSettingsContextValue>(
     () => ({
@@ -269,7 +264,6 @@ export function SessionSettingsProvider({ children }: { children: ReactNode }) {
       handleLogin,
       handleLoadSession,
       handleLogout,
-      setFeedback,
     ],
   );
 

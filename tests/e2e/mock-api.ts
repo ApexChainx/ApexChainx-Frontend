@@ -616,13 +616,14 @@ export async function mockApi(
     }
 
     if (method === "POST" && path === "/api/v1/webhooks") {
-      const body = request.postDataJSON() as { url?: string; events?: string[] };
+      const body = request.postDataJSON() as { url?: string; events?: string[]; secret?: string };
       const created = {
         id: `WEB-${webhooks.length + 1}`,
         url: body.url ?? "https://example.com/hook",
         events: body.events ?? [],
         active: true,
         created_at: new Date().toISOString(),
+        secret: body.secret ?? "test-webhook-secret",
       };
       webhooks.push(created);
       return json(201, created);

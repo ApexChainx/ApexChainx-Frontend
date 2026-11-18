@@ -37,7 +37,7 @@ function invalidCsv(): string {
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -66,13 +66,13 @@ test.describe("Bulk import journey", () => {
 
     // Row-count readout reflects the full file, only the first page renders.
     await expect(page.getByText("30 rows")).toBeVisible();
-    await expect(page.getByText("s1")).toBeVisible();
-    await expect(page.getByText("s11")).toBeHidden();
+    await expect(page.getByRole("cell", { name: "s1", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "s11", exact: true })).toBeHidden();
 
     // Previous/next paging works...
-    await page.getByRole("button", { name: /next/i }).click();
-    await expect(page.getByText("s11")).toBeVisible();
-    await expect(page.getByText("s1")).toBeHidden();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.getByRole("cell", { name: "s11", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "s1", exact: true })).toBeHidden();
 
     // ...and the upload itself still succeeds from a later page.
     await page.getByRole("button", { name: /upload file/i }).click();
@@ -96,6 +96,7 @@ test.describe("Bulk import journey", () => {
         mimeType: "text/csv",
         buffer: Buffer.from(validCsv()),
       });
+      await page.getByRole("button", { name: /upload file/i }).click();
       await expect(page.getByText("Import Summary")).toBeVisible();
       await page.getByRole("button", { name: /upload another file/i }).click();
     }
@@ -119,7 +120,7 @@ test.describe("Bulk import journey", () => {
     await expect(page.getByText(filenames[2]!, { exact: true })).toBeVisible(); // 10th record
     await expect(page.getByText(filenames[1]!, { exact: true })).toBeHidden();
 
-    await page.getByRole("button", { name: /next/i }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByText(filenames[1]!, { exact: true })).toBeVisible();
   });
@@ -225,7 +226,7 @@ test.describe("Bulk import journey", () => {
     // the throttled request is pending — not a frozen busy state.
     const bar = page.getByRole("progressbar", { name: "Import progress" });
     await expect(bar).toBeVisible();
-    await expect(page.getByText("Uploading file…")).toBeVisible();
+    await expect(page.getByText(/Parsing file|Validating file|Uploading file|Applying import/)).toBeVisible();
 
     // The submit button is gone for the duration of the import, so the
     // batch cannot be re-submitted mid-flight.

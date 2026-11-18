@@ -5,7 +5,7 @@ import { locales, defaultLocale, localeNames } from "@/i18n/config";
 async function getLocaleFromCookie(): Promise<string> {
   const cookieStore = await headers();
   const localeCookie = cookieStore.get("preferred-locale");
-  if (localeCookie && locales.includes(localeCookie as any)) {
+  if (localeCookie && (locales as readonly string[]).includes(localeCookie)) {
     return localeCookie;
   }
   return defaultLocale;

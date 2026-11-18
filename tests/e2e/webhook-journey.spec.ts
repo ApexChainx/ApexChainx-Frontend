@@ -16,7 +16,7 @@ const DELETE_PHRASE = "delete webhook";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -53,7 +53,7 @@ test.describe("Webhook CRUD journey (#598)", () => {
 
     // The seeded delivery renders in the endpoint's history.
     await page.getByRole("button", { name: "Deliveries" }).click();
-    await expect(page.getByText("failed")).toBeVisible();
+    await expect(page.getByTestId("delivery-row").getByText("failed", { exact: true })).toBeVisible();
     await expect(page.getByText("HTTP 500")).toBeVisible();
     await page.getByRole("button", { name: "Hide deliveries" }).click();
 
@@ -72,7 +72,7 @@ test.describe("Webhook CRUD journey (#598)", () => {
       .getByPlaceholder("https://example.com/webhook")
       .fill("https://edited.example.com/hook");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("https://edited.example.com/hook")).toBeVisible();
+    await expect(page.getByText("https://edited.example.com/hook").first()).toBeVisible();
 
     // Delete (#599) — nothing fires until the exact phrase is typed.
     await page.getByRole("button", { name: "Delete" }).first().click();
@@ -87,7 +87,7 @@ test.describe("Webhook CRUD journey (#598)", () => {
     await expect(confirm).toBeEnabled();
     await confirm.click();
 
-    await expect(page.getByText("https://edited.example.com/hook")).not.toBeVisible();
+    await expect(page.getByText("https://edited.example.com/hook")).toHaveCount(0);
     await expect(page.getByText("https://new.example.com/hook")).toBeVisible();
   });
 });

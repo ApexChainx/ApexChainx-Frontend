@@ -18,12 +18,16 @@ import {
   setOutageDetailCache,
 } from "@/features/outages/hooks/outage-cache";
 import { useDocumentVisibility } from "@/hooks/useDocumentVisibility";
+import { debouncedCacheSet } from "@/lib/debounced-cache";
+import { persistedCache } from "@/lib/persisted-cache";
 import { getOutage, resolveOutage, updateOutage, deleteOutage } from "@/services/outages";
 import { explorerLink } from "@/lib/explorer";
 import type { Outage, OutageResolutionPayment, OutageUpdate, Severity, OutageStatus } from "@/types/outages";
 
 /** How often an unresolved outage is re-fetched while the tab is in front. */
 const DETAIL_POLL_INTERVAL_MS = 15_000;
+const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const DETAIL_CACHE_WRITE_DEBOUNCE_MS = 500;
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Failed to load outage";
@@ -81,6 +85,7 @@ export default function OutageDetailsPage() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
 
@@ -95,6 +100,12 @@ export default function OutageDetailsPage() {
         // any other consumer of `slaEventKeys.outages.detail(id)` sees the
         // same object.
         setOutageDetailCache(queryClient, data);
+        void debouncedCacheSet(
+          `outage-detail:${id}`,
+          data,
+          DETAIL_CACHE_TTL_MS,
+          DETAIL_CACHE_WRITE_DEBOUNCE_MS,
+        );
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -108,8 +119,23 @@ export default function OutageDetailsPage() {
         ) {
           removeOutageFromCache(queryClient, id);
         }
-        setError(getErrorMessage(err));
-        setLoading(false);
+        void persistedCache
+          .getStale<Outage>(`outage-detail:${id}`)
+          .then((cached) => {
+            if (!mounted) return;
+            if (cached) {
+              setOutage(cached);
+              setError(null);
+            } else {
+              setError(getErrorMessage(err));
+            }
+            setLoading(false);
+          })
+          .catch(() => {
+            if (!mounted) return;
+            setError(getErrorMessage(err));
+            setLoading(false);
+          });
       });
 
     return () => {
@@ -333,8 +359,9 @@ export default function OutageDetailsPage() {
           <CardContent className="space-y-4 text-sm">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block font-medium text-slate-700">Site Name</label>
+                <label htmlFor="edit-site-name" className="mb-1 block font-medium text-slate-700">Site Name</label>
                 <input
+                  id="edit-site-name"
                   className="w-full rounded-md border border-slate-200 px-3 py-2"
                   value={editForm.site_name ?? ""}
                   onChange={(e) => setEditForm((f) => ({ ...f, site_name: e.target.value }))}
@@ -591,7 +618,7 @@ export default function OutageDetailsPage() {
                     <span className="absolute -left-[1.35rem] top-1 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" />
                     <p className="text-sm font-medium text-slate-900">{event.label}</p>
                     <p className="text-xs text-slate-500">{new Date(event.time).toLocaleString()}</p>
-                    {event.note && <p className="mt-0.5 text-xs text-slate-400">{event.note}</p>}
+                    {event.note && <p className="mt-0.5 text-xs text-slate-500">{event.note}</p>}
                   </li>
                 ))}
               </ol>
@@ -757,7 +784,7 @@ function OutageLocationMap({
         style={{ paddingBottom: "40%" }}
       >
         {/* Fallback layer — visible whenever the iframe fails to paint. */}
-        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-400">
+        <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-500">
           Map unavailable — coordinates provided below.
         </div>
         <iframe
@@ -769,7 +796,7 @@ function OutageLocationMap({
         />
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-500">
         Map data ©{" "}
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">
           OpenStreetMap

@@ -31,11 +31,11 @@ export default function NewOutagePage() {
     assigned_to: "",
   });
 
-  const dirty = isFormDirty(form);
+  const dirty = isFormDirty(form as unknown as Record<string, string>);
   const { confirmLeave, markClean } = useUnsavedChangesGuard(dirty);
 
   function set(field: string, value: string) {
-    setForm((f) => ({ ...f, [field]: value }));
+    setForm((f) => ({ ...f, [field]: value } as NewOutageFormState));
   }
 
   async function handleSubmit(e: React.FormEvent) {

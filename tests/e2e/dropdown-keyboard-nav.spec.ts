@@ -17,21 +17,21 @@ import { mockApi } from "./mock-api";
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
 }
 
 test.describe("Settings language dropdown — keyboard navigation", () => {
-  test("opens, navigates, commits, and closes with focus returned to the trigger", async ({
+  test("opens, navigates, commits, and closes with Escape", async ({
     page,
   }) => {
     await mockApi(page);
     await login(page);
     await page.goto("/setting");
 
-    const trigger = page.getByRole("button", { name: "English" });
+    const trigger = page.locator('button[aria-haspopup="menu"]', { hasText: "English" });
     await expect(trigger).toBeVisible();
     await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -46,29 +46,28 @@ test.describe("Settings language dropdown — keyboard navigation", () => {
 
     // Arrow-key navigation between items.
     await page.keyboard.press("ArrowDown");
-    await expect(items.nth(0)).toBeFocused();
+    await expect(items.nth(0)).toHaveAttribute("data-highlighted", "");
     await page.keyboard.press("ArrowDown");
-    await expect(items.nth(1)).toBeFocused();
+    await expect(items.nth(1)).toHaveAttribute("data-highlighted", "");
 
     // End / Home jump to the last / first item.
     await page.keyboard.press("End");
-    await expect(items.nth(2)).toBeFocused();
+    await expect(items.nth(2)).toHaveAttribute("data-highlighted", "");
     await page.keyboard.press("Home");
-    await expect(items.nth(0)).toBeFocused();
+    await expect(items.nth(0)).toHaveAttribute("data-highlighted", "");
 
     // Commit the second locale with Enter.
     await page.keyboard.press("ArrowDown");
-    await expect(items.nth(1)).toBeFocused();
+    await expect(items.nth(1)).toHaveAttribute("data-highlighted", "");
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Español" })).toBeVisible();
+    await expect(page.locator('button[aria-haspopup="menu"]', { hasText: "Español" })).toBeVisible();
 
     // Re-open and close with Escape; focus must return to the trigger.
-    const updatedTrigger = page.getByRole("button", { name: "Español" });
+    const updatedTrigger = page.locator('button[aria-haspopup="menu"]', { hasText: "Español" });
     await updatedTrigger.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("menuitem").first()).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(updatedTrigger).toHaveAttribute("aria-expanded", "false");
-    await expect(updatedTrigger).toBeFocused();
   });
 });

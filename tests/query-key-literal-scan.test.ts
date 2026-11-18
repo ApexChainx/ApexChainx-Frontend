@@ -22,7 +22,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SRC_DIR = path.resolve(__dirname, "../../src");
+const SRC_DIR = path.resolve(__dirname, "../src");
 
 /** A literal array passed directly as the `queryKey` property of a
  * useQuery/useMutation options object or an invalidation filters object. */

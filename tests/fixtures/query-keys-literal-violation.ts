@@ -16,7 +16,8 @@ export function useLiteralKeyViolation() {
   });
 }
 
-export function invalidateLiteralKeyViolation() {
+export function useInvalidateLiteralKeyViolation() {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const queryClient = useQueryClient();
   queryClient.invalidateQueries({ queryKey: ["literal-key", "invalidate"] });
 }

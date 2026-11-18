@@ -225,9 +225,9 @@ export default function OnboardingTour() {
       // Issue #621 — no live driver: debounce rapid repeats (e.g. a
       // double-fired event) into a single start instead of mounting two.
       if (startTimerRef.current) {
-        window.clearTimeout(startTimerRef.current);
+        clearTimeout(startTimerRef.current);
       }
-      startTimerRef.current = window.setTimeout(() => {
+      startTimerRef.current = setTimeout(() => {
         startTimerRef.current = null;
         start();
       }, START_DEBOUNCE_MS);
@@ -237,7 +237,7 @@ export default function OnboardingTour() {
       window.removeEventListener(START_TOUR_EVENT, handler);
       // Issue #621 — don't let a pending debounced start fire after unmount.
       if (startTimerRef.current) {
-        window.clearTimeout(startTimerRef.current);
+        clearTimeout(startTimerRef.current);
         startTimerRef.current = null;
       }
     };
@@ -262,7 +262,7 @@ export default function OnboardingTour() {
       driverRef.current = null;
       // Issue #621 — cancel any pending debounced start.
       if (startTimerRef.current) {
-        window.clearTimeout(startTimerRef.current);
+        clearTimeout(startTimerRef.current);
         startTimerRef.current = null;
       }
     };

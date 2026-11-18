@@ -8,6 +8,7 @@
  * events and assert no interval callback runs in the hidden state.
  */
 import { act, renderHook } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDocumentVisibility } from "@/hooks/useDocumentVisibility";
@@ -73,13 +74,13 @@ describe("useDocumentVisibility", () => {
       const { result, rerender } = renderHook(() => {
         const isVisible = useDocumentVisibility();
         // Mirrors the detail page's poll effect.
-        if (isVisible) {
+        useEffect(() => {
+          if (!isVisible) return undefined;
           const id = setInterval(() => {
             polls += 1;
           }, 15_000);
           return () => clearInterval(id);
-        }
-        return undefined;
+        }, [isVisible]);
       });
 
       act(() => {

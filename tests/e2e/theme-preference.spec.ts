@@ -11,7 +11,7 @@ import { mockApi } from "./mock-api";
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -69,6 +69,7 @@ test("legacy 'theme' key migrates to the namespaced key on first app load", asyn
 
   await login(page);
   await page.goto("/setting");
+  await page.waitForFunction(() => localStorage.getItem("apexchain.theme") === "dark");
 
   // The settings page's storage module migrated the value on read: the
   // namespaced key now holds the preference. (The page's apply effect then

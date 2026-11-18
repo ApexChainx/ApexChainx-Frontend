@@ -20,7 +20,12 @@ import { join } from "node:path";
 
 const ROOT = process.cwd();
 const NEXT_DIR = join(ROOT, ".next");
-const MANIFEST_FILE = join(NEXT_DIR, "app-build-manifest.json");
+const CANDIDATE_MANIFESTS = [
+  join(NEXT_DIR, "app-build-manifest.json"),
+  join(NEXT_DIR, "server", "app-paths-manifest.json"),
+  join(NEXT_DIR, "build-manifest.json"),
+];
+const MANIFEST_FILE = CANDIDATE_MANIFESTS.find((f) => existsSync(f)) || CANDIDATE_MANIFESTS[0];
 const BUDGET_FILE = join(ROOT, "bundle-budget.json");
 const DEFAULT_TOLERANCE_PERCENT = 10;
 
@@ -35,7 +40,7 @@ function kb(bytes) {
 
 if (!existsSync(MANIFEST_FILE)) {
   fail(
-    `No build manifest at .next/app-build-manifest.json. Run \`npm run build\` before checking the bundle budget.`,
+    `No supported Next.js build manifest found in .next/. Run \`npm run build\` before checking the bundle budget.`,
   );
 }
 
@@ -62,6 +67,12 @@ function routeBytes(chunks) {
 const sizes = Object.fromEntries(
   Object.entries(pages).map(([route, chunks]) => [route, routeBytes(chunks)]),
 );
+
+if (Object.keys(sizes).length === 0) {
+  fail(
+    `No route-level chunk data found in ${MANIFEST_FILE}. This build does not expose the per-route manifest this check needs; refusing to report a false pass.`,
+  );
+}
 
 if (process.argv.includes("--update")) {
   const sorted = Object.fromEntries(

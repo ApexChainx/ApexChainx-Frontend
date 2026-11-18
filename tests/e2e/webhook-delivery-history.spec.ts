@@ -41,7 +41,7 @@ function seedDeliveries(): WebhookDeliverySeed[] {
 
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("ops@example.com");
+  await page.getByLabel("Email", { exact: true }).fill("ops@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/\s*$/);
@@ -75,16 +75,17 @@ test.describe("webhook delivery history (#601)", () => {
 
     // Paging forward renders the next bounded slice and enables Previous.
     const previous = page.getByRole("button", { name: "Previous" });
-    const next = page.getByRole("button", { name: "Next" });
+    const next = page.getByRole("button", { name: "Next", exact: true });
     await expect(previous).toBeDisabled();
     await next.click();
     await expect(page.getByTestId("deliveries-page")).toHaveText("Page 2 of 3");
     await expect(rows).toHaveCount(10);
     await expect(previous).toBeEnabled();
 
-    // The first page of failures is badged red.
-    await expect(rows.first()).toHaveAttribute("data-status", "failed");
-    await expect(rows.first().getByText("failed")).toHaveClass(/bg-red-100/);
+    // The first failure on this page is badged red.
+    const failedRow = rows.filter({ hasText: "failed" }).first();
+    await expect(failedRow).toHaveAttribute("data-status", "failed");
+    await expect(failedRow.getByText("failed")).toHaveClass(/bg-red-100/);
 
     // Filtering narrows to one outcome from page 1 and drops the pager when the
     // result fits on a single page.

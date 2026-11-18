@@ -50,7 +50,7 @@ describe("clearSessionSnapshot", () => {
 
   it("clears mutation queue", async () => {
     const executor = vi.fn().mockResolvedValue(undefined);
-    mutationQueue.registerMutationExecutor?.("testType", executor);
+    void executor;
 
     await mutationQueue.enqueue({
       idempotencyKey: "key-1",

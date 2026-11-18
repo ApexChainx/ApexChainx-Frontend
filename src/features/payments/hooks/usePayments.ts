@@ -9,7 +9,7 @@ import { slaEventKeys } from "@/lib/query-keys";
 import type { PaginatedPayments } from "@/types/payment";
 import type { PaymentFilters } from "@/services/paymentService";
 
-export interface UsePaymentsParams extends PaymentFilters {}
+export type UsePaymentsParams = PaymentFilters;
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -78,7 +78,7 @@ export function usePayments(params: UsePaymentsParams = {}) {
     queryKey,
 
     queryFn: async ({ signal }) => {
-      const data = await fetchPayments(normalizedParams as PaymentFilters, { signal });
+      const data = await fetchPayments(normalizedParams as PaymentFilters);
 
       void persistedCache.set(cacheKeyStr, data, CACHE_TTL_MS);
 
