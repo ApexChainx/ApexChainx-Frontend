@@ -28,10 +28,12 @@ Components that deviate (for example `ActionButtonGroup` and `ToolbarDivider`, w
 | `ActionButtonGroup` | `components/ActionButtonGroup.tsx` | Grouped toolbar buttons |
 | `BulkImportPreviewPanel` | `components/BulkImportPreviewPanel.tsx` | Table of rows from a bulk import dry run |
 | `DisputeSummaryCard` | `components/DisputeSummaryCard.tsx` | Summary of one SLA dispute |
+| `ErrorStatePanel` | `components/ErrorStatePanel.tsx` | Inline error state with optional retry |
 | `ExportToolbar` | `components/ExportToolbar.tsx` | One button per export format |
 | `ImportValidationReport` | `components/ImportValidationReport.tsx` | Import validation counts and failing rows |
 | `IncidentTimelinePanel` | `components/IncidentTimelinePanel.tsx` | Chronological incident events |
 | `KpiOverviewGrid` | `components/KpiOverviewGrid.tsx` | Grid of KPI cards |
+| `LoadingSkeletonBlock` | `components/LoadingSkeletonBlock.tsx` | Loading placeholder block |
 | `MttrBreakdownPanel` | `components/MttrBreakdownPanel.tsx` | Mean/median MTTR and bucket counts |
 | `OperationsFilterBar` | `components/OperationsFilterBar.tsx` | Search, date and select filters |
 | `OperationsSearchPanel` | `components/OperationsSearchPanel.tsx` | Search box with quick filters |
@@ -40,10 +42,12 @@ Components that deviate (for example `ActionButtonGroup` and `ToolbarDivider`, w
 | `PaymentReconciliationSummary` | `components/PaymentReconciliationSummary.tsx` | Matched/unmatched/pending payments |
 | `RecentOperationsFeed` | `components/RecentOperationsFeed.tsx` | Latest operations list |
 | `RootCauseNotesPanel` | `components/RootCauseNotesPanel.tsx` | Root-cause and resolution notes |
+| `SectionHeader` | `components/SectionHeader.tsx` | Heading/description/actions row |
 | `SettlementBreakdownPanel` | `components/SettlementBreakdownPanel.tsx` | Reward and penalty totals |
 | `SlaComplianceSummary` | `components/SlaComplianceSummary.tsx` | Compliance rate against a threshold |
 | `SlaTrendSummaryPanel` | `components/SlaTrendSummaryPanel.tsx` | Compliance by period, highlighting big changes |
 | `ThresholdComparisonPanel` | `components/ThresholdComparisonPanel.tsx` | Observed values against thresholds |
+| `TimelineItem` | `components/TimelineItem.tsx` | Single timeline event row |
 | `ToolbarDivider` | `components/ToolbarDivider.tsx` | Separator between toolbar groups |
 | `WebhookDeliveryLogPanel` | `components/WebhookDeliveryLogPanel.tsx` | Webhook delivery attempts |
 | `WebhookEndpointHealthPanel` | `components/WebhookEndpointHealthPanel.tsx` | Endpoint health with recent deliveries |
