@@ -2,7 +2,10 @@
 /** Issue #1019 — focused MTTR utility tests for the SLA operations workspace. */
 import { describe, expect, it } from "vitest";
 
-import { normalizeMttrMinutes } from "@/features/sla-operations/utils/mttr";
+import {
+  clampMttrMinutes,
+  normalizeMttrMinutes,
+} from "@/features/sla-operations/utils/mttr";
 
 describe("MTTR normalization (#1019)", () => {
   it("accepts finite non-negative numbers unchanged", () => {
@@ -48,5 +51,35 @@ describe("MTTR normalization (#1019)", () => {
     expect(normalizeMttrMinutes(Number.NaN)).toBeNull();
     expect(normalizeMttrMinutes(Number.POSITIVE_INFINITY)).toBeNull();
     expect(normalizeMttrMinutes("Infinity")).toBeNull();
+  });
+});
+
+describe("MTTR clamping (#1019)", () => {
+  it("leaves values inside the range untouched", () => {
+    expect(clampMttrMinutes(60, 0, 120)).toBe(60);
+    expect(clampMttrMinutes("1h 30m", 0, 120)).toBe(90);
+  });
+
+  it("clamps above the upper bound and below the lower bound", () => {
+    expect(clampMttrMinutes(200, 0, 120)).toBe(120);
+    expect(clampMttrMinutes(10, 30, 60)).toBe(30);
+  });
+
+  it("normalizes reversed bounds before clamping", () => {
+    expect(clampMttrMinutes(90, 120, 30)).toBe(90);
+    expect(clampMttrMinutes(200, 120, 30)).toBe(120);
+    expect(clampMttrMinutes(5, 120, 30)).toBe(30);
+  });
+
+  it("keeps identical bounds stable", () => {
+    expect(clampMttrMinutes(0, 5, 5)).toBe(5);
+    expect(clampMttrMinutes(10, 5, 5)).toBe(5);
+  });
+
+  it("propagates invalid values as null", () => {
+    expect(clampMttrMinutes(null, 0, 120)).toBeNull();
+    expect(clampMttrMinutes(undefined, 0, 120)).toBeNull();
+    expect(clampMttrMinutes("bad", 0, 120)).toBeNull();
+    expect(clampMttrMinutes(-1, 0, 120)).toBeNull();
   });
 });
