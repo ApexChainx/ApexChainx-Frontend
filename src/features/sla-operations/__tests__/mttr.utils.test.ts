@@ -115,3 +115,22 @@ describe("MTTR compact formatting (#1019)", () => {
     expect(formatMttr("bad", { emptyLabel: "n/a" })).toBe("n/a");
   });
 });
+
+describe("MTTR formatting with seconds (#1019)", () => {
+  it("converts minute inputs into hours, minutes, and seconds", () => {
+    expect(formatMttr(90, { includeSeconds: true })).toBe("1h 30m 0s");
+    expect(formatMttr(60, { includeSeconds: true })).toBe("1h 0m 0s");
+    expect(formatMttr(1.5, { includeSeconds: true })).toBe("1m 30s");
+    expect(formatMttr(0, { includeSeconds: true })).toBe("0s");
+  });
+
+  it("rounds sub-minute values to whole seconds", () => {
+    expect(formatMttr(0.4, { includeSeconds: true })).toBe("24s");
+    expect(formatMttr(0.008, { includeSeconds: true })).toBe("0s");
+  });
+
+  it("uses the placeholder when seconds are requested for invalid input", () => {
+    expect(formatMttr(null, { includeSeconds: true })).toBe("\u2014");
+    expect(formatMttr("bad", { includeSeconds: true, emptyLabel: "n/a" })).toBe("n/a");
+  });
+});
