@@ -89,7 +89,8 @@ export function formatMttr(
   }
 
   if (options.includeSeconds ?? false) {
-    const wholeSeconds = Math.round(value);
+    // `value` is in minutes; convert before splitting into h/m/s parts.
+    const wholeSeconds = Math.round(value * 60);
     const hours = Math.floor(wholeSeconds / 3600);
     const mins = Math.floor((wholeSeconds % 3600) / 60);
     const secs = wholeSeconds % 60;
