@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   clampMttrMinutes,
   formatMttr,
+  formatMttrHours,
+  isWithinMttrThreshold,
   normalizeMttrMinutes,
 } from "@/features/sla-operations/utils/mttr";
 
@@ -132,5 +134,46 @@ describe("MTTR formatting with seconds (#1019)", () => {
   it("uses the placeholder when seconds are requested for invalid input", () => {
     expect(formatMttr(null, { includeSeconds: true })).toBe("\u2014");
     expect(formatMttr("bad", { includeSeconds: true, emptyLabel: "n/a" })).toBe("n/a");
+  });
+});
+
+describe("MTTR hours formatting (#1019)", () => {
+  it("divides minutes by 60 using one decimal by default", () => {
+    expect(formatMttrHours(90)).toBe("1.5h");
+    expect(formatMttrHours(60)).toBe("1.0h");
+    expect(formatMttrHours(0)).toBe("0.0h");
+  });
+
+  it("honors an explicit decimal precision", () => {
+    expect(formatMttrHours(45, { decimals: 2 })).toBe("0.75h");
+    expect(formatMttrHours(90, { decimals: 0 })).toBe("2h");
+  });
+
+  it("uses the default and custom empty labels", () => {
+    expect(formatMttrHours(null)).toBe("\u2014");
+    expect(formatMttrHours(undefined, { emptyLabel: "n/a" })).toBe("n/a");
+    expect(formatMttrHours("bad")).toBe("\u2014");
+  });
+});
+
+describe("MTTR threshold checks (#1019)", () => {
+  it("treats the threshold as inclusive", () => {
+    expect(isWithinMttrThreshold(60, 90)).toBe(true);
+    expect(isWithinMttrThreshold(90, 90)).toBe(true);
+    expect(isWithinMttrThreshold(90.1, 90)).toBe(false);
+  });
+
+  it("normalizes string inputs before comparing", () => {
+    expect(isWithinMttrThreshold("1h", 60)).toBe(true);
+    expect(isWithinMttrThreshold("1h 30m", 90)).toBe(true);
+    expect(isWithinMttrThreshold("2h", 90)).toBe(false);
+  });
+
+  it("returns false for unusable values and thresholds", () => {
+    expect(isWithinMttrThreshold(null, 90)).toBe(false);
+    expect(isWithinMttrThreshold(undefined, 90)).toBe(false);
+    expect(isWithinMttrThreshold("bad", 90)).toBe(false);
+    expect(isWithinMttrThreshold(-1, 90)).toBe(false);
+    expect(isWithinMttrThreshold(5, -1)).toBe(false);
   });
 });
