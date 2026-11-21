@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   clampMttrMinutes,
+  formatMttr,
   normalizeMttrMinutes,
 } from "@/features/sla-operations/utils/mttr";
 
@@ -81,5 +82,36 @@ describe("MTTR clamping (#1019)", () => {
     expect(clampMttrMinutes(undefined, 0, 120)).toBeNull();
     expect(clampMttrMinutes("bad", 0, 120)).toBeNull();
     expect(clampMttrMinutes(-1, 0, 120)).toBeNull();
+  });
+});
+
+describe("MTTR compact formatting (#1019)", () => {
+  it("renders minutes and hours in the documented compact form", () => {
+    expect(formatMttr(0)).toBe("0m");
+    expect(formatMttr(30)).toBe("30m");
+    expect(formatMttr(60)).toBe("1h");
+    expect(formatMttr(90)).toBe("1h 30m");
+    expect(formatMttr("1h 5m")).toBe("1h 5m");
+    expect(formatMttr(120)).toBe("2h");
+  });
+
+  it("rounds fractional minutes before deriving hours and minutes", () => {
+    expect(formatMttr(29.4)).toBe("29m");
+    expect(formatMttr(29.6)).toBe("30m");
+    expect(formatMttr(59.6)).toBe("1h");
+    expect(formatMttr(89.6)).toBe("1h 30m");
+  });
+
+  it("uses the default placeholder for unusable values", () => {
+    expect(formatMttr(null)).toBe("\u2014");
+    expect(formatMttr(undefined)).toBe("\u2014");
+    expect(formatMttr("")).toBe("\u2014");
+    expect(formatMttr("bad")).toBe("\u2014");
+    expect(formatMttr(-1)).toBe("\u2014");
+  });
+
+  it("honors a custom empty label", () => {
+    expect(formatMttr(null, { emptyLabel: "pending" })).toBe("pending");
+    expect(formatMttr("bad", { emptyLabel: "n/a" })).toBe("n/a");
   });
 });
