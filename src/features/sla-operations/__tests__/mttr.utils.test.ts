@@ -177,3 +177,23 @@ describe("MTTR threshold checks (#1019)", () => {
     expect(isWithinMttrThreshold(5, -1)).toBe(false);
   });
 });
+
+describe("MTTR utility determinism (#1019)", () => {
+  it("returns identical results across repeated calls", () => {
+    const inputs = [0, 1.5, 90, "1h 30m", "", null, undefined] as const;
+    for (const input of inputs) {
+      expect(normalizeMttrMinutes(input)).toBe(normalizeMttrMinutes(input));
+      expect(formatMttr(input)).toBe(formatMttr(input));
+      expect(formatMttrHours(input)).toBe(formatMttrHours(input));
+      expect(clampMttrMinutes(input, 0, 120)).toBe(clampMttrMinutes(input, 0, 120));
+      expect(isWithinMttrThreshold(input, 90)).toBe(isWithinMttrThreshold(input, 90));
+    }
+  });
+
+  it("treats equivalent representations identically", () => {
+    expect(normalizeMttrMinutes("1h 30m")).toBe(normalizeMttrMinutes(90));
+    expect(formatMttr("90")).toBe(formatMttr(90));
+    expect(clampMttrMinutes("1.5h", 0, 120)).toBe(clampMttrMinutes(90, 0, 120));
+    expect(isWithinMttrThreshold("90", 90)).toBe(isWithinMttrThreshold(90, 90));
+  });
+});
