@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   countActiveOutageFilters,
+  createOutagePredicate,
   normalizeOutageFilters,
   toOutageQueryParams,
   useOutageFilters,
@@ -255,5 +256,66 @@ describe("useOutageFilters (#963)", () => {
     expect(result.current).toBe(first);
     act(() => result.current.setSearch("x"));
     expect(result.current).not.toBe(first);
+  });
+
+  it("normalises an inverted date range set through the hook", () => {
+    const { result } = renderHook(() => useOutageFilters());
+
+    act(() => result.current.setDateRange({ from: "2026-05-12", to: "2026-05-10" }));
+    expect(result.current.queryParams).toEqual({ from: "2026-05-12", to: "2026-05-12" });
+    expect(result.current.filterOutages(rows).map((row) => row.id)).toEqual([]);
+  });
+
+  it("does not mutate the rows it filters", () => {
+    const { result } = renderHook(() => useOutageFilters({ initialFilters: { search: "lagos" } }));
+    const input = [...rows];
+    result.current.filterOutages(input);
+    expect(input.map((row) => row.id)).toEqual(["o1", "o2", "o3"]);
+  });
+});
+
+describe("createOutagePredicate (#963)", () => {
+  it("accepts every row when no filter is set", () => {
+    const predicate = createOutagePredicate(normalizeOutageFilters());
+    expect(rows.every(predicate)).toBe(true);
+  });
+
+  it("requires a row to satisfy every active filter", () => {
+    const predicate = createOutagePredicate(
+      normalizeOutageFilters({
+        search: "lagos",
+        severities: ["critical"],
+        statuses: ["investigating"],
+        from: "2026-04-01",
+        to: "2026-04-30",
+      }),
+    );
+    expect(rows.filter(predicate).map((row) => row.id)).toEqual(["o3"]);
+  });
+
+  it("matches a row severity through its backend alias", () => {
+    const predicate = createOutagePredicate(normalizeOutageFilters({ severities: ["critical"] }));
+    expect(predicate(outage({ id: "alias", severity: "urgent" as never }))).toBe(true);
+    expect(predicate(outage({ id: "alias", severity: "sev-9" as never }))).toBe(false);
+  });
+
+  it("treats the date bounds as inclusive UTC days", () => {
+    const predicate = createOutagePredicate(
+      normalizeOutageFilters({ from: "2026-04-28", to: "2026-04-28" }),
+    );
+    expect(predicate(outage({ id: "edge", detectedAt: "2026-04-28T23:59:59Z" }))).toBe(true);
+    expect(predicate(outage({ id: "edge", detectedAt: "2026-04-29T00:00:00Z" }))).toBe(false);
+  });
+
+  it("ignores an unreadable date when no bound is set", () => {
+    const predicate = createOutagePredicate(normalizeOutageFilters());
+    expect(predicate(outage({ id: "bad", detectedAt: "yesterday-ish" }))).toBe(true);
+  });
+
+  it("matches the assignee case-insensitively and only on exact names", () => {
+    const predicate = createOutagePredicate(normalizeOutageFilters({ assignedTo: "ada obi" }));
+    expect(predicate(outage({ id: "a", assignedTo: "  ADA OBI " }))).toBe(true);
+    expect(predicate(outage({ id: "b", assignedTo: "Ada" }))).toBe(false);
+    expect(predicate(outage({ id: "c", assignedTo: null }))).toBe(false);
   });
 });
